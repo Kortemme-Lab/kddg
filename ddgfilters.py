@@ -4,6 +4,7 @@ import common.ddgproject
 from ddglib.filter import *
 
 dbfields = common.ddgproject.FieldNames()
+StdCursor = common.ddgproject.StdCursor
 
 class StructureResultSet(ResultSet):
 	dbname = dbfields.Structure
@@ -105,9 +106,10 @@ class StructureFilter(Filter):
 		if self.techniques:
 			tstrs = []
 			for t in self.techniques:
-				tstrs.append('Techniques LIKE "%%%s%%"' % t)
+				tstrs.append('Techniques LIKE %s')
+				self.parameters.append("%%%s%%" % t)
 			self.conditions.append(join(tstrs, " OR "))
-			self.paramsoffset -=  1
+			self.paramsoffset += (len(self.techniques) - 1)
 		
 		if self.bfactors_min or self.bfactors_max:
 			self.post_SQL_filters.append(self._checkTotalBFactorRange) 
@@ -145,7 +147,7 @@ class PredictionResultSet(ResultSet):
 		
 		self.structure_map = {} 
 		for id in self.IDs:
-			results = db.execute("SELECT Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID WHERE Prediction.ID=%s", parameters=(id,), cursorClass=ddgproject.StdCursor)
+			results = db.execute("SELECT Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID WHERE Prediction.ID=%s", parameters=(id,), cursorClass=StdCursor)
 			pdbID = results[0][0]
 			self.structure_map[pdbID] = self.structure_map.get(pdbID) or []
 			self.structure_map[pdbID].append(id)

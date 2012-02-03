@@ -7,15 +7,15 @@ class Filter(kobject):
 	_ResultSet = None
 	
 	def __init__(self):
-		self.paramsoffset = 0
+		pass
 		#raise Exception("Calling an abstract class.")
 		
 	def apply(self, db):
 		self.conditions = []
 		self.parameters = []
+		self.paramsoffset = 0
 		
 		self._apply()
-		
 		conditions = self.conditions
 		parameters = self.parameters
 		assert(len(conditions) == len(parameters) - self.paramsoffset)
@@ -109,7 +109,7 @@ class ResultSet(kobject):
 		
 		if SQL:
 			if not results:
-				raise Exception("No results were returned from '%s' %% %s." % (SQL, parameters or ""))
+				print("No results were returned from '%s' %% %s." % (SQL, parameters or ""))
 			else:
 				if not self.__class__.primary_key in results[0]:
 					raise Exception("The resulting set from '%s'(%s) must including the primary key field %s of %s." % (SQL, parameters, self.__class__.primary_key, self.__class__.dbname))
@@ -165,21 +165,21 @@ class ResultSet(kobject):
 	def getFilteredResults(self):
 		'''Applies the filters, returns a new dict'''
 		pks = self.IDs
-		self.log("Primary keys before filtering:")
-		self.log(str(pks))
+		#self.log("Primary keys before filtering:")
+		#self.log(str(pks))
 		for taggedFilter in self.filterchain:
 			filter = taggedFilter[0] 
 			tag = taggedFilter[1]
 			if filter.isOfClass(UnionFilter):
 				self.log("Applying %s:"% (tag or "Union Filter"))
 				pks = self.applyUnionFilter(pks, filter, tag)
-				self.log("Primary keys after filtering:")
-				self.log(str(pks))
+				#self.log("Primary keys after filtering:")
+				#self.log(str(pks))
 			elif Filter in filter.getBaseClasses():
 				self.log("Applying %s:" % (tag or filter.getClassName()))
 				pks = self.applyFilter(pks, filter, tag)
-				self.log("Primary keys after filtering:")
-				self.log(str(pks))
+				#self.log("Primary keys after filtering:")
+				#self.log(str(pks))
 			else:
 				raise Exception("BLARG!")
 		self.log("Filtered record count: %d" % len(pks))
