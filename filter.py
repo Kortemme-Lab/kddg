@@ -1,3 +1,13 @@
+#!/usr/bin/python2.4
+# encoding: utf-8
+"""
+filter.py
+Defines generic filter and result set classes for use on databases.
+
+Created by Shane O'Connor 2012.
+Copyright (c) 2012 __UCSF__. All rights reserved.
+"""
+
 import re
 from string import join
 from base import kobject
@@ -7,7 +17,7 @@ class Filter(kobject):
 	_ResultSet = None
 	
 	def __init__(self):
-		pass
+		self.post_SQL_filters = []
 		#raise Exception("Calling an abstract class.")
 		
 	def apply(self, db):
@@ -23,11 +33,11 @@ class Filter(kobject):
 			result_set = self._ResultSet(db, SQL = "WHERE %s" % join(conditions, " AND "), parameters = tuple(parameters))
 		else:
 			result_set = self._ResultSet(db)
-
+		
 		for postfilter in self.post_SQL_filters:
 			# post_SQL_filters functions take a database connection and self._ResultSet object and return a self._ResultSet object 
-			result_set = postfilter(db, result_set)
-		
+			result_set &= postfilter(db, result_set)
+			
 		return result_set
 
 	def __or__(self, disjunct):
@@ -59,16 +69,18 @@ class UnionFilter(kobject):
 			return UnionFilter(self.filters + [disjunct])
 		else:
 			raise Exception("Trying to combine a filter with an object of class '%s'." % disjunct.getClassName())
-			
+		
+	
 class ResultSet(kobject):
 	dbname = None
 	primary_key = "ID"
 	stored_procedures = [] # e.g. ["GetScores"]
 	allowed_filters = []
+	allowed_restrict_sets = []
 	
 	stored_procedure_regex = re.compile("CALL (\w+)")
 	
-	def __init__(self, db, SQL = "", parameters = None, AdditionalIDs = []):
+	def __init__(self, db, SQL = "", parameters = None, AdditionalIDs = [], retrieveAllByDefault = True):
 		'''e.g. ResultSet("CALL GetScores", parameters = 16734)
 				ResultSet("WHERE ...")'''
 		
@@ -81,7 +93,7 @@ class ResultSet(kobject):
 				raise Exception("Parameters %s were specified for an empty SQL query." % parameters)
 		
 		results = []
-		if SQL or (not AdditionalIDs):
+		if SQL or (retrieveAllByDefault and not AdditionalIDs):
 			# We run an SQL query if the SQL parameter has been specified or if AdditionalIDs is empty.
 			# If AdditionalIDs is not empty and the SQL is blank then we do NOT run the SQL query and
 			# instead use AdditionalIDs as the record keys.  
@@ -162,7 +174,7 @@ class ResultSet(kobject):
 		self.log("Applying %s:" % (tag or filter.getClassName()))
 		raise Exception("This function needs to be implemented for this class (%s)." % self.getClassName())
 		
-	def getFilteredResults(self):
+	def getFilteredIDs(self):
 		'''Applies the filters, returns a new dict'''
 		pks = self.IDs
 		#self.log("Primary keys before filtering:")
@@ -183,12 +195,65 @@ class ResultSet(kobject):
 			else:
 				raise Exception("BLARG!")
 		self.log("Filtered record count: %d" % len(pks))
-		
+		return pks
+	
+	def getFilteredResults(self):
+		'''Applies the filters, returns a new dict'''
+		pks = self.getFilteredIDs()
 		SQL = "SELECT * FROM %s" % self.__class__.dbname
 		results = self.db.execute(SQL)
 		return [r for r in results if r[self.__class__.primary_key] in pks]
 	
-	def intersection(self, IDs):
-		return self.IDs.intersection(IDs)
+	def filterBySet(self, resSet):
+		if resSet.__class__== self.__class__:
+			return self.__class__(self.db, AdditionalIDs = self.IDs.intersection(resSet.IDs),  retrieveAllByDefault = False)
+		elif resSet.__class__ in self.__class__.allowed_restrict_sets:
+			pks = self._filterBySet(resSet)
+			return self.__class__(self.db, AdditionalIDs = pks, retrieveAllByDefault = False)
+		else:
+			raise Exception("Trying to restrict %s by a %s set which is impossible." % (self.__class__, resSet.__class__))
+		
+	def __or__(self, resSet):
+		if self.hasTheSameClassAs(resSet):
+			pks = self.getFilteredIDs().union(resSet.getFilteredIDs())
+			disjunction = self.__class__(self.db, AdditionalIDs = pks, retrieveAllByDefault = False)
+			disjunction._log = self._log + resSet._log + ["UNION OF RESULT SETS", "Filtered record count: %d" % len(disjunction.IDs)] 
+			return disjunction
+		else:
+			raise Exception("Trying to combine two ResultSets of different types (%s and %s)." % (self.getClassName(), resSet.getClassName()))
+
+	def __and__(self, resSet):
+		if self.hasTheSameClassAs(resSet):
+			pks = self.getFilteredIDs().intersection(resSet.getFilteredIDs())
+			conjunction = self.__class__(self.db, AdditionalIDs = pks, retrieveAllByDefault = False)
+			conjunction._log = self._log + resSet._log + ["INTERSECTION OF RESULT SETS", "Filtered record count: %d" % len(conjunction.IDs)] 
+			return conjunction
+		else:
+			raise Exception("Trying to combine two ResultSets of different types (%s and %s)." % (self.getClassName(), resSet.getClassName()))
+
+	def __sub__(self, resSet):
+		if self.hasTheSameClassAs(resSet):
+			pks = self.getFilteredIDs().difference(resSet.getFilteredIDs())
+			conjunction = self.__class__(self.db, AdditionalIDs = pks, retrieveAllByDefault = False)
+			conjunction._log = self._log + resSet._log + ["DIFFERENCE OF RESULT SETS", "Filtered record count: %d" % len(conjunction.IDs)] 
+			return conjunction
+		else:
+			raise Exception("Trying to combine two ResultSets of different types (%s and %s)." % (self.getClassName(), resSet.getClassName()))
+
+	def __div__(self, resSet):
+		return self.__sub__(resSet)
+
+	def __xor__(self, resSet):
+		if self.hasTheSameClassAs(resSet):
+			my_pks = self.getFilteredIDs()
+			other_pks = resSet.getFilteredIDs()
+			allpks = my_pks.union(other_pks)
+			commonpks = my_pks.intersection(other_pks)
+			pks = allpks.difference(commonpks)
+			xconjunction = self.__class__(self.db, AdditionalIDs = pks, retrieveAllByDefault = False)
+			xconjunction._log = self._log + resSet._log + ["XOR OF RESULT SETS", "Filtered record count: %d" % len(xconjunction.IDs)] 
+			return xconjunction
+		else:
+			raise Exception("Trying to combine two ResultSets of different types (%s and %s)." % (self.getClassName(), resSet.getClassName()))
 
 

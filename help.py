@@ -1,3 +1,13 @@
+#!/usr/bin/python2.4
+# encoding: utf-8
+"""
+help.py
+Help functionality for the ddG database.
+
+Created by Shane O'Connor 2012.
+Copyright (c) 2012 __UCSF__. All rights reserved.
+"""
+
 import sys
 from string import join
 from common.ddgproject import FieldNames, StdCursor, ddGDatabase
@@ -27,6 +37,8 @@ def _get_ResultSetFilter_data():
 				d_filters[classnm] = d 
 			elif classnm.find("ResultSet") != -1:
 				e_Filter = "%sFilter" % classnm[:classnm.find("ResultSet")]
+				e_Filter = o.allowed_filters
+				#"%sFilter" % classnm[:classnm.find("ResultSet")]
 				m_resultsets.append({"name" : classnm, "class" : o, "filter" : e_Filter})
 			else:
 				colortext.error("Unknown class '%s' found." % classnm)
@@ -105,10 +117,11 @@ so will hopefully survive any changes made to the database design. Filters are e
 The following ResultSet classes and associated filters are available:\n''', "silver"))
 	for rs in sorted(m_resultsets):
 		help.append(("\t%s" % rs["name"], "green"))
-		if d_filters.get(rs["filter"]):
-			filter = d_filters[rs["filter"]]
-			help.append(("\t\t%s" % filter["name"], "orange"))
-	
+		print(rs["filter"])
+		if rs["filter"]:
+			avail_f = [d_filters[rs_f.__name__]["name"] for rs_f in rs["filter"] if d_filters.get(rs_f.__name__)]
+			help.append(("\t\t%s" % join(avail_f, ", "), "orange"))
+			
 	_print_lines(help)
 		
 def ShowFilter():

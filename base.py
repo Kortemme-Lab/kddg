@@ -1,9 +1,22 @@
+#!/usr/bin/python2.4
+# encoding: utf-8
+"""
+base.py
+Base classes.
+
+Created by Shane O'Connor 2012.
+Copyright (c) 2012 __UCSF__. All rights reserved.
+"""
+
 import inspect
 
 class kobject(object):
 	
 	def isOfClass(self, c):
 		return self.__class__ == c
+
+	def hasTheSameClassAs(self, o):
+		return self.__class__ == o.__class__
 
 	def getBaseClassesForObject(self):
 		return self.getBaseClasses()
