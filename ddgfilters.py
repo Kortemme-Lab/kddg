@@ -207,6 +207,15 @@ class ExperimentResultSet(ResultSet):
 				if self.structure_map.get(s):
 					foundIDs.extend(self.structure_map[s])
 			return foundIDs
+	
+	def getStructures(self):
+		idstr = join(map(str, list(self.getFilteredIDs())), ",")
+		results = self.db.execute("SELECT Structure FROM Experiment WHERE ID IN (%s)" % idstr)
+		structureIDs = self.db.execute("SELECT DISTINCT Structure FROM Experiment WHERE ID IN (%s)" % idstr, cursorClass=StdCursor)
+		structureIDs = [s[0] for s in structureIDs]
+		sr = StructureResultSet.fromIDs(self.db, structureIDs)
+		return sr, results 
+
 
 class ExperimentFilter(Filter):
 	'''Note: minresolution and maxresolution are soft bounds i.e. if they are set to 1 and 2.5 respectively then we find structures with resolution r where 1 <= r <= 2.5.
@@ -456,6 +465,23 @@ class PredictionResultSet(ResultSet):
 				if self.structure_map.get(s):
 					foundIDs.extend(self.structure_map[s])
 			return foundIDs
+	
+	def getStructures(self):
+		idstr = join(map(str, list(self.getFilteredIDs())), ",")
+		results = self.db.execute("SELECT Prediction.ID, Experiment.Structure FROM Prediction INNER JOIN Experiment ON ExperimentID = Experiment.ID WHERE Prediction.ID IN (%s)" % idstr)
+		structureIDs = self.db.execute("SELECT DISTINCT Experiment.Structure FROM Prediction INNER JOIN Experiment ON ExperimentID = Experiment.ID WHERE Prediction.ID IN (%s)" % idstr, cursorClass=StdCursor)
+		structureIDs = [s[0] for s in structureIDs]
+		sr = StructureResultSet.fromIDs(self.db, structureIDs)
+		return sr, results 
+
+	def getExperiments(self):
+		idstr = join(map(str, list(self.getFilteredIDs())), ",")
+		results = self.db.execute("SELECT Prediction.ID, ExperimentID FROM Prediction WHERE Prediction.ID IN (%s)" % idstr)
+		experimentIDs = self.db.execute("SELECT DISTINCT ExperimentID FROM Prediction WHERE Prediction.ID IN (%s)" % idstr, cursorClass=StdCursor)
+		experimentIDs = [s[0] for s in experimentIDs]
+		er = ExperimentResultSet.fromIDs(self.db, experimentIDs)
+		return er, results 
+			
 
 class PredictionFilter(Filter):
 	'''Note: minresolution and maxresolution are soft bounds i.e. if they are set to 1 and 2.5 respectively then we find structures with resolution r where 1 <= r <= 2.5.

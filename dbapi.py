@@ -8,6 +8,7 @@ Created by Shane O'Connor 2012.
 Copyright (c) 2012 __UCSF__. All rights reserved.
 """
 
+import os
 from string import join
 import common.ddgproject as ddgproject
 from pdb import PDB, ResidueID2String, checkPDBAgainstMutations, aa1
@@ -18,6 +19,11 @@ import traceback
 import pickle
 import md5
 import random
+import score 
+import analysis
+from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet 
+
+dbfields = ddgproject.FieldNames()
 
 class ddG(object):
 	'''This class is responsible for inserting prediction jobs to the database.''' 
@@ -29,7 +35,7 @@ class ddG(object):
 	def __del__(self):
 		self.ddGDB.close()
 		self.ddGDataDB.close()
-	
+			
 	def _createResfile(self, pdb, mutations):
 		'''The mutations here are in the original PDB numbering. pdb is assumed to use Rosetta numbering.
 			We use the pdb mapping from PDB numbering to Rosetta numbering to generate the resfile.
@@ -58,9 +64,75 @@ class ddG(object):
 			assert(len(results) == 1)
 			return results[0]["Data"]
 	
+	def getPublications(self, result_set):
+		if result_set:
+			structures = None
+			experiments = None
+			
+			if result_set.isOfClass(ExperimentResultSet):
+				experiments = result_set 
+			elif ExperimentResultSet in result_set.__class__.allowed_restrict_sets:
+				experiments, experiment_map = result_set.getExperiments()			
+			
+			if result_set.isOfClass(StructureResultSet):
+				structures = result_set 
+			elif StructureResultSet in result_set.__class__.allowed_restrict_sets:
+				structures, structure_map = result_set.getStructures()
+			
+			if structures:
+				print("\nRelated publications for structures:")
+				for id in sorted(structures.IDs):
+					pubs = self.ddGDB.callproc("GetPublications", parameters=(id,))
+					print(id)
+					for pub in pubs:
+						print("\t%s: %s" % (pub["Type"], pub["PublicationID"]))
+					 
+			if experiments:
+				print("\nRelated publications for experiments:")
+				for id in sorted(experiments.IDs):
+					pubs = self.ddGDB.callproc("GetExperimentPublications", parameters=(id,))
+					print(id)
+					for pub in pubs:
+						print("\t%s: %s" % (pub["Type"], pub["SourceLocation.ID"]))
+						
+				experimentsets = [e[0] for e in self.ddGDB.execute("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % join(map(str, list(experiments.IDs)), ","), cursorClass = ddgproject.StdCursor)]
+				
+				if experimentsets:
+					print("\nRelated publications for experiment-set sources:")
+					for id in sorted(experimentsets):
+						print(id)
+						pubs = self.ddGDB.execute("SELECT ID, Type FROM SourceLocation WHERE SourceID=%s", parameters = (id,))
+						for pub in pubs:
+							print("\t%s: %s" % (pub["Type"], pub["ID"]))
+		else:
+			raise Exception("Empty result set.")
+				
+
+		
 	def dumpData(self, outfile, predictionID):
 		write_file(outfile, self.getData(predictionID))
+	
+	def analyze(self, prediction_result_set, outpath = os.getcwd()):
+		PredictionIDs = sorted(list(prediction_result_set.getFilteredIDs()))
+		colortext.printf("Analyzing %d records:" % len(PredictionIDs), "lightgreen")
+		#results = self.ddGDB.execute("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % join(map(str, PredictionIDs), ","))
+		
+		#for r in results:
+		#	r["ddG"] = pickle.loads(r["ddG"])
+		#	predicted_score = r["ddG"]["data"]["ddG"]
+		#	experimental_scores = [expscore["ddG"] for expscore in self.ddGDB.callproc("GetScores", parameters = r["ExperimentID"])]
+		#	mean_experimental_score = float(sum(experimental_scores)) / float(len(experimental_scores))
+	
+		results = self.ddGDB.execute("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % join(map(str, PredictionIDs), ","))
+		
+		analysis.plot(analysis._R_mean_unsigned_error, analysis._createMAEFile, results, "my_plot1.pdf", average_fn = analysis._mean)
+		analysis.plot(analysis._R_correlation_coefficient, analysis._createAveragedInputFile, results, "my_plot2.pdf", average_fn = analysis._mean)
+		colortext.printf("Done", "lightgreen")
+		
 			
+		
+		#score.ddgTestScore
+		
 	def addPrediction(self, experimentID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}):
 		'''This function inserts a prediction into the database.
 			The parameters define:

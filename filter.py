@@ -80,6 +80,10 @@ class ResultSet(kobject):
 	
 	stored_procedure_regex = re.compile("CALL (\w+)")
 	
+	@classmethod
+	def fromIDs(cls, db, IDs):
+		return cls(db, AdditionalIDs = IDs, retrieveAllByDefault = False)
+	
 	def __init__(self, db, SQL = "", parameters = None, AdditionalIDs = [], retrieveAllByDefault = True):
 		'''e.g. ResultSet("CALL GetScores", parameters = 16734)
 				ResultSet("WHERE ...")'''
@@ -197,10 +201,16 @@ class ResultSet(kobject):
 		self.log("Filtered record count: %d" % len(pks))
 		return pks
 	
-	def getFilteredResults(self):
+	def getFilteredResults(self, fields = None):
 		'''Applies the filters, returns a new dict'''
 		pks = self.getFilteredIDs()
-		SQL = "SELECT * FROM %s" % self.__class__.dbname
+		if fields:
+			if type(fields) == list:
+				SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, join(fields, ", "), self.__class__.dbname)
+			else:
+				SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, fields, self.__class__.dbname)
+		else:
+			SQL = "SELECT * FROM %s" % self.__class__.dbname
 		results = self.db.execute(SQL)
 		return [r for r in results if r[self.__class__.primary_key] in pks]
 	
