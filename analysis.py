@@ -12,6 +12,9 @@ from tempfile import mkstemp
 ddGdb = ddgproject.ddGDatabase()
 dbfields = ddgproject.FieldNames()
 
+def kJtokcal(x):
+	return x / 4.1868
+
 def _mean(points, numpoints):
 	'''Points is expected to be a list (or iterable), numpoints should be an integer.'''
 	return sum(points) / numpoints 
@@ -32,7 +35,8 @@ def _createMAEFile(results, outfname, average_fn = _mean):
 			c = e["NumberOfMeasurements"]
 			n += c
 			scores.append(e["ddG"] * c)
-		point = abs(average_fn(scores, n) - predicted_ddG)
+		 # Note the sign negation of average_fn(scores, n) as Rosetta convention is reverse to ProTherm
+		point = abs(- kJtokcal(average_fn(scores, n)) - predicted_ddG)
 		output.append("%s,%s"% (X,point))
 		X += 1
 		
@@ -45,21 +49,24 @@ def _createMAEFile(results, outfname, average_fn = _mean):
 
 def _createAveragedInputFile(results, outfname, average_fn = _mean):
 	output = []
-	output.append("Experimental,Predicted")
+	output.append("Experimental,Predicted,ProThermID")
 	for r in results:
-		predicted_ddG = pickle.loads(r["ddG"])["data"]["ddG"]
+		predicted_ddG = pickle.loads(r["ddG"])["data"]["ddG"] 
 		expID = r["ExperimentID"]
 		expScores = ddGdb.callproc('GetScores', parameters = (expID,))
 		
 		n = 0
 		scores = []
+		sources = []
 		for e in expScores:
+			sources.append(e["SourceID"])
 			c = e["NumberOfMeasurements"]
 			n += c
 			scores.append(e["ddG"] * c)
-		eavg = average_fn(scores, n)
-		
-		output.append("%s,%s"% (eavg, predicted_ddG))
+		 # Note the sign negation as Rosetta convention is reverse to ProTherm.
+		 # The scores stored in the database are in kJ/mol. Convert to kcal/mol
+		eavg = - kJtokcal(average_fn(scores, n))
+		output.append("%s,%s,%s"% (eavg, predicted_ddG, join(sorted(sources)," & ") or "."))
 
 	F, fname = mkstemp(dir = ".")
 	F = os.fdopen(F, "w")
@@ -144,6 +151,7 @@ def plot(RFunction, filecreator, results, outfname, average_fn = _mean):
 		inputfname = filecreator(results, outfname, average_fn)
 		try:
 			colortext.printf("Running %s" % RFunction)
+			print(inputfname)
 			RFunction(inputfname, outfname)
 		except Exception, e:
 			import traceback
