@@ -7,13 +7,11 @@ from string import join
 import time
 import common.colortext as colortext
 import common.ddgproject as ddgproject
+from common.rosettahelper import kJtokcal
 from tempfile import mkstemp
 
 ddGdb = ddgproject.ddGDatabase()
 dbfields = ddgproject.FieldNames()
-
-def kJtokcal(x):
-	return x / 4.1868
 
 def _mean(points, numpoints):
 	'''Points is expected to be a list (or iterable), numpoints should be an integer.'''
