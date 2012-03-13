@@ -9,6 +9,7 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 """
 
 import sys
+import re
 from string import join
 from common.ddgproject import FieldNames, StdCursor, ddGDatabase
 from common import colortext
@@ -53,6 +54,8 @@ def ShowDatabaseStructure():
 	help = []
 	
 	ddGdb = ddGDatabase()
+	procregex = re.compile(".*?PROCEDURE `.*?`[(](.*?)[)] BEGIN.*")
+		
 	help.append(("\n* Database structure *", "white"))
 	help.append(("The tables of the database are as follows (orange = primary key, blue = foreign key):\n", "silver"))
 	tablenames = sorted([r[0] for r in (ddGdb.execute("SHOW TABLES", cursorClass = StdCursor))])
@@ -75,6 +78,16 @@ def ShowDatabaseStructure():
 			else:
 				help.append((str, "yellow"))
 	
+	help.append(("\n* Database stored procedures *", "white"))
+	help.append(("The stored procedures defined in the database are as follows:\n", "silver"))
+	sprocs = sorted([r[0] for r in ddGdb.execute("SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_SCHEMA = 'ddG' AND ROUTINE_TYPE = 'PROCEDURE';", cursorClass = StdCursor)])
+	for sproc in sprocs:
+		defn = ddGdb.execute("SHOW CREATE PROCEDURE %s" % sproc)[0]
+		mtchs = procregex.match(defn["Create Procedure"].replace("\n", " "))
+		if mtchs:
+			help.append(("\t%s( %s )" % (defn["Procedure"], mtchs.group(1)), "green"))
+		else:
+			help.append(("\t%s" % defn["Procedure"], "green"))
 	_print_lines(help)
 	
 def ShowResultSet():
@@ -117,7 +130,6 @@ so will hopefully survive any changes made to the database design. Filters are e
 The following ResultSet classes and associated filters are available:\n''', "silver"))
 	for rs in sorted(m_resultsets):
 		help.append(("\t%s" % rs["name"], "green"))
-		print(rs["filter"])
 		if rs["filter"]:
 			avail_f = [d_filters[rs_f.__name__]["name"] for rs_f in rs["filter"] if d_filters.get(rs_f.__name__)]
 			help.append(("\t\t%s" % join(avail_f, ", "), "orange"))

@@ -80,7 +80,7 @@ class ddG(object):
 				structures, structure_map = result_set.getStructures()
 			
 			if structures:
-				print("\nRelated publications for structures:")
+				colortext.printf("\nRelated publications for structures:", "lightgreen")
 				for id in sorted(structures.IDs):
 					pubs = self.ddGDB.callproc("GetPublications", parameters=(id,))
 					print(id)
@@ -88,7 +88,7 @@ class ddG(object):
 						print("\t%s: %s" % (pub["Type"], pub["PublicationID"]))
 					 
 			if experiments:
-				print("\nRelated publications for experiments:")
+				colortext.printf("\nRelated publications for experiments:", "lightgreen")
 				for id in sorted(experiments.IDs):
 					pubs = self.ddGDB.callproc("GetExperimentPublications", parameters=(id,))
 					print(id)
@@ -98,7 +98,7 @@ class ddG(object):
 				experimentsets = [e[0] for e in self.ddGDB.execute("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % join(map(str, list(experiments.IDs)), ","), cursorClass = ddgproject.StdCursor)]
 				
 				if experimentsets:
-					print("\nRelated publications for experiment-set sources:")
+					colortext.printf("\nRelated publications for experiment-set sources:", "lightgreen")
 					for id in sorted(experimentsets):
 						print(id)
 						pubs = self.ddGDB.execute("SELECT ID, Type FROM SourceLocation WHERE SourceID=%s", parameters = (id,))
