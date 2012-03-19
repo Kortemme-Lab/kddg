@@ -226,6 +226,7 @@ class ExperimentFilter(Filter):
 	ProTherm = "ProTherm-2008-09-08-23581"
 	Potapov = "Potapov-2009"
 	SenLiu = "SenLiu-ComplexExperimentalDataset"
+	DummySource = "DummySource"
 	large = "large"
 	small = "small"
 	

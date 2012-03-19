@@ -25,6 +25,16 @@ from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResult
 
 dbfields = ddgproject.FieldNames()
 
+class MutationSet(object):
+	def __init__(self):
+		self.mutations = []
+	
+	def addMutation(self, chainID, residueID, wildtypeAA, mutantAA):
+		self.mutations.append((chainID, residueID, wildtypeAA, mutantAA))
+	
+	def getChains(self):
+		return sorted(list(set([m[0] for m in self.mutations])))
+
 class ddG(object):
 	'''This class is responsible for inserting prediction jobs to the database.''' 
 	
@@ -132,7 +142,38 @@ class ddG(object):
 			
 		
 		#score.ddgTestScore
+	
+	def addPDBtoDatabase(self, filepath, protein = None, source = None):
+		if not os.path.exists(filepath):
+			raise Exception("The file %s does not exist." % filepath)
+		rootname, extension = os.path.splitext(filepath)
+		if not extension.lower() == ".pdb":
+			raise Exception("Aborting: The file does not have a .pdb extension.")
 		
+		try:
+			Structure = ddgproject.PDBStructure(rootname, protein = protein, source = source, filepath = filepath)
+			Structure.getPDBContents()
+			
+			sql = ("SELECT PDB_ID FROM Structure WHERE %s=" % dbfields.PDB_ID) + "%s"
+			results = self.ddGDB.execute(sql, parameters = (rootname,))
+			if results:
+				raise Exception("There is already a structure in the database with the ID %s." % rootname)
+			Structure.commit(self.ddGDB)
+		except Exception, e:
+			colortext.error(str(e))
+			colortext.error(traceback.format_exc())
+			raise Exception("An exception occurred committing %s to the database." % filepath)
+
+	def createDummyExperiment(self, pdbID, mutationset, chains, sourceID, ddG, ExperimentSetName = "DummySource"):
+		Experiment = ddgproject.ExperimentSet(pdbID, ExperimentSetName)
+		for m in mutationset.mutations:
+			Experiment.addMutation(m[0], m[1], m[2], m[3])
+		for c in chains:
+			Experiment.addChain(c)
+		Experiment.addExperimentalScore(sourceID, ddG, pdbID)
+		Experiment.commit(self.ddGDB)
+			
+			
 	def addPrediction(self, experimentID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}):
 		'''This function inserts a prediction into the database.
 			The parameters define:
