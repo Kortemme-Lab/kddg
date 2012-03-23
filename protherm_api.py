@@ -470,21 +470,27 @@ missingRefMap = {
 	"PROTEIN SCI 6, 2196-2202 (1997)" 			: ("PMID", 9336842),
 } 
 
-def getDDGUnitsUsedInDB():
-	import common.ddgproject as ddgproject
+def getDDGUnitsUsedInDB(ddGDB = None):
+	if not ddGDB:
+		import common.ddgproject as ddgproject
+		ddGDB = ddgproject.ddGDatabase()
+		results = ddGDB.execute('SELECT SourceID, UnitUsed FROM ProTherm_Units')
+		ddGDB.close()
+	else:
+		results = ddGDB.execute('SELECT SourceID, UnitUsed FROM ProTherm_Units')
 	unitsUsed = {}
-	ddGDB = ddgproject.ddGDatabase()
-	results = ddGDB.execute('SELECT SourceID, UnitUsed FROM ProTherm_Units')
-	ddGDB.close()
 	for r in results:
 		unitsUsed[r["SourceID"]] = r["UnitUsed"]
 	return unitsUsed
 	
-def getIDsInDB(source = "ProTherm-2008-09-08-23581"):
-	import common.ddgproject as ddgproject
-	ddGDB = ddgproject.ddGDatabase()
-	records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgproject.StdCursor)])
-	ddGDB.close()
+def getIDsInDB(ddGDB = None, source = "ProTherm-2008-09-08-23581"):
+	if not ddGDB:
+		import common.ddgproject as ddgproject
+		ddGDB = ddgproject.ddGDatabase()
+		records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgproject.StdCursor)])
+		ddGDB.close()
+	else:
+		records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgproject.StdCursor)])
 	return records_in_database
 	
 def summarizeList(l):
@@ -508,14 +514,16 @@ class ProThermReader(object):
 		23581 : "2008-09-08",
 		25616 : "2011-12-21",
 	}
-		
-	def __init__(self, infilepath, quiet = False):
+	
+	def __init__(self, infilepath, ddgDB = None, quiet = False):
+		self.ddgDB = ddgDB
 		mtchs = re.match(".*(ProTherm)(\d+)[.]dat$", infilepath, re.IGNORECASE)
 		if mtchs:
 			lastrecord = int(mtchs.group(2))
 		if lastrecord in [23581, 25616]:
 			# These fields of ProTherm records cannot be empty for our purposes
 			self.requiredFields = ["NO.", "PDB_wild", "LENGTH", "ddG", "MUTATION", "MUTATED_CHAIN"]
+			self.quiet = quiet
 			# For bad data
 			self.iCodeRecords = iCodeRecords
 			self.patch = patch
@@ -544,7 +552,7 @@ class ProThermReader(object):
 			self.missingReferences = 0
 			self.noPMIDs = {}
 			self.ExistingDBIDs = {}
-			self.ddGUnitsUsed = getDDGUnitsUsedInDB()
+			self.ddGUnitsUsed = getDDGUnitsUsedInDB(self.ddgDB)
 		else:
 			raise Exception("No patch data is available for %s. Run a diff against the most recent database to determine if any changes need to be made." % infilepath)
 		
@@ -556,10 +564,12 @@ class ProThermReader(object):
 		self.open()
 		self.readFieldnames()
 		self.singleErrors = dict.fromkeys(self.fieldnames, 0)
-		colortext.write("[Storing indices for %s: " % self.infilepath, "green")
+		if not self.quiet:
+			colortext.write("[Storing indices for %s: " % self.infilepath, "green")
 		colortext.flush()
 		self.storeRecordIndices()
-		colortext.printf("done]", "green")
+		if not quiet:
+			colortext.printf("done]", "green")
 		colortext.flush()
 		self.close()
 		
@@ -578,6 +588,14 @@ class ProThermReader(object):
 			self.fhandle = None
 		else:
 			raise Exception("Trying to close a null file handle.")
+	
+	def test(self):
+		expected_results = {
+			1163 : [],
+		}
+		for ID, expected in sorted(expected_results.iteritems()):
+			print(ID)
+			print(self.getMutations(ID))
 		
 	def printSummary(self):
 		colortext.printf("File %s: " % self.infilepath, "green")
@@ -703,6 +721,47 @@ class ProThermReader(object):
 		record = self._getRecord(ID, record)
 		colortext.message("Record: %d" % ID)
 		self._printRecordSection(field_order, record)
+	
+	def _getRecordHTMLSection(self, html, field, record, maxlevel, level = -1):
+		if type(field) == type(""):
+			if record.get(field):
+				extra=""
+				if level < maxlevel:
+					extra='colspan="%d"' % (maxlevel - level + 1)
+				html.append('''<tr>%s<td style="background-color:#bbbbbb; border:1px solid black;" %s>%s</td>''' % ('''<td style="border:0"></td>''' * level, extra, field))
+				# Wrap long strings
+				splitstr = ""
+				for i in range(0, len(record[field]), 80):
+					splitstr = splitstr + record[field][i:i+80] + " "
+				if field =="REFERENCE":
+					refnum = self.getReference(0, record)
+					if refnum:
+						splitstr = '''<a target="ddGpubmed" href="http://www.ncbi.nlm.nih.gov/pubmed?term=%s[uid]">%s</a>''' % (refnum, splitstr)
+				html.append('''<td style="background-color:#bbbbee; border:1px solid black;">%s</td></tr>''' % splitstr)
+		else:
+			if type(field[0]) == type(""):
+				for f in field[1:]:
+					if type(f) != type("") or record.get(f):
+						html.append('''<tr>%s<td style="background-color:#993333;border:1px solid black;"><b>%s</b></td></tr>''' % ('''<td style="border:0"></td>''' * level, field[0]))
+						
+						if type(f) == type(""):
+							extra=""
+							if level < maxlevel:
+								extra='colspan="%d"' % (maxlevel - level)
+							html.append('''<tr>%s<td style="background-color:#bb8888; border:1px solid black;" %s><b>Field</b></td><td style="background-color:#bb8888; border:1px solid black;"><b>Value</b></td></tr>''' % ('''<td style="border:0"></td>''' * (level + 1), extra))
+						break
+			else:
+				self._getRecordHTMLSection(html, field[0], record, maxlevel, level + 1)
+			for field in field[1:]:
+				self._getRecordHTMLSection(html, field, record, maxlevel, level + 1)
+	
+	def getRecordHTML(self, ID, record = None):
+		record = self._getRecord(ID, record)
+		html = []
+		html.append('''<br><br><table width="900px" style="text-align:left"><tr><td align="center" colspan="4"><b>Record #%d</b></td></tr>''' % ID)
+		self._getRecordHTMLSection(html, field_order, record, 2)
+		html.append("</table>")
+		return html
 			
 
 	def fixRecord(self, ID, record = None):
@@ -949,7 +1008,8 @@ class ProThermReader(object):
 	def readRecord(self, recordnumber):
 		'''Reads a record from the current position in the file.'''
 		if not recordnumber in self.indices.keys():
-			colortext.error("Record %d not found" % recordnumber)
+			if not self.quiet:
+				colortext.error("Record %d not found" % recordnumber)
 			return None
 		openhandlehere = False
 		if not self.fhandle:
@@ -1047,7 +1107,7 @@ class ProThermReader(object):
 		if openedhere[1]:
 			secondDB.close()
 					
-		existingIDs = getIDsInDB(source = "ProTherm-2008-09-08-23581")
+		existingIDs = getIDsInDB(self.ddgDB, source = "ProTherm-2008-09-08-23581")
 		for i in added_info:
 			if showall:
 				colortext.error("Record %10.d: %s (%s). Value '%s' deleted." % (i[0], i[1], field_descriptions[i[1]], i[2]))
@@ -1118,3 +1178,6 @@ if __name__ == "__main__":
 						dbs.append((int(mtchs.group(2)), ProThermReader(os.path.join(datapath, filenm), mtchs.group(2))))
 				dbs = sorted(dbs)
 				dbs[0][1].diff(dbs[1][1], fields_to_ignore = ["E.C.NUMBER", "ION_NAME_1", "SWISSPROT_ID", "REMARKS", "NO_MOLECULE"], start_at_id = 0, end_at_id = None, showall = False)		
+			if args[1] == "test":
+				ptReader = ProThermReader(os.path.join("..", "rawdata", "ProTherm25616.dat"), quiet = True)
+				ptReader.test()
