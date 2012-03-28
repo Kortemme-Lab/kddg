@@ -10,7 +10,6 @@ from string import join
 import common.colortext as colortext
 import common.ddgproject as ddgproject
 from common.rosettahelper import kJtokcal
-from common.rosettahelper import kcaltokJ
 from common.rosettahelper import NUMBER_KELVIN_AT_ZERO_CELSIUS
 
 
@@ -431,16 +430,33 @@ overridden = {
 	14474 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	14475 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	14476 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
+	24298 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'}, # As above but ProTherm has no entry at all
+	24299 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
+	24300 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
+	24301 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	10057 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1RN1'}, # Three identical chains A, B, C. These cases are odd ones - the PDB file contains identical chains but residue 45 is missing in chain A
 	10058 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1RN1'},
 	14153 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1N0J'}, # Two identical chains A and B but '-' specified in ProTherm
+}
+
+badPublicationReferences = {
+	13376 : 8390295,
+	13377 : 8390295,
+	13378 : 8390295,
+	13379 : 8390295,
+	13380 : 8390295,
+	13381 : 8390295,
+}	
+
+badSecondaryStructure = {
+	19893 : True,
 }
 
 # In these cases, the protein is elongated at the 67th position. This is more than a mutation so I ignore it. 	
 skipTheseCases = [12156, 12159, 12161, 12188, 12191, 12193, 14468]
 
 #These cases fail parsing the mutation line - need to write a new regex
-#skipTheseCases.extend([16597,16598,16599,16600,19893,19894,19895])
+#skipTheseCases.extend([19893,19894,19895])
 
 # In these cases, the structural information needed for the mutations (residues A57, A62) is missing in the PDB file
 # Some of the information is present in chain B (A57's corresponding residue) but I decided against remapping the residues. 
@@ -454,7 +470,7 @@ skipTheseCases = set(skipTheseCases)
 CysteineMutationCases = [13663, 13664, 13677, 13678]
 
 # Mutations with different parsing requirements and their regexes
-multimapCases1 = [22383, 22384]
+multimapCases1 = [16597, 16598, 16599, 16600, 19893, 19894, 22383, 22384]
 mmapCases1regex = re.compile("PDB:(.+[,]{0,1})+\)")
 multimapCases2 = range(17681, 17687 + 1) + range(17692, 17698 + 1)
 mmapCases2regex = re.compile("^.*PDB:(.*);PIR.*$")			
@@ -538,7 +554,8 @@ class ProThermReader(object):
 			self.mmapCases1regex = mmapCases1regex
 			self.mmapCases2regex = mmapCases2regex
 			self.mmapCases3regex = mmapCases3regex
-			self.mutationregex = re.compile("^(\w\d+\w,)+(\w\d+\w)[,]{0,1}$")
+			#self.mutationregex = re.compile("^(\w\d+\w,)+(\w\d+\w)[,]{0,1}$")
+			self.singlemutationregex = re.compile("^(\w)(\d+)(\w)$")
 			self.missingRefMap = missingRefMap
 			self.updated_date = ProThermReader.updated_dates[lastrecord]
 			self.missingddGUnits = {}
@@ -553,6 +570,7 @@ class ProThermReader(object):
 			self.noPMIDs = {}
 			self.ExistingDBIDs = {}
 			self.ddGUnitsUsed = getDDGUnitsUsedInDB(self.ddgDB)
+			self.ExistingScores = {}		
 		else:
 			raise Exception("No patch data is available for %s. Run a diff against the most recent database to determine if any changes need to be made." % infilepath)
 		
@@ -590,25 +608,120 @@ class ProThermReader(object):
 			raise Exception("Trying to close a null file handle.")
 	
 	def test(self):
+		success = True
 		expected_results = {
-			1163 : [],
+		# PLAIN
+			# L 121 A, A 129 M, F 153 L
+			1163  : [('L',  '121', 'A'), ('A',  '129', 'M'), ('F',  '153', 'L')],
+			# S 31 G, E 33 A, E 34 A
+			1909  : [('S',   '31', 'G'), ('E',   '33', 'A'), ('E',   '34', 'A')],
+			#Q 15 I, T 16 R, K 19 R, G 65 S, K 66 A, K 108 R
+			2227  : [('Q',   '15', 'I'), ('T',   '16', 'R'), ('K',   '19', 'R'), ('G',   '65', 'S'), ('K',   '66', 'A'), ('K',  '108', 'R')],
+			# I 6 R, T 53 E, T 44 A
+			12848 : [('I',    '6', 'R'), ('T',   '53', 'E'), ('T',   '44', 'A')],
+			# E 128 A, V 131 A, N 132 A
+			17608 : [('E',  '128', 'A'), ('V',  '131', 'A'), ('N',  '132', 'A')],
+		# PLAIN BUT BADLY FORMATTED
+			11146 : [('G',   '23', 'A'), ('G',   '25', 'A')],
+			21156 : [('E',    '3', 'R'), ('F',   '15', 'A'), ('D',   '25', 'K')],
+		# MUTATION (PDB: MUTATION; PIR MUTATION), repeat
+			#S 15 R (PDB: S 14 R; PIR: S 262 R), H 19 E (PDB: H 18 E; PIR: H 266 E), N 22 R ( PDB: N 21 R; PIR: N 269 R)
+			14215 : [('S',   '14', 'R'), ('H',   '18', 'E'), ('N',   '21', 'R')],
+		# MUTATION_LIST (PDB: MUTATION_LIST; PIR MUTATION_LIST)
+			# N 51 H, D 55 H (PDB: N 47 H, D 51 H; PIR: N 135 H, D 139 H)
+			17681 : [('N',   '47', 'H'), ('D',   '51', 'H')],
+		# MUTATION_LIST (PDB: MUTATION_LIST)
+			# A 2 K, L 33 I (PDB: A 1 K, L 32 I)
+			22383 : [('A',    '1', 'K'), ('I',   '23', 'V')],
+			16597 : [('G',   '92', 'P')],
+			19893 : [('Q',  '11A', 'E'), ('H',  '53A', 'E'), ('S',  '76A', 'K'), ('M',  '78A', 'K'), ('D',  '81A', 'K')],
 		}
-		for ID, expected in sorted(expected_results.iteritems()):
-			print(ID)
-			print(self.getMutations(ID))
 		
+		errors = []
+		colortext.write("Testing %d mutation formats: " % len(expected_results), "green")	
+		for ID, expected in sorted(expected_results.iteritems()):
+			numerrormsgs = len(errors)
+			for i in range(len(expected)):
+				expected[i] = {
+					"WildTypeAA"	: expected[i][0],
+					"ResidueID"		: expected[i][1],
+					"MutantAA"		: expected[i][2]
+				}
+			record = self._getRecord(ID, None)
+			mutations, secondary_structure_positions = self.getMutations(ID, record)
+			if expected and (expected != mutations):
+				errors.append("Record %d: Expected %s, got %s." % (ID, expected, mutations))
+			if (not badSecondaryStructure.get(ID)):
+				if len(mutations) != len(secondary_structure_positions):
+					errors.append("%s: \n" % record["MUTATION"])
+					errors.append("Record %d: Read %d mutations but %d secondary structure positions." % (ID, len(mutations), len(secondary_structure_positions)))
+					errors.append(secondary_structure_positions)
+			if numerrormsgs < len(errors):
+				colortext.write(".", "red")
+			else:
+				colortext.write(".", "green")
+		if errors:
+			colortext.error(" [failed]")
+			colortext.error("Failed mutation parsing test.")
+			for e in errors:
+				colortext.error("\t%s" % e)
+			success = False
+		else:
+			colortext.message(" [passed]")
+			
+		expected_results = {
+			897   : -0.08, # -0.08
+			5980  : 1.1 / 4.184, # 1.1 kJ/mol
+			12144 : -3.9 / 4.184, #-3.9 kJ/mol
+			13535 : -0.14, #-0.14
+			14451 : -20.7 / 4.184, # -20.7 kJ/mol
+			14751 : 3.35, # 3.35
+			17849 : 12.7, # 12.7 kcal/mol
+			17858 : 0.06, # 0.06 kcal/mol
+			20129 : 0.08, # 0.08 
+			21100 : 9.5 / 4.184, # 9.5 kJ/mol,
+			22261 : -0.4 / 4.184, # -0.4 kJ/mol
+			23706 : -2.8, # -2.8
+			25089 : -3.3, # -3.3
+		}
+		errors = []
+		colortext.write("Testing %d ddG conversions: " % len(expected_results), "green")	
+		for ID, expectedDDG in sorted(expected_results.iteritems()):
+			numerrormsgs = len(errors)
+			record = self._getRecord(ID, None)
+			referenceID = self.getReference(ID, record)
+			record["dbReferencePK"] = "PMID:%s" % referenceID
+			ddG = self.getDDGInKcal(ID, record)
+			if expectedDDG != ddG:
+				errors.append("Record %d: Expected %f, got %f." % (ID, expectedDDG, ddG))
+			if numerrormsgs < len(errors):
+				colortext.write(".", "red")
+			else:
+				colortext.write(".", "green")
+		if errors:
+			colortext.error(" [failed]")
+			colortext.error("Failed ddG parsing test.")
+			for e in errors:
+				colortext.error("\t%s" % e)
+			success = False
+		else:
+			colortext.message(" [passed]")
+		return success
+					
 	def printSummary(self):
 		colortext.printf("File %s: " % self.infilepath, "green")
 		colortext.printf("Number of records: %d" % len(self.indices), "yellow")
 		colortext.printf("First record ID: %d" % sorted(self.indices.keys())[0], "yellow")
 		colortext.printf("Last record ID: %d" % sorted(self.indices.keys())[-1], "yellow")
-		colortext.printf("Missing records: ", "yellow")
 		i = 1
+		count = 0
 		while i < self.list_of_available_keys[-1]:
 			if i not in self.set_of_available_keys:
-				colortext.write("%d " % i)
-				colortext.flush()
+				count += 1
+				#colortext.write("%d " % i)
+				#colortext.flush()
 			i += 1
+		colortext.printf("Missing record IDs in this range: %d" % count, "yellow")
 		colortext.write("\n")
 				
 			
@@ -820,9 +933,12 @@ class ProThermReader(object):
 			
 		mutations = []
 		mutationline = record["MUTATION"].split()
+		#print(len(mutationline))
 		cline = join(mutationline, "")
 		if ID in self.CysteineMutationCases: # Hack for input which includes information on the bonds generated from mutation to cysteine
-			mutations = [(mutationline[0], int(mutationline[1]), mutationline[2])] # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur. 
+			if not mutationline[1].isdigit():
+				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID)) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+			mutations = [{"WildTypeAA" : mutationline[0], "ResidueID" : mutationline[1], "MutantAA" : mutationline[2]}]  
 		elif ID in self.multimapCases1:
 			mtchslst = self.mmapCases1regex.findall(cline)
 			if mtchslst:
@@ -830,7 +946,11 @@ class ProThermReader(object):
 				mtchslst = mtchslst[0].split(',')
 				for mtch in mtchslst:
 					assert(mtch)
-					mutations.append((mtch[0], int(mtch[1:-1]), mtch[-1])) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur
+					residueID = mtch[1:-1]
+					if not residueID.isdigit():
+						if (not residueID[:-1].isdigit()) or (not residueID[-1].isalpha()):
+							raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
+					mutations.append({"WildTypeAA" : mtch[0], "ResidueID" : mtch[1:-1], "MutantAA" : mtch[-1]}) 
 			else:
 				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
 		elif ID in self.multimapCases2:
@@ -839,7 +959,9 @@ class ProThermReader(object):
 				mtchslst = mtchslst.group(1).split(",")
 				for mtch in mtchslst:
 					assert(mtch)
-					mutations.append((mtch[0], int(mtch[1:-1]), mtch[-1])) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+					if not mtch[1:-1].isdigit():
+						raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID)) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+					mutations.append({"WildTypeAA" : mtch[0], "ResidueID" : mtch[1:-1], "MutantAA" : mtch[-1]})
 			else:
 				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
 		elif ID in self.multimapCases3:
@@ -847,37 +969,42 @@ class ProThermReader(object):
 			if mtchslst:
 				for mtch in mtchslst:
 					assert(mtch)
-					mutations.append((mtch[0], int(mtch[1:-1]), mtch[-1])) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+					if not mtch[1:-1].isdigit():
+						raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID)) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+					mutations.append({"WildTypeAA" : mtch[0], "ResidueID" : mtch[1:-1], "MutantAA" : mtch[-1]}) 
 			else:
 				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
 		elif len(mutationline) == 3:
-			mutations = [(mutationline[0], int(mutationline[1]), mutationline[2])]  # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+			if not mutationline[1].isdigit():
+				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID)) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+			mutations = [{"WildTypeAA" : mutationline[0], "ResidueID" : mutationline[1], "MutantAA" : mutationline[2]}] 
 		elif len(mutationline) == 1:
 			mline = mutationline[0]
 			if mline == "wild" or mline == "wild*" or mline == "wild**":
 				return [], []
 			else:
 				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
-		elif len(mutationline) % 3 == 0 or len(mutationline) == 5: #2nd case is a hack for 11146
-			#self.mutationregex = re.compile("^(\w\d+\w,)+(\w\d+\w)[,]{0,1}$")
-			m = self.mutationregex.match(cline.strip())
-			if m:
-				mtchs = [m.group(i)[:-1] for i in range(1, m.lastindex)] + [m.group(m.lastindex)]
-				for mut in mtchs:
-					mutations.append((mut[0], int(mut[1:-1]), mut[-1])) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
-			else:
-				# todo: I realized after the fact that the regexes below do not deal properly with insertion codes in
-				# the mutation e.g. "MUTATION        Y 27D D, S 29 D" in record 5438. However, none of these records
-				# have ddG values for ProTherm on 2008-09-08 (23581 entries) so we can ignore this issue unless the
-				# database is updated.
-				# In this case, something like mutationregex = re.compile("^(\w\d+\w{1,2},)+(\w\d+\w{1,2})[,]{0,1}$") should work
-				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
-			 
+		elif len(mutationline) % 3 == 0 or len(mutationline) == 5: # 2nd case is a hack for 11146
+			cline = [entry for entry in cline.split(",") if entry] # Hack for extra comma in 21156
+			for mutation in cline:
+				m = self.singlemutationregex.match(mutation)
+				if m:
+					if not m.group(2).isdigit():
+						raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID)) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+					mutations.append({"WildTypeAA" : m.group(1), "ResidueID" : m.group(2), "MutantAA" : m.group(3)}) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+				else:
+					# todo: I realized after the fact that the regexes below do not deal properly with insertion codes in
+					# the mutation e.g. "MUTATION        Y 27D D, S 29 D" in record 5438. However, none of these records
+					# have ddG values for ProTherm on 2008-09-08 (23581 entries) so we can ignore this issue unless the
+					# database is updated.
+					# In this case, maybe singlemutationregex = re.compile("^(\w)(\d+\w?)(\w)$") would work
+					raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
+				 
 		else:
 			raise Exception("We need to add a case to handle this mutation string: '%s'." % cline)
 		
-		mutation_locations = None
-		if record["SEC.STR."]:
+		mutation_locations = []
+		if (not badSecondaryStructure.get(ID)) and record["SEC.STR."]:
 			mutation_locations = record["SEC.STR."].split(",")
 			numlocations = len(mutation_locations)
 			if not numlocations == len(mutations):
@@ -892,9 +1019,8 @@ class ProThermReader(object):
 		
 		return mutations, mutation_locations
 	
-	def getDDG(self, ID, record = None):
+	def getDDGInKcal(self, ID, record = None):
 		record = self._getRecord(ID, record)
-		
 		dbReferencePK = record.get("dbReferencePK", "publication undetermined")
 		ddGline = record["ddG"]
 		if ddGline.find("kJ/mol") == -1 and ddGline.find("kcal/mol") == -1:
@@ -904,6 +1030,7 @@ class ProThermReader(object):
 				colortext.error("Error processing ddG: ID %d, %s" % (ID, record["ddG"]))
 			if self.ddGUnitsUsed.get(dbReferencePK):
 				unitsUsed = self.ddGUnitsUsed[dbReferencePK]
+				# todo: These cases should be checked
 				if unitsUsed[-1] == '?':
 					unitsUsed = unitsUsed[:-1].strip()
 				ddGline = "%s %s" % (ddGline, unitsUsed)
@@ -911,36 +1038,39 @@ class ProThermReader(object):
 		idx = ddGline.find("kJ/mol")
 		if idx != -1:
 			try:
+				return(kJtokcal(float(ddGline[0:idx])))
+			except:
+				colortext.error("Error processing ddG: ID %d, %s" % (ID, record["ddG"]))
+				return None
+	
+		idx = ddGline.find("kcal/mol")
+		if idx != -1:
+			try:
 				return(float(ddGline[0:idx]))
 			except:
 				colortext.error("Error processing ddG: ID %d, %s" % (ID, record["ddG"]))
 				return None
-		else:
-			idx = ddGline.find("kcal/mol")
-			if idx != -1:
-				try:
-					return(kcaltokJ(float(ddGline[0:idx])))
-				except:
-					colortext.error("Error processing ddG: ID %d, %s" % (ID, record["ddG"]))
-					return None
+		
+		mutationline = record["MUTATION"]
+		if not(mutationline == "wild" or mutationline == "wild*" or mutationline == "wild**"):
+			if self.ExistingDBIDs.get(ID):
+				colortext.printf("No ddG unit specified for existing record: ID %d, %s, publication ID='%s'" % (ID, ddGline, dbReferencePK), "pink")
 			else:
-				mutationline = record["MUTATION"]
-				if not(mutationline == "wild" or mutationline == "wild*" or mutationline == "wild**"):
-					if self.ExistingDBIDs.get(ID):
-						colortext.printf("No ddG unit specified for existing record: ID %d, %s, publication ID='%s'" % (ID, ddGline, dbReferencePK), "pink")
-					else:
-						pass
-						colortext.printf("No ddG unit specified for new record: ID %d, %s, publication ID='%s'" % (ID, ddGline, dbReferencePK), "cyan")
-					mutations, mutation_locations = self.getMutations(ID, record)
-					mutations = join([join(map(str, m),"") for m in mutations], ",")
-					print(dbReferencePK)
-					sys.exit(0)
-					self.missingddGUnits[dbReferencePK] = self.missingddGUnits.get(dbReferencePK) or []
-					self.missingddGUnits[dbReferencePK].append((ID, "*" + mutations + "=" + ddGline + "*"))
-				return None
-	
+				pass
+				colortext.printf("No ddG unit specified for new record: ID %d, %s, publication ID='%s'" % (ID, ddGline, dbReferencePK), "cyan")
+			mutations, mutation_locations = self.getMutations(ID, record)
+			mutations = join([join(map(str, m),"") for m in mutations], ",")
+			print(dbReferencePK)
+			#sys.exit(0)
+			self.missingddGUnits[dbReferencePK] = self.missingddGUnits.get(dbReferencePK) or []
+			self.missingddGUnits[dbReferencePK].append((ID, "*" + mutations + "=" + ddGline + "*"))
+		return None
+
 	def getReference(self, ID, record = None):
 		record = self._getRecord(ID, record)
+		
+		if badPublicationReferences.get(ID):
+			return badPublicationReferences[ID]
 		
 		# Parse reference
 		if not record["REFERENCE"]:
