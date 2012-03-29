@@ -143,15 +143,15 @@ class ddG(object):
 		
 		#score.ddgTestScore
 	
-	def addPDBtoDatabase(self, filepath, protein = None, source = None):
+	def addPDBtoDatabase(self, filepath, protein = None, source = None, UniProtAC = None, UniProtID = None):
 		if not os.path.exists(filepath):
 			raise Exception("The file %s does not exist." % filepath)
-		rootname, extension = os.path.splitext(filepath)
+		filename = os.path.split(filepath)[-1]
+		rootname, extension = os.path.splitext(filename)
 		if not extension.lower() == ".pdb":
 			raise Exception("Aborting: The file does not have a .pdb extension.")
-		
 		try:
-			Structure = ddgproject.PDBStructure(rootname, protein = protein, source = source, filepath = filepath)
+			Structure = ddgproject.PDBStructure(rootname, protein = protein, source = source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID)
 			Structure.getPDBContents()
 			
 			sql = ("SELECT PDB_ID FROM Structure WHERE %s=" % dbfields.PDB_ID) + "%s"

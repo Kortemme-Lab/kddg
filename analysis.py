@@ -34,7 +34,7 @@ def _createMAEFile(results, outfname, average_fn = _mean):
 			n += c
 			scores.append(e["ddG"] * c)
 		 # Note the sign negation of average_fn(scores, n) as Rosetta convention is reverse to ProTherm
-		point = abs(- kJtokcal(average_fn(scores, n)) - predicted_ddG)
+		point = abs(- average_fn(scores, n) - predicted_ddG)
 		output.append("%s,%s"% (X,point))
 		X += 1
 		
@@ -62,8 +62,7 @@ def _createAveragedInputFile(results, outfname, average_fn = _mean):
 			n += c
 			scores.append(e["ddG"] * c)
 		 # Note the sign negation as Rosetta convention is reverse to ProTherm.
-		 # The scores stored in the database are in kJ/mol. Convert to kcal/mol
-		eavg = - kJtokcal(average_fn(scores, n))
+		eavg = - average_fn(scores, n)
 		output.append("%s,%s,%s"% (eavg, predicted_ddG, join(sorted(sources)," & ") or "."))
 
 	F, fname = mkstemp(dir = ".")
