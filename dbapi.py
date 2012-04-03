@@ -143,13 +143,16 @@ class ddG(object):
 		
 		#score.ddgTestScore
 	
-	def addPDBtoDatabase(self, filepath, protein = None, source = None, UniProtAC = None, UniProtID = None):
-		if not os.path.exists(filepath):
-			raise Exception("The file %s does not exist." % filepath)
-		filename = os.path.split(filepath)[-1]
-		rootname, extension = os.path.splitext(filename)
-		if not extension.lower() == ".pdb":
-			raise Exception("Aborting: The file does not have a .pdb extension.")
+	def addPDBtoDatabase(self, filepath = None, pdbID = None, protein = None, source = None, UniProtAC = None, UniProtID = None):
+		if filepath:
+			if not os.path.exists(filepath):
+				raise Exception("The file %s does not exist." % filepath)
+			filename = os.path.split(filepath)[-1]
+			rootname, extension = os.path.splitext(filename)
+			if not extension.lower() == ".pdb":
+				raise Exception("Aborting: The file does not have a .pdb extension.")
+		elif pdbID:
+			rootname = pdbID
 		try:
 			Structure = ddgproject.PDBStructure(rootname, protein = protein, source = source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID)
 			Structure.getPDBContents()
@@ -157,6 +160,7 @@ class ddG(object):
 			sql = ("SELECT PDB_ID FROM Structure WHERE %s=" % dbfields.PDB_ID) + "%s"
 			results = self.ddGDB.execute(sql, parameters = (rootname,))
 			if results:
+				ddgproject.getUniProtMapping(pdbID, storeInDatabase = True)
 				raise Exception("There is already a structure in the database with the ID %s." % rootname)
 			Structure.commit(self.ddGDB)
 		except Exception, e:
