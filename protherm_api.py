@@ -531,7 +531,7 @@ class ProThermReader(object):
 		25616 : "2011-12-21",
 	}
 	
-	def __init__(self, infilepath, ddgDB = None, quiet = False):
+	def __init__(self, infilepath, ddgDB = None, quiet = False, skipIndexStore = False):
 		self.ddgDB = ddgDB
 		mtchs = re.match(".*(ProTherm)(\d+)[.]dat$", infilepath, re.IGNORECASE)
 		if mtchs:
@@ -582,13 +582,14 @@ class ProThermReader(object):
 		self.open()
 		self.readFieldnames()
 		self.singleErrors = dict.fromkeys(self.fieldnames, 0)
-		if not self.quiet:
-			colortext.write("[Storing indices for %s: " % self.infilepath, "green")
-		colortext.flush()
-		self.storeRecordIndices()
-		if not quiet:
-			colortext.printf("done]", "green")
-		colortext.flush()
+		if not skipIndexStore:
+			if not self.quiet:
+				colortext.write("[Storing indices for %s: " % self.infilepath, "green")
+			colortext.flush()
+			self.storeRecordIndices()
+			if not quiet:
+				colortext.printf("done]", "green")
+			colortext.flush()
 		self.close()
 		
 		if not quiet:
@@ -739,8 +740,27 @@ class ProThermReader(object):
 		fhandle.seek(oldpos)
 		self.fieldnames = fieldnames
 		
+	def saveIndicesToFile(self, filename):
+		import pickle
+		F = open(filename, "w")
+		F.write(pickle.dumps(self.indices))
+		F.close()
+
+	def loadIndicesFromFile(self, filename):
+		import pickle
+		F = open(filename, "r")
+		self.indices = pickle.loads(F.read())
+		F.close()
+		ikeys = self.indices.keys()
+		self.list_of_available_keys = sorted(ikeys)
+		self.set_of_available_keys = set(ikeys)
+		
 	def storeRecordIndices(self):
 		'''Reads record indices from the file without affecting the current position.'''
+		mustclose = False
+		if not self.fhandle:
+			self.open()
+			mustclose = True
 		fhandle = self.fhandle
 		oldpos = fhandle.tell()
 		fhandle.seek(0)
@@ -760,6 +780,8 @@ class ProThermReader(object):
 		self.set_of_available_keys = set(ikeys)
 		
 		fhandle.seek(oldpos)
+		if mustclose:
+			self.close()
 		
 	def readRecordsConsecutively(self):
 		'''Reads a record from the current position in the file.'''
