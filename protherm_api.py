@@ -836,6 +836,40 @@ class ProThermReader(object):
 			raise Exception("Could not read a record with number #%s" % str(ID))
 		return record	
 	
+	def searchFor(self, pdbID = None, chain = None, startIndex = None, endIndex = None, numMutations = None, hasddG = None, mutations = None, residueIDs = None):
+		matching_records = []
+		
+		list_of_available_keys = sorted(list(self.set_of_available_keys.difference(set(skipTheseCases))))
+		for ID in list_of_available_keys:
+			record = self.readRecord(ID)
+			self.fixRecord(ID, record)
+			mts = None
+			mtlocs = None
+			try:
+				mts, mtlocs = self.getMutations(ID, record)
+			except:
+				pass
+			if mts and len(mts) == 1:
+				#if str(mts[0]["ResidueID"]) == "32" and  m["WildTypeAA"] == 'A':
+				#	print(ID, mts, record["ddG"], record["PDB_wild"])
+				if str(mts[0]["ResidueID"]) == "45" and mts[0]["WildTypeAA"] == 'A' and mts[0]["MutantAA"] == 'G':
+					print(ID, mts, record["ddG"], record["PDB_wild"])
+			
+			if (pdbID == None) or (pdbID != None and record["PDB_wild"] == pdbID):
+				#if mts:
+				#	print(ID, mts)
+				if not(hasddG) or (hasddG == True and record["ddG"] != None):
+					if (numMutations == None) or (mts and numMutations == len(mts)):
+						foundResidueID = False
+						if residueIDs:
+							for m in mts:
+								if m["ResidueID"] in residueIDs and m["WildTypeAA"] == 'A':
+									foundResidueID = True 
+									print(ID, mts)
+						if not(residueIDs) or foundResidueID: 
+							matching_records.append(ID)
+		return matching_records
+
 	def _printRecordSection(self, field, record, level = -1):
 		if type(field) == type(""):
 			if record.get(field):
@@ -1041,7 +1075,7 @@ class ProThermReader(object):
 		
 		return mutations, mutation_locations
 	
-	def getDDGInKcal(self, ID, record = None):
+	def getDDGInKcal(self, ID, record = None, useRosettaConvention = False):
 		record = self._getRecord(ID, record)
 		dbReferencePK = record.get("dbReferencePK", "publication undetermined")
 		ddGline = record["ddG"]
@@ -1060,7 +1094,10 @@ class ProThermReader(object):
 		idx = ddGline.find("kJ/mol")
 		if idx != -1:
 			try:
-				return(kJtokcal(float(ddGline[0:idx])))
+				val = kJtokcal(float(ddGline[0:idx]))
+				if useRosettaConvention:
+					return -val
+				return val
 			except:
 				colortext.error("Error processing ddG: ID %d, %s" % (ID, record["ddG"]))
 				return None
@@ -1068,7 +1105,10 @@ class ProThermReader(object):
 		idx = ddGline.find("kcal/mol")
 		if idx != -1:
 			try:
-				return(float(ddGline[0:idx]))
+				val = float(ddGline[0:idx])
+				if useRosettaConvention:
+					return -val
+				return val
 			except:
 				colortext.error("Error processing ddG: ID %d, %s" % (ID, record["ddG"]))
 				return None
