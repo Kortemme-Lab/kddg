@@ -28,7 +28,7 @@ field_order = [
 		"PDB_wild"				, 
 		"PDB_mutant"			, 
 		"MUTATION"				, 
-		"MUTATION_CHAIN"		, 
+		"MUTATED_CHAIN"			, 
 		"NO_MOLECULE"			, 
 		"SEC.STR."				, 
 		"ASA"					,
@@ -96,7 +96,7 @@ field_descriptions = {
 	"PDB_wild"				: "PDB code of wildtype",
 	"PDB_mutant"			: "PDB code of mutant",
 	"MUTATION"				: "Mutation detail (wildtype, position, mutation)",
-	"MUTATION_CHAIN"		: "Mutation detail (chain)",
+	"MUTATED_CHAIN"			: "Mutation detail (chain)",
 	"NO_MOLECULE"			: "Number of molecules?",
 	"SEC.STR."				: "Mutation detail? (secondary structure)",
 	"ASA"					: "Accessible surface area (ASA)",
@@ -152,7 +152,7 @@ fields_of_interest = {
 	"PDB_wild" 			: True,
 	"PDB_mutant" 		: True,
 	"MUTATION" 			: True,
-	"MUTATION_CHAIN" 	: True,
+	"MUTATED_CHAIN" 	: True,
 	"T" 				: fn.ExpConTemperature,
 	"pH" 				: fn.ExpConpH,
 	"BUFFER_NAME" 		: fn.ExpConBuffer,
@@ -329,50 +329,278 @@ patch = {
 # These PDB files have exactly one chain but ProTherm lists the wrong chain e.g. '-' rather than 'A'
 singleChainPDBs = {
 	'1A23' : {'MUTATED_CHAIN' : 'A'},
+	'1A2I' : {'MUTATED_CHAIN' : 'A'},
+	'1A43' : {'MUTATED_CHAIN' : 'A'},
+	'1A53' : {'MUTATED_CHAIN' : 'A'},
+	'1A5E' : {'MUTATED_CHAIN' : 'A'},
+	'1A70' : {'MUTATED_CHAIN' : 'A'},
+	'1ABE' : {'MUTATED_CHAIN' : 'A'},
 	'1AG2' : {'MUTATED_CHAIN' : 'A'},
+	'1AG4' : {'MUTATED_CHAIN' : 'A'},
+	'1AG6' : {'MUTATED_CHAIN' : 'A'},
+	'1AIN' : {'MUTATED_CHAIN' : 'A'},
+	'1AJ3' : {'MUTATED_CHAIN' : 'A'},
 	'1AKK' : {'MUTATED_CHAIN' : 'A'},
+	'1AMQ' : {'MUTATED_CHAIN' : 'A'},
+	'1APC' : {'MUTATED_CHAIN' : 'A'},
+	'1APS' : {'MUTATED_CHAIN' : 'A'},
+	'1AQH' : {'MUTATED_CHAIN' : 'A'},
+	'1AVR' : {'MUTATED_CHAIN' : 'A'},
+	'1AX1' : {'MUTATED_CHAIN' : 'A'},
+	'1AXB' : {'MUTATED_CHAIN' : 'A'},
+	'1AYE' : {'MUTATED_CHAIN' : 'A'},
+	'1B0O' : {'MUTATED_CHAIN' : 'A'},
 	'1B5M' : {'MUTATED_CHAIN' : 'A'},
+	'1BAH' : {'MUTATED_CHAIN' : 'A'},
 	'1BCX' : {'MUTATED_CHAIN' : 'A'},
+	'1BD8' : {'MUTATED_CHAIN' : 'A'},
+	'1BET' : {'MUTATED_CHAIN' : 'A'},
+	'1BKE' : {'MUTATED_CHAIN' : 'A'},
+	'1BLC' : {'MUTATED_CHAIN' : 'A'},
+	'1BMC' : {'MUTATED_CHAIN' : 'A'},
+	'1BOY' : {'MUTATED_CHAIN' : 'A'},
+	'1BP2' : {'MUTATED_CHAIN' : 'A'},
 	'1BPI' : {'MUTATED_CHAIN' : 'A'},
+	'1BPR' : {'MUTATED_CHAIN' : 'A'},
 	'1BTA' : {'MUTATED_CHAIN' : 'A'},
 	'1BVC' : {'MUTATED_CHAIN' : 'A'},
+	'1BZO' : {'MUTATED_CHAIN' : 'A'},	
+	'1C52' : {'MUTATED_CHAIN' : 'A'},
+	'1C53' : {'MUTATED_CHAIN' : 'A'},
+	'1C5G' : {'MUTATED_CHAIN' : 'A'},
 	'1CAH' : {'MUTATED_CHAIN' : 'A'},
+	'1CEY' : {'MUTATED_CHAIN' : 'A'},
+	'1CLW' : {'MUTATED_CHAIN' : 'A'},
+	'1CMS' : {'MUTATED_CHAIN' : 'A'},
+	'1COK' : {'MUTATED_CHAIN' : 'A'},
+	'1CPM' : {'MUTATED_CHAIN' : 'A'},
 	'1CSP' : {'MUTATED_CHAIN' : 'A'},
+	'1CTS' : {'MUTATED_CHAIN' : 'A'},
+	'1CUS' : {'MUTATED_CHAIN' : 'A'},
 	'1CYO' : {'MUTATED_CHAIN' : 'A'},
+	'1D0X' : {'MUTATED_CHAIN' : 'A'},
+	'1DE3' : {'MUTATED_CHAIN' : 'A'},
+	'1DEC' : {'MUTATED_CHAIN' : 'A'},
+	'1DFX' : {'MUTATED_CHAIN' : 'A'},
+	'1DHN' : {'MUTATED_CHAIN' : 'A'},
+	'1DIL' : {'MUTATED_CHAIN' : 'A'},
+	'1DIV' : {'MUTATED_CHAIN' : 'A'},
+	'1DLC' : {'MUTATED_CHAIN' : 'A'},
+	'1DO9' : {'MUTATED_CHAIN' : 'A'},
+	'1DTO' : {'MUTATED_CHAIN' : 'A'},
+	'1DVC' : {'MUTATED_CHAIN' : 'A'},
+	'1EKG' : {'MUTATED_CHAIN' : 'A'},
+	'1ELV' : {'MUTATED_CHAIN' : 'A'},
+	'1EQ1' : {'MUTATED_CHAIN' : 'A'},
+	'1ERU' : {'MUTATED_CHAIN' : 'A'},
+	'1EVQ' : {'MUTATED_CHAIN' : 'A'},
+	'1EW4' : {'MUTATED_CHAIN' : 'A'},
+	'1EXG' : {'MUTATED_CHAIN' : 'A'},
+	'1EZA' : {'MUTATED_CHAIN' : 'A'},
+	'1FAJ' : {'MUTATED_CHAIN' : 'A'},
+	'1FEP' : {'MUTATED_CHAIN' : 'A'},
+	'1FGA' : {'MUTATED_CHAIN' : 'A'},
+	'1FKJ' : {'MUTATED_CHAIN' : 'A'},
 	'1FLV' : {'MUTATED_CHAIN' : 'A'},
+	'1FMM' : {'MUTATED_CHAIN' : 'S'},
+	'1FNF' : {'MUTATED_CHAIN' : 'A'},
+	'1FRD' : {'MUTATED_CHAIN' : 'A'},
 	'1FTG' : {'MUTATED_CHAIN' : 'A'},
+	'1FTT' : {'MUTATED_CHAIN' : 'A'},
+	'1GAL' : {'MUTATED_CHAIN' : 'A'},
+	'1GKG' : {'MUTATED_CHAIN' : 'A'},
+	'1GLH' : {'MUTATED_CHAIN' : 'A'},
+	'1GLM' : {'MUTATED_CHAIN' : 'A'},
+	'1GPC' : {'MUTATED_CHAIN' : 'A'},
+	'1GRX' : {'MUTATED_CHAIN' : 'A'},
+	'1H09' : {'MUTATED_CHAIN' : 'A'},
+	'1H7M' : {'MUTATED_CHAIN' : 'A'},
+	'1HCD' : {'MUTATED_CHAIN' : 'A'},
+	'1HEV' : {'MUTATED_CHAIN' : 'A'},
+	'1HIC' : {'MUTATED_CHAIN' : 'A'},
+	'1HK0' : {'MUTATED_CHAIN' : 'X'},
 	'1HME' : {'MUTATED_CHAIN' : 'A'},
+	'1HML' : {'MUTATED_CHAIN' : 'A'},
+	'1HXN' : {'MUTATED_CHAIN' : 'A'},
+	'1HYW' : {'MUTATED_CHAIN' : 'A'},
+	'1IFB' : {'MUTATED_CHAIN' : 'A'},
+	'1IGS' : {'MUTATED_CHAIN' : 'A'},
+	'1IMQ' : {'MUTATED_CHAIN' : 'A'},
 	'1IOB' : {'MUTATED_CHAIN' : 'A'},
+	'1IOJ' : {'MUTATED_CHAIN' : 'A'},
+	'1IRL' : {'MUTATED_CHAIN' : 'A'},
 	'1IRO' : {'MUTATED_CHAIN' : 'A'},
+	'1JAE' : {'MUTATED_CHAIN' : 'A'},
+	'1JBK' : {'MUTATED_CHAIN' : 'A'},
+	'1JHN' : {'MUTATED_CHAIN' : 'A'},
+	'1JNK' : {'MUTATED_CHAIN' : 'A'},
+	'1KDU' : {'MUTATED_CHAIN' : 'A'},
+	'1KFD' : {'MUTATED_CHAIN' : 'A'},
+	'1KKJ' : {'MUTATED_CHAIN' : 'A'},
+	'1KTQ' : {'MUTATED_CHAIN' : 'A'},
+	'1KUM' : {'MUTATED_CHAIN' : 'A'},
 	'1L63' : {'MUTATED_CHAIN' : 'A'},
+	'1LFO' : {'MUTATED_CHAIN' : 'A'},
+	'1LPS' : {'MUTATED_CHAIN' : 'A'},
+	'1LRE' : {'MUTATED_CHAIN' : 'A'},
+	'1LS4' : {'MUTATED_CHAIN' : 'A'},
+	'1LVE' : {'MUTATED_CHAIN' : 'A'},
 	'1LZ1' : {'MUTATED_CHAIN' : 'A'},
+	'1MAX' : {'MUTATED_CHAIN' : 'A'},
+	'1MBD' : {'MUTATED_CHAIN' : 'A'},
+	'1MBG' : {'MUTATED_CHAIN' : 'A'},
 	'1MGR' : {'MUTATED_CHAIN' : 'A'},
+	'1MJC' : {'MUTATED_CHAIN' : 'A'},
+	'1MSI' : {'MUTATED_CHAIN' : 'A'},
+	'1MUL' : {'MUTATED_CHAIN' : 'A'},
+	'1N02' : {'MUTATED_CHAIN' : 'A'},
+	'1OLR' : {'MUTATED_CHAIN' : 'A'},
+	'1OMU' : {'MUTATED_CHAIN' : 'A'},
 	'1ONC' : {'MUTATED_CHAIN' : 'A'},
+	'1ORC' : {'MUTATED_CHAIN' : 'A'},
+	'1OSA' : {'MUTATED_CHAIN' : 'A'},
+	'1P2P' : {'MUTATED_CHAIN' : 'A'},
+	'1PAH' : {'MUTATED_CHAIN' : 'A'},
+	'1PBA' : {'MUTATED_CHAIN' : 'A'},
+	'1PCA' : {'MUTATED_CHAIN' : 'A'},
+	'1PDO' : {'MUTATED_CHAIN' : 'A'},
+	'1PGA' : {'MUTATED_CHAIN' : 'A'},
+	'1PHP' : {'MUTATED_CHAIN' : 'A'},
+	'1PII' : {'MUTATED_CHAIN' : 'A'},
+	'1PK2' : {'MUTATED_CHAIN' : 'A'},
+	'1PMC' : {'MUTATED_CHAIN' : 'A'},
 	'1POH' : {'MUTATED_CHAIN' : 'A'},
+	'1PPI' : {'MUTATED_CHAIN' : 'A'},
+	'1PPN' : {'MUTATED_CHAIN' : 'A'},
+	'1PPP' : {'MUTATED_CHAIN' : 'A'},
+	'1PRR' : {'MUTATED_CHAIN' : 'A'},
+	'1QLX' : {'MUTATED_CHAIN' : 'A'},
+	'1QQV' : {'MUTATED_CHAIN' : 'A'},
+	'1RBP' : {'MUTATED_CHAIN' : 'A'},
+	'1RCB' : {'MUTATED_CHAIN' : 'A'},
+	'1RH1' : {'MUTATED_CHAIN' : 'A'},
+	'1RHD' : {'MUTATED_CHAIN' : 'A'},
+	'1RIL' : {'MUTATED_CHAIN' : 'A'},
+	'1RIS' : {'MUTATED_CHAIN' : 'A'},
 	'1RRO' : {'MUTATED_CHAIN' : 'A'},
 	'1RTB' : {'MUTATED_CHAIN' : 'A'},
 	'1RX4' : {'MUTATED_CHAIN' : 'A'},
+	'1SAP' : {'MUTATED_CHAIN' : 'A'},
+	'1SEE' : {'MUTATED_CHAIN' : 'A'},
+	'1SFP' : {'MUTATED_CHAIN' : 'A'},
+	'1SHG' : {'MUTATED_CHAIN' : 'A'},
+	'1SMD' : {'MUTATED_CHAIN' : 'A'},
 	'1SSO' : {'MUTATED_CHAIN' : 'A'},
 	'1STN' : {'MUTATED_CHAIN' : 'A'},
 	'1SUP' : {'MUTATED_CHAIN' : 'A'},
+	'1TCA' : {'MUTATED_CHAIN' : 'A'},
+	'1TEN' : {'MUTATED_CHAIN' : 'A'},
+	'1TFE' : {'MUTATED_CHAIN' : 'A'},
+	'1TGN' : {'MUTATED_CHAIN' : 'A'},
+	'1TIN' : {'MUTATED_CHAIN' : 'A'},
+	'1TIT' : {'MUTATED_CHAIN' : 'A'},
+	'1TML' : {'MUTATED_CHAIN' : 'A'},
+	'1TMY' : {'MUTATED_CHAIN' : 'A'},
+	'1TOF' : {'MUTATED_CHAIN' : 'A'},
+	'1TPE' : {'MUTATED_CHAIN' : 'A'},
+	'1TTG' : {'MUTATED_CHAIN' : 'A'},
+	'1TUR' : {'MUTATED_CHAIN' : 'A'},
+	'1UBQ' : {'MUTATED_CHAIN' : 'A'},
+	'1UCU' : {'MUTATED_CHAIN' : 'A'},
+	'1UOX' : {'MUTATED_CHAIN' : 'A'},
+	'1URK' : {'MUTATED_CHAIN' : 'A'},
+	'1UW3' : {'MUTATED_CHAIN' : 'A'},
+	'1VIE' : {'MUTATED_CHAIN' : 'A'},
 	'1VQB' : {'MUTATED_CHAIN' : 'A'},
+	'1W3D' : {'MUTATED_CHAIN' : 'A'},
+	'1W4H' : {'MUTATED_CHAIN' : 'A'},
+	'1WIT' : {'MUTATED_CHAIN' : 'A'},
+	'1WRP' : {'MUTATED_CHAIN' : 'R'},
+	'1XAS' : {'MUTATED_CHAIN' : 'A'},
+	'1YAL' : {'MUTATED_CHAIN' : 'A'},
 	'1YCC' : {'MUTATED_CHAIN' : 'A'},
+	'1YEA' : {'MUTATED_CHAIN' : 'A'},
+	'1YMB' : {'MUTATED_CHAIN' : 'A'},
+	'2A36' : {'MUTATED_CHAIN' : 'A'},
 	'2ABD' : {'MUTATED_CHAIN' : 'A'},
+	'2ACE' : {'MUTATED_CHAIN' : 'A'},
 	'2ACY' : {'MUTATED_CHAIN' : 'A'},
+	'2ADA' : {'MUTATED_CHAIN' : 'A'},
+	'2AIT' : {'MUTATED_CHAIN' : 'A'},
 	'2AKY' : {'MUTATED_CHAIN' : 'A'},
+	'2ASI' : {'MUTATED_CHAIN' : 'A'},
+	'2B4Z' : {'MUTATED_CHAIN' : 'A'},
+	'2BRD' : {'MUTATED_CHAIN' : 'A'},
+	'2CBR' : {'MUTATED_CHAIN' : 'A'},
+	'2CPP' : {'MUTATED_CHAIN' : 'A'},
+	'2CRK' : {'MUTATED_CHAIN' : 'A'},
+	'2CRO' : {'MUTATED_CHAIN' : 'A'},
+	'2DRI' : {'MUTATED_CHAIN' : 'A'},
+	'2EQL' : {'MUTATED_CHAIN' : 'A'},
+	'2FAL' : {'MUTATED_CHAIN' : 'A'},
+	'2FHA' : {'MUTATED_CHAIN' : 'A'},
+	'2GA5' : {'MUTATED_CHAIN' : 'A'},
+	'2HMB' : {'MUTATED_CHAIN' : 'A'},
 	'2HPR' : {'MUTATED_CHAIN' : 'A'},
+	'2IFB' : {'MUTATED_CHAIN' : 'A'},
+	'2IMM' : {'MUTATED_CHAIN' : 'A'},
 	'2LZM' : {'MUTATED_CHAIN' : 'A'},
+	'2NUL' : {'MUTATED_CHAIN' : 'A'},
+	'2PDD' : {'MUTATED_CHAIN' : 'A'},
+	'2PEC' : {'MUTATED_CHAIN' : 'A'},
+	'2PGK' : {'MUTATED_CHAIN' : 'A'},
+	'2PRD' : {'MUTATED_CHAIN' : 'A'},
 	'2RN2' : {'MUTATED_CHAIN' : 'A'},
+	'2TRT' : {'MUTATED_CHAIN' : 'A'},
+	'2TS1' : {'MUTATED_CHAIN' : 'A'},
+	'3MBP' : {'MUTATED_CHAIN' : 'A'},
+	'3PGK' : {'MUTATED_CHAIN' : 'A'},
+	'3PSG' : {'MUTATED_CHAIN' : 'A'},
 	'3SSI' : {'MUTATED_CHAIN' : 'A'},
+	'3VUB' : {'MUTATED_CHAIN' : 'A'},
 	'451C' : {'MUTATED_CHAIN' : 'A'},
+	'4GCR' : {'MUTATED_CHAIN' : 'A'},
 	'4LYZ' : {'MUTATED_CHAIN' : 'A'},
+	'4TLN' : {'MUTATED_CHAIN' : 'A'},
+	'4TMS' : {'MUTATED_CHAIN' : 'A'},
+	'5CPV' : {'MUTATED_CHAIN' : 'A'},
+	'5PEP' : {'MUTATED_CHAIN' : 'A'},
+	'6TAA' : {'MUTATED_CHAIN' : 'A'},
+	'9PCY' : {'MUTATED_CHAIN' : 'A'},
+}
+
+# These PDB files have more than one chain but are sequence-identical and ProTherm sometimes lists the wrong chain e.g. '-' rather than 'A'
+identicalChainPDBs = {
+	'1AAR' : {'MUTATED_CHAIN' : 'A'},
+	'1ARR' : {'MUTATED_CHAIN' : 'A'},
+	'1AZP' : {'MUTATED_CHAIN' : 'A'},
+	'1B26' : {'MUTATED_CHAIN' : 'A'},
+	'1BNI' : {'MUTATED_CHAIN' : 'A'},
+	'1FC1' : {'MUTATED_CHAIN' : 'A'},
+	'1G6N' : {'MUTATED_CHAIN' : 'A'},
+	'1HFY' : {'MUTATED_CHAIN' : 'A'},
+	'1HFZ' : {'MUTATED_CHAIN' : 'A'},
+	'1LRP' : {'MUTATED_CHAIN' : 'A'},
+	'1N0J' : {'MUTATED_CHAIN' : 'A'},
+	'1RGG' : {'MUTATED_CHAIN' : 'A'},
+	#'1RN1' : {'MUTATED_CHAIN' : 'B'}, # Three identical chains A, B, C. This case is an odd one - we choose chain B since while the PDB file contains identical chains, residue 45 is missing in chain A but required for records 10057 and 10058.
+	'1WQ5' : {'MUTATED_CHAIN' : 'A'},
+	'2AFG' : {'MUTATED_CHAIN' : 'A'},
+	'2TRX' : {'MUTATED_CHAIN' : 'A'},
+	'2ZTA' : {'MUTATED_CHAIN' : 'A'},
 }
 
 # In these cases, the data in ProTherm is incorrect according to the publication
 overridden = {
 	# These cases have ambiguous entries
+	
+	3047  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'}, # Two identical chains A, B, and C (and two DNA chains E and F) but '-' specified in ProTherm
+	3048  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
+	3049  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
+	3050  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
+	3051  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
 	3469  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1G6N'}, # Two identical chains A and B but '-' specified in ProTherm
-	3470  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1G6N'}, 
+	3470  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1G6N'},
 	2418  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'}, # Two identical chains A and B but '-' specified in ProTherm
 	5979  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
 	5980  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
@@ -434,9 +662,12 @@ overridden = {
 	24299 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	24300 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	24301 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	10057 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1RN1'}, # Three identical chains A, B, C. These cases are odd ones - the PDB file contains identical chains but residue 45 is missing in chain A
-	10058 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1RN1'},
 	14153 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1N0J'}, # Two identical chains A and B but '-' specified in ProTherm
+	17394 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}, # Two distinct chains. There's no mutation here so there's no harm in specifying B as the chain.
+	17395 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}, # 
+	17396 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}, # 
+	8498  : {'ddG_H2O' 		 : '-2.82', 		'PDB' : '1TEN'}, # Typo 
+	14192 : {'ddG' 		 	 : '-0.6453154876', 'PDB' : '1LZ1'}, # Bad computation 
 }
 
 badPublicationReferences = {
@@ -454,6 +685,27 @@ badSecondaryStructure = {
 
 # In these cases, the protein is elongated at the 67th position. This is more than a mutation so I ignore it. 	
 skipTheseCases = [12156, 12159, 12161, 12188, 12191, 12193, 14468]
+
+# todo: Most of these can probably be fixed. Usually just mutation parsing errors 	
+badCasesForDDGH2O = [2747, 3352, 3353, 3354, 3355, 3356, 3357, 3358, 3359, 3360, 3361, 
+			3362, 3363, 3364, 3365, 3366, 3367, 3368, 3369, 3370, 3371, 3372, 3373, 3374, 3375, 3376, 
+			3377, 3378, 3379, 3380, 3381, 3382, 3383, 4611, 5438, 5439, 5440, 5441, 6366, 6367, 6368, 
+			8470, 8471, 8472, 8473, 8474, 8475, 8476, 8477, 8478, 8479, 8480, 8481, 8482, 8483, 8484, 
+			8485, 8486, 8487, 8488, 8489, 8490, 8491, 8492, 8493, 8494, 8495, 8496, 8497, 8498, 8499,
+			8500, 8501, 8502, 8503, 8504, 10384, 12218, 12235, 12236, 12237, 12308, 12309, 12310, 12701, 
+			12702, 12979, 12980, 12982, 12983, 13080, 13081, 13083, 13084, 15402, 15403, 15404, 15405,
+			15406, 15407, 15408, 15529, 15530, 15531, 15532, 15533, 15534, 16251, 16252, 16253, 16255,
+			16256, 16257, 16259, 16260, 16261, 16263, 16264, 16265, 18104, 18105, 18108, 18109, 18110,
+			18111, 18112, 18113, 18114, 18115, 18116, 18117, 18118, 18119, 18120, 18121, 18122, 18123,
+			18124, 18125, 18126, 18127, 18128, 18129, 18130, 18131, 18132, 18133, 18134, 18135, 18136,
+			18138, 18139, 18140, 18141, 18142, 18143, 18144, 18145, 18146, 18147, 18148, 18149, 18150,
+			18151, 18152, 18153, 18154, 18155, 18156, 18157, 18158, 18159, 18160, 18161, 18162, 18163,
+			18164, 18165, 18166, 18167, 18168, 18169, 18170, 18171, 18172, 18173, 18174, 18175, 19886,
+			19887, 19888, 19889, 24283, 24335, 24921, 24922, 24923, 24924, 24925, 24926, 24927, 24928,
+			24929, 24931, 24932, 24933, 24934, 24935, 24936, 24937, 24938, 24939, 24962, 24963, 24964,
+			24966, 24968, 24969, 24970, 24971, 24972, 24973, 24974, 24975, 24976, 24977, 24978, 24979,
+			24980, 24981, 24982, 24983, 24985, 24986, 24987, 24988, 24989, 24990, 24991, 24992, 24993,
+			24994, 24995, 24996, 24997, 24998, 24999, 25000]
 
 #These cases fail parsing the mutation line - need to write a new regex
 #skipTheseCases.extend([19893,19894,19895])
@@ -545,6 +797,7 @@ class ProThermReader(object):
 			self.patch = patch
 			self.patchthis = {}
 			self.singleChainPDBs = singleChainPDBs
+			self.identicalChainPDBs = identicalChainPDBs
 			self.overridden = overridden
 			self.skipTheseCases = skipTheseCases
 			self.CysteineMutationCases = CysteineMutationCases
@@ -559,7 +812,8 @@ class ProThermReader(object):
 			self.missingRefMap = missingRefMap
 			self.updated_date = ProThermReader.updated_dates[lastrecord]
 			self.missingddGUnits = {}
-			self.secondary_structure_values = secondary_structure_values	
+			self.secondary_structure_values = secondary_structure_values
+			self.badCasesForDDGH2O = badCasesForDDGH2O
 			# Experimental data
 			self.missingExpData = {}
 			self.maxDBfieldlengths = {}
@@ -570,6 +824,15 @@ class ProThermReader(object):
 			self.noPMIDs = {}
 			self.ExistingDBIDs = {}
 			self.ddGUnitsUsed = getDDGUnitsUsedInDB(self.ddgDB)
+			
+			# todo: Hack for Guerois matching. Should be checked added to the database
+			self.ddGUnitsUsed["PMID:1610820"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8399139"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8639591"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:2261461"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:7577991"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:9315853"] = "kcal/mol"
+			
 			self.ExistingScores = {}		
 		else:
 			raise Exception("No patch data is available for %s. Run a diff against the most recent database to determine if any changes need to be made." % infilepath)
@@ -892,6 +1155,7 @@ class ProThermReader(object):
 		self._printRecordSection(field_order, record)
 	
 	def _getRecordHTMLSection(self, html, field, record, maxlevel, level = -1):
+		#print(field)
 		if type(field) == type(""):
 			if record.get(field):
 				extra=""
@@ -940,6 +1204,7 @@ class ProThermReader(object):
 		passed = True
 		overridden = self.overridden
 		singleChainPDBs = self.singleChainPDBs
+		identicalChainPDBs = self.identicalChainPDBs
 		patch = self.patch
 		if overridden.get(ID):
 			if record.get('PDB_wild'):
@@ -950,9 +1215,14 @@ class ProThermReader(object):
 					record[k] = v
 		if record["PDB_wild"]:
 			pdbID = record["PDB_wild"].upper()
-			if singleChainPDBs.get(pdbID):
-				for k,v in singleChainPDBs[pdbID].iteritems():
-					record[k] = v
+			if not(overridden.get(ID)) or not(overridden[ID].get("MUTATED_CHAIN")):
+				# Update PDB IDs so long as we don't have them in the override dict 
+				if singleChainPDBs.get(pdbID):
+					for k,v in singleChainPDBs[pdbID].iteritems():
+						record[k] = v
+				elif identicalChainPDBs.get(pdbID):
+					for k,v in identicalChainPDBs[pdbID].iteritems():
+						record[k] = v
 		
 		missingFields = []
 		for field in self.requiredFields:
@@ -1075,15 +1345,23 @@ class ProThermReader(object):
 		
 		return mutations, mutation_locations
 	
-	def getDDGInKcal(self, ID, record = None, useRosettaConvention = False):
+	def getDDGInKcal(self, ID, record = None, useRosettaConvention = False, getDDGH2OInstead = False):
 		record = self._getRecord(ID, record)
 		dbReferencePK = record.get("dbReferencePK", "publication undetermined")
-		ddGline = record["ddG"]
+		
+		ddGKey = "ddG"
+		if getDDGH2OInstead:
+			ddGKey = "ddG_H2O"
+		
+		ddGline = record[ddGKey]
+		if getDDGH2OInstead and not ddGline:
+			# todo: I should handle this better
+			return None
 		if ddGline.find("kJ/mol") == -1 and ddGline.find("kcal/mol") == -1:
 			try:
 				x = float(ddGline)
 			except:
-				colortext.error("Error processing ddG: ID %d, %s" % (ID, record["ddG"]))
+				colortext.error("Error processing %s: ID %d, %s" % (ddGKey, ID, record["ddG"]))
 			if self.ddGUnitsUsed.get(dbReferencePK):
 				unitsUsed = self.ddGUnitsUsed[dbReferencePK]
 				# todo: These cases should be checked
@@ -1099,7 +1377,7 @@ class ProThermReader(object):
 					return -val
 				return val
 			except:
-				colortext.error("Error processing ddG: ID %d, %s" % (ID, record["ddG"]))
+				colortext.error("Error processing %s: ID %d, %s" % (ddGKey, ID, record["ddG"]))
 				return None
 	
 		idx = ddGline.find("kcal/mol")
@@ -1110,16 +1388,16 @@ class ProThermReader(object):
 					return -val
 				return val
 			except:
-				colortext.error("Error processing ddG: ID %d, %s" % (ID, record["ddG"]))
+				colortext.error("Error processing %s: ID %d, %s" % (ddGKey, ID, record["ddG"]))
 				return None
 		
 		mutationline = record["MUTATION"]
 		if not(mutationline == "wild" or mutationline == "wild*" or mutationline == "wild**"):
 			if self.ExistingDBIDs.get(ID):
-				colortext.printf("No ddG unit specified for existing record: ID %d, %s, publication ID='%s'" % (ID, ddGline, dbReferencePK), "pink")
+				colortext.printf("No %s unit specified for existing record: ID %d, %s, publication ID='%s'" % (ddGKey, ID, ddGline, dbReferencePK), "pink")
 			else:
 				pass
-				colortext.printf("No ddG unit specified for new record: ID %d, %s, publication ID='%s'" % (ID, ddGline, dbReferencePK), "cyan")
+				colortext.printf("No %s unit specified for new record: ID %d, %s, publication ID='%s'" % (ddGKey, ID, ddGline, dbReferencePK), "cyan")
 			mutations, mutation_locations = self.getMutations(ID, record)
 			mutations = join([join(map(str, m),"") for m in mutations], ",")
 			print(dbReferencePK)
