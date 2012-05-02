@@ -686,6 +686,8 @@ badSecondaryStructure = {
 # In these cases, the protein is elongated at the 67th position. This is more than a mutation so I ignore it. 	
 skipTheseCases = [12156, 12159, 12161, 12188, 12191, 12193, 14468]
 
+# Note: The pair of records 12193 and 14468 are one example of duplicated data
+
 # todo: Most of these can probably be fixed. Usually just mutation parsing errors 	
 badCasesForDDGH2O = [2747, 3352, 3353, 3354, 3355, 3356, 3357, 3358, 3359, 3360, 3361, 
 			3362, 3363, 3364, 3365, 3366, 3367, 3368, 3369, 3370, 3371, 3372, 3373, 3374, 3375, 3376, 
