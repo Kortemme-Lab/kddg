@@ -667,8 +667,31 @@ overridden = {
 	17395 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}, # 
 	17396 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}, # 
 	8498  : {'ddG_H2O' 		 : '-2.82', 		'PDB' : '1TEN'}, # Typo 
-	14192 : {'ddG' 		 	 : '-0.6453154876', 'PDB' : '1LZ1'}, # Bad computation 
+	14192 : {'ddG' 		 	 : '-0.6453154876', 'PDB' : '1LZ1'}, # Bad computation
+	
+	# PMID: 1404369. Rounding errors
+	180 : {'ddG' 		 	 : 0.71, 'PDB'	:	'1BNI'},
+	179 : {'ddG' 		 	 : 0.69, 'PDB'	:	'1BNI'},
+	186 : {'ddG' 		 	 : 0.91, 'PDB'	:	'1BNI'},
+	181 : {'ddG' 		 	 : 0.78, 'PDB'	:	'1BNI'},
+	183 : {'ddG' 		 	 : 0.81, 'PDB'	:	'1BNI'},
+	172 : {'ddG' 		 	 : 0.19, 'PDB'	:	'1BNI'},
+	174 : {'ddG' 		 	 : 0.35, 'PDB'	:	'1BNI'},
+	173 : {'ddG' 		 	 : 0.31, 'PDB'	:	'1BNI'},
+	178 : {'ddG' 		 	 : 0.66, 'PDB'	:	'1BNI'},
+	189 : {'ddG' 		 	 : 4.08, 'PDB'	:	'1BNI'},
+	176 : {'ddG' 		 	 : 0.48, 'PDB'	:	'1BNI'},
+	171 : {'ddG' 		 	 : 0.14, 'PDB'	:	'1BNI'},
+	175 : {'ddG' 		 	 : 0.41, 'PDB'	:	'1BNI'},
+	182 : {'ddG' 		 	 : 0.79, 'PDB'	:	'1BNI'},
+	185 : {'ddG' 		 	 : 0.88, 'PDB'	:	'1BNI'},
+	187 : {'ddG' 		 	 : 0.98, 'PDB'	:	'1BNI'},
+	184 : {'ddG' 		 	 : 0.82, 'PDB'	:	'1BNI'},
 }
+
+PMIDReferencesInWhichToFixDDGPrecision = [
+	1569557,
+]
 
 badPublicationReferences = {
 	13376 : 8390295,
