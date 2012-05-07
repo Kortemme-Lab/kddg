@@ -668,30 +668,60 @@ overridden = {
 	17396 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}, # 
 	8498  : {'ddG_H2O' 		 : '-2.82', 		'PDB' : '1TEN'}, # Typo 
 	14192 : {'ddG' 		 	 : '-0.6453154876', 'PDB' : '1LZ1'}, # Bad computation
-	
-	# PMID: 1404369. Rounding errors
-	180 : {'ddG' 		 	 : 0.71, 'PDB'	:	'1BNI'},
-	179 : {'ddG' 		 	 : 0.69, 'PDB'	:	'1BNI'},
-	186 : {'ddG' 		 	 : 0.91, 'PDB'	:	'1BNI'},
-	181 : {'ddG' 		 	 : 0.78, 'PDB'	:	'1BNI'},
-	183 : {'ddG' 		 	 : 0.81, 'PDB'	:	'1BNI'},
-	172 : {'ddG' 		 	 : 0.19, 'PDB'	:	'1BNI'},
-	174 : {'ddG' 		 	 : 0.35, 'PDB'	:	'1BNI'},
-	173 : {'ddG' 		 	 : 0.31, 'PDB'	:	'1BNI'},
-	178 : {'ddG' 		 	 : 0.66, 'PDB'	:	'1BNI'},
-	189 : {'ddG' 		 	 : 4.08, 'PDB'	:	'1BNI'},
-	176 : {'ddG' 		 	 : 0.48, 'PDB'	:	'1BNI'},
-	171 : {'ddG' 		 	 : 0.14, 'PDB'	:	'1BNI'},
-	175 : {'ddG' 		 	 : 0.41, 'PDB'	:	'1BNI'},
-	182 : {'ddG' 		 	 : 0.79, 'PDB'	:	'1BNI'},
-	185 : {'ddG' 		 	 : 0.88, 'PDB'	:	'1BNI'},
-	187 : {'ddG' 		 	 : 0.98, 'PDB'	:	'1BNI'},
-	184 : {'ddG' 		 	 : 0.82, 'PDB'	:	'1BNI'},
+	15807 : {'ddG'			 : '2.72', 'PDB' : '1FKJ'}, # Wrong sign
+	15808 : {'ddG'			 : '2.35', 'PDB' : '1FKJ'}, # Wrong sign
 }
 
+RoundingErrors = {
+	# PMID: 1404369. Rounding errors
+	180 : {'ddG' 		 	 : '0.71', 'PDB'	:	'1BNI'},
+	179 : {'ddG' 		 	 : '0.69', 'PDB'	:	'1BNI'},
+	186 : {'ddG' 		 	 : '0.91', 'PDB'	:	'1BNI'},
+	181 : {'ddG' 		 	 : '0.78', 'PDB'	:	'1BNI'},
+	183 : {'ddG' 		 	 : '0.81', 'PDB'	:	'1BNI'},
+	172 : {'ddG' 		 	 : '0.19', 'PDB'	:	'1BNI'},
+	174 : {'ddG' 		 	 : '0.35', 'PDB'	:	'1BNI'},
+	173 : {'ddG' 		 	 : '0.31', 'PDB'	:	'1BNI'},
+	178 : {'ddG' 		 	 : '0.66', 'PDB'	:	'1BNI'},
+	189 : {'ddG' 		 	 : '4.08', 'PDB'	:	'1BNI'},
+	176 : {'ddG' 		 	 : '0.48', 'PDB'	:	'1BNI'},
+	171 : {'ddG' 		 	 : '0.14', 'PDB'	:	'1BNI'},
+	175 : {'ddG' 		 	 : '0.41', 'PDB'	:	'1BNI'},
+	182 : {'ddG' 		 	 : '0.79', 'PDB'	:	'1BNI'},
+	185 : {'ddG' 		 	 : '0.88', 'PDB'	:	'1BNI'},
+	187 : {'ddG' 		 	 : '0.98', 'PDB'	:	'1BNI'},
+	184 : {'ddG' 		 	 : '0.82', 'PDB'	:	'1BNI'},
+	
+	# PMID: 8358293. Rounding errors
+	13328 : {'ddG'	: '1.05', 'PDB' : '1BVC'},
+	13329 : {'ddG'	: '0.75', 'PDB' : '1BVC'},
+	13330 : {'ddG'	: '0.59', 'PDB' : '1BVC'},
+	13331 : {'ddG'	: '0.16', 'PDB' : '1BVC'},
+	13332 : {'ddG'	: '-0.67', 'PDB' : '1BVC'},
+	13333 : {'ddG'	: '-0.26', 'PDB' : '1BVC'},
+	13334 : {'ddG'	: '-0.26', 'PDB' : '1BVC'},
+	13335 : {'ddG'	: '-0.44', 'PDB' : '1BVC'},
+	13336 : {'ddG'	: '-0.41', 'PDB' : '1BVC'},
+	13337 : {'ddG'	: '-1.12', 'PDB' : '1BVC'},
+	13338 : {'ddG'	: '-1.78', 'PDB' : '1BVC'},
+	13339 : {'ddG'	: '-1.45', 'PDB' : '1BVC'},
+	13340 : {'ddG'	: '-1.41', 'PDB' : '1BVC'},
+	13341 : {'ddG'	: '-1.60', 'PDB' : '1BVC'},
+	13342 : {'ddG'	: '-1.92', 'PDB' : '1BVC'},
+	
+	# More from these references need to be updated
+	19236 : {'ddG'	: str(6.0/4.184), 'PDB' : '5AZU'},
+	21991 : {'ddG'	: str(10.0/4.184), 'PDB' : '5AZU'},
+}
 PMIDReferencesInWhichToFixDDGPrecision = [
-	1569557,
+	1569557, "Protherm 19236", "ProTherm 21991"
+
 ]
+
+for ID, data in RoundingErrors.iteritems():
+	assert(ID not in overridden.keys())
+	overridden[ID] = data
+	
 
 badPublicationReferences = {
 	13376 : 8390295,
@@ -720,12 +750,9 @@ badCasesForDDGH2O = [2747, 3352, 3353, 3354, 3355, 3356, 3357, 3358, 3359, 3360,
 			8500, 8501, 8502, 8503, 8504, 10384, 12218, 12235, 12236, 12237, 12308, 12309, 12310, 12701, 
 			12702, 12979, 12980, 12982, 12983, 13080, 13081, 13083, 13084, 15402, 15403, 15404, 15405,
 			15406, 15407, 15408, 15529, 15530, 15531, 15532, 15533, 15534, 16251, 16252, 16253, 16255,
-			16256, 16257, 16259, 16260, 16261, 16263, 16264, 16265, 18104, 18105, 18108, 18109, 18110,
-			18111, 18112, 18113, 18114, 18115, 18116, 18117, 18118, 18119, 18120, 18121, 18122, 18123,
-			18124, 18125, 18126, 18127, 18128, 18129, 18130, 18131, 18132, 18133, 18134, 18135, 18136,
-			18138, 18139, 18140, 18141, 18142, 18143, 18144, 18145, 18146, 18147, 18148, 18149, 18150,
-			18151, 18152, 18153, 18154, 18155, 18156, 18157, 18158, 18159, 18160, 18161, 18162, 18163,
-			18164, 18165, 18166, 18167, 18168, 18169, 18170, 18171, 18172, 18173, 18174, 18175, 19886,
+			16256, 16257, 16259, 16260, 16261, 16263, 16264, 16265, 
+			18137, # QL
+			19886,
 			19887, 19888, 19889, 24283, 24335, 24921, 24922, 24923, 24924, 24925, 24926, 24927, 24928,
 			24929, 24931, 24932, 24933, 24934, 24935, 24936, 24937, 24938, 24939, 24962, 24963, 24964,
 			24966, 24968, 24969, 24970, 24971, 24972, 24973, 24974, 24975, 24976, 24977, 24978, 24979,
@@ -749,10 +776,12 @@ CysteineMutationCases = [13663, 13664, 13677, 13678]
 # Mutations with different parsing requirements and their regexes
 multimapCases1 = [16597, 16598, 16599, 16600, 19893, 19894, 22383, 22384]
 mmapCases1regex = re.compile("PDB:(.+[,]{0,1})+\)")
-multimapCases2 = range(17681, 17687 + 1) + range(17692, 17698 + 1)
+multimapCases2 = range(17681, 17687 + 1) + range(17692, 17698 + 1) + range(18104, 18105 + 1) + range(18108, 18136 + 1) + range(18138, 18175 + 1)
 mmapCases2regex = re.compile("^.*PDB:(.*);PIR.*$")			
 multimapCases3 = range(14215, 14223 + 1) + [16991, 17678, 17679, 17680, 17689, 17690, 17691]
 mmapCases3regex = re.compile("PDB:(\w.*?\w)[;)]")
+
+# 18125 - The PIR mutation has the wrong mutant (it should be A, not I)
 
 # A mapping for missing ProTherm references to their PubMed IDs
 missingRefMap = {
@@ -761,6 +790,8 @@ missingRefMap = {
 	"BIOCHEMISTRY 37, 2477-2487 (1998)" 		: ("PMID", 9485396),
 	"BIOCHIM BIOPHYS ACTA 1429, 365-376 (1999)" : ("PMID", 9989221),
 	"PROTEIN SCI 6, 2196-2202 (1997)" 			: ("PMID", 9336842),
+	"J MOL BIOL 224, 819-835 (1992)"			: ("PMID", 1569559),
+	"STRUCTURE 14, 1401-1410 (2006)"			: ("PMID", 16962971),
 } 
 
 def getDDGUnitsUsedInDB(ddGDB = None):
@@ -850,13 +881,59 @@ class ProThermReader(object):
 			self.ExistingDBIDs = {}
 			self.ddGUnitsUsed = getDDGUnitsUsedInDB(self.ddgDB)
 			
-			# todo: Hack for Guerois matching. Should be checked added to the database
+			# todo: Hack for Guerois matching. Should be checked and added to the database
 			self.ddGUnitsUsed["PMID:1610820"] = "kcal/mol"
 			self.ddGUnitsUsed["PMID:8399139"] = "kcal/mol"
 			self.ddGUnitsUsed["PMID:8639591"] = "kcal/mol"
 			self.ddGUnitsUsed["PMID:2261461"] = "kcal/mol"
 			self.ddGUnitsUsed["PMID:7577991"] = "kcal/mol"
 			self.ddGUnitsUsed["PMID:9315853"] = "kcal/mol"
+			# todo: Hack for Liz matching. Should be checked and added to the database
+			self.ddGUnitsUsed["PMID:7681323"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8448112"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:2021603"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:3300767"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:1602471"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:1920420"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:7479708"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:1610817"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8515459"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:3167015"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:1980207"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8355268"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:3449854"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8897601"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:9578580"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:9558354"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:9565753"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:2015219"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:1988046"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:7893716"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8422372"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:7756312"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:10438631"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:10051585"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:7773177"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:2023260"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:1569552"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8158639"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8648619"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8289248"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:8580845"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:2266554"] = "kcal/mol"
+			
+			self.ddGUnitsUsed["PMID:1569558"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:11254388"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:11438757"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:11705391"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:11841216"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:10467094"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:12600203"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:14607120"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:14516751"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:15504411"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:17400925"] = "kcal/mol"
+			self.ddGUnitsUsed["PMID:1569559"] = "kcal/mol"
 			
 			self.ExistingScores = {}		
 		else:
@@ -1361,7 +1438,6 @@ class ProThermReader(object):
 			if not numlocations == len(mutations):
 				#todo raise Exception
 				colortext.error("The mutations '%s' do not have corresponding locations '%s' in record %d." % (mutations, mutation_locations, ID))
-				
 			for i in range(numlocations):
 				n_location = self.secondary_structure_values.get(mutation_locations[i].strip())
 				if not n_location:
