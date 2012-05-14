@@ -588,6 +588,7 @@ identicalChainPDBs = {
 	'2AFG' : {'MUTATED_CHAIN' : 'A'},
 	'2TRX' : {'MUTATED_CHAIN' : 'A'},
 	'2ZTA' : {'MUTATED_CHAIN' : 'A'},
+	'1HTI' : {'MUTATED_CHAIN' : 'A'},
 }
 
 # In these cases, the data in ProTherm is incorrect according to the publication
@@ -668,29 +669,30 @@ overridden = {
 	17396 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}, # 
 	8498  : {'ddG_H2O' 		 : '-2.82', 		'PDB' : '1TEN'}, # Typo 
 	14192 : {'ddG' 		 	 : '-0.6453154876', 'PDB' : '1LZ1'}, # Bad computation
-	15807 : {'ddG'			 : '2.72', 'PDB' : '1FKJ'}, # Wrong sign
-	15808 : {'ddG'			 : '2.35', 'PDB' : '1FKJ'}, # Wrong sign
+	15807 : {'ddG_H2O'			 : '2.72', 'PDB' : '1FKJ'}, # Wrong sign
+	15808 : {'ddG_H2O'			 : '2.35', 'PDB' : '1FKJ'}, # Wrong sign
+	17873 : {'ddG_H2O'		 : None, 'PDB' : '1RN1'},# I would need to check the reference
 }
 
 RoundingErrors = {
 	# PMID: 1404369. Rounding errors
-	180 : {'ddG' 		 	 : '0.71', 'PDB'	:	'1BNI'},
-	179 : {'ddG' 		 	 : '0.69', 'PDB'	:	'1BNI'},
-	186 : {'ddG' 		 	 : '0.91', 'PDB'	:	'1BNI'},
-	181 : {'ddG' 		 	 : '0.78', 'PDB'	:	'1BNI'},
-	183 : {'ddG' 		 	 : '0.81', 'PDB'	:	'1BNI'},
-	172 : {'ddG' 		 	 : '0.19', 'PDB'	:	'1BNI'},
-	174 : {'ddG' 		 	 : '0.35', 'PDB'	:	'1BNI'},
-	173 : {'ddG' 		 	 : '0.31', 'PDB'	:	'1BNI'},
-	178 : {'ddG' 		 	 : '0.66', 'PDB'	:	'1BNI'},
-	189 : {'ddG' 		 	 : '4.08', 'PDB'	:	'1BNI'},
-	176 : {'ddG' 		 	 : '0.48', 'PDB'	:	'1BNI'},
-	171 : {'ddG' 		 	 : '0.14', 'PDB'	:	'1BNI'},
-	175 : {'ddG' 		 	 : '0.41', 'PDB'	:	'1BNI'},
-	182 : {'ddG' 		 	 : '0.79', 'PDB'	:	'1BNI'},
-	185 : {'ddG' 		 	 : '0.88', 'PDB'	:	'1BNI'},
-	187 : {'ddG' 		 	 : '0.98', 'PDB'	:	'1BNI'},
-	184 : {'ddG' 		 	 : '0.82', 'PDB'	:	'1BNI'},
+	180 : {'ddG' 		 	 : '-0.71', 'PDB'	:	'1BNI'},
+	179 : {'ddG' 		 	 : '-0.69', 'PDB'	:	'1BNI'},
+	186 : {'ddG' 		 	 : '-0.91', 'PDB'	:	'1BNI'},
+	181 : {'ddG' 		 	 : '-0.78', 'PDB'	:	'1BNI'},
+	183 : {'ddG' 		 	 : '-0.81', 'PDB'	:	'1BNI'},
+	172 : {'ddG' 		 	 : '-0.19', 'PDB'	:	'1BNI'},
+	174 : {'ddG' 		 	 : '-0.35', 'PDB'	:	'1BNI'},
+	173 : {'ddG' 		 	 : '-0.31', 'PDB'	:	'1BNI'},
+	178 : {'ddG' 		 	 : '-0.66', 'PDB'	:	'1BNI'},
+	189 : {'ddG' 		 	 : '-4.08', 'PDB'	:	'1BNI'},
+	176 : {'ddG' 		 	 : '-0.48', 'PDB'	:	'1BNI'},
+	171 : {'ddG' 		 	 : '-0.14', 'PDB'	:	'1BNI'},
+	175 : {'ddG' 		 	 : '-0.41', 'PDB'	:	'1BNI'},
+	182 : {'ddG' 		 	 : '-0.79', 'PDB'	:	'1BNI'},
+	185 : {'ddG' 		 	 : '-0.88', 'PDB'	:	'1BNI'},
+	187 : {'ddG' 		 	 : '-0.98', 'PDB'	:	'1BNI'},
+	184 : {'ddG' 		 	 : '-0.82', 'PDB'	:	'1BNI'},
 	
 	# PMID: 8358293. Rounding errors
 	13328 : {'ddG'	: '1.05', 'PDB' : '1BVC'},
@@ -708,10 +710,87 @@ RoundingErrors = {
 	13340 : {'ddG'	: '-1.41', 'PDB' : '1BVC'},
 	13341 : {'ddG'	: '-1.60', 'PDB' : '1BVC'},
 	13342 : {'ddG'	: '-1.92', 'PDB' : '1BVC'},
+
+	# More from this reference needs to be updated
+	# PMID: 1569557. Precision lost during data entry.
+	96 : {'ddG'	: '-2.07', 'PDB' : '1BNI'},
+	40 : {'ddG'	: '-1.35', 'PDB' : '1BNI'},
+	41 : {'ddG'	: '-1.85', 'PDB' : '1BNI'},
+	42 : {'ddG'	: '-1.24', 'PDB' : '1BNI'},
+	43 : {'ddG'	: '-2.15', 'PDB' : '1BNI'},
+	44 : {'ddG'	: '-0.89', 'PDB' : '1BNI'},
+	45 : {'ddG'	: '-2.48', 'PDB' : '1BNI'},
+	46 : {'ddG'	: '-3.39', 'PDB' : '1BNI'},
+	47 : {'ddG'	: '-0.31', 'PDB' : '1BNI'},
+	48 : {'ddG'	: '-3.34', 'PDB' : '1BNI'},
+	49 : {'ddG'	: '-4.32', 'PDB' : '1BNI'},
+	50 : {'ddG'	: '-1.68', 'PDB' : '1BNI'},
+	51 : {'ddG'	:  '0.54', 'PDB' : '1BNI'},
+	52 : {'ddG'	: '-2.03', 'PDB' : '1BNI'},
+	53 : {'ddG'	: '-2.25', 'PDB' : '1BNI'},
+	54 : {'ddG'	: '-0.02', 'PDB' : '1BNI'},
+	55 : {'ddG'	: '-1.12', 'PDB' : '1BNI'},
+	56 : {'ddG'	: '-3.52', 'PDB' : '1BNI'},
+	57 : {'ddG'	: '-1.46', 'PDB' : '1BNI'},
+	58 : {'ddG'	: '-1.94', 'PDB' : '1BNI'},
+	59 : {'ddG'	: '-0.44', 'PDB' : '1BNI'},
+	60 : {'ddG'	: '-1.76', 'PDB' : '1BNI'},
+	# Missing
+	65 : {'ddG'	: '-1.15', 'PDB' : '1BNI'},
+	# Missing
+	67 : {'ddG'	: '-1.75', 'PDB' : '1BNI'},
+	68 : {'ddG'	: '-2.44', 'PDB' : '1BNI'},
+	# Missing
+	71 : {'ddG'	: '-2.97', 'PDB' : '1BNI'},
+	72 : {'ddG'	: '-2.42', 'PDB' : '1BNI'},
+	73 : {'ddG'	: '-0.27', 'PDB' : '1BNI'},
+	74 : {'ddG'	: '-1.15', 'PDB' : '1BNI'},
+	# Missing
+	77 : {'ddG'	:  '0.47', 'PDB' : '1BNI'},
+	# Missing
+	79 : {'ddG'	: '-0.82', 'PDB' : '1BNI'},
+	80 : {'ddG'	: '-1.89', 'PDB' : '1BNI'},
+	81 : {'ddG'	: '-1.65', 'PDB' : '1BNI'},
+	82 : {'ddG'	: '-1.35', 'PDB' : '1BNI'},
+	83 : {'ddG'	: '-2.02', 'PDB' : '1BNI'},
+	84 : {'ddG'	: '-1.34', 'PDB' : '1BNI'},
+	# Missing
+	88 : {'ddG'	: '-1.93', 'PDB' : '1BNI'},
+	# Missing
+	90 : {'ddG'	: '-0.88', 'PDB' : '1BNI'},
+	91 : {'ddG'	: '-3.17', 'PDB' : '1BNI'},
+	92 : {'ddG'	: '-2.67', 'PDB' : '1BNI'},
+	# Missing
+	94 : {'ddG'	: '-2.24', 'PDB' : '1BNI'},
+	95 : {'ddG'	: '-0.76', 'PDB' : '1BNI'},
+	# Missing
+	
+	# More from this reference needs to be updated
+	# PMID: 1404369. Precision lost during data entry.
+	171 : {'ddG'	: '-0.14', 'PDB' : '1BNI'}, # A 32 R ARG
+	172 : {'ddG'	: '-0.19', 'PDB' : '1BNI'}, # A 32 K LYS
+	173 : {'ddG'	: '-0.31', 'PDB' : '1BNI'}, # A 32 M MET
+	174 : {'ddG'	: '-0.35', 'PDB' : '1BNI'}, # A 32 L LEU
+	175 : {'ddG'	: '-0.41', 'PDB' : '1BNI'}, # A 32 S SER
+	176 : {'ddG'	: '-0.48', 'PDB' : '1BNI'}, # A 32 Q GLN
+	177 : {'ddG'	: '-0.55', 'PDB' : '1BNI'}, # A 32 E GLU
+	178 : {'ddG'	: '-0.66', 'PDB' : '1BNI'}, # A 32 N ASN
+	179 : {'ddG'	: '-0.69', 'PDB' : '1BNI'}, # A 32 F PHE
+	180 : {'ddG'	: '-0.71', 'PDB' : '1BNI'}, # A 32 D ASP
+	181 : {'ddG'	: '-0.78', 'PDB' : '1BNI'}, # A 32 H HIS
+	182 : {'ddG'	: '-0.79', 'PDB' : '1BNI'}, # A 32 T THR
+	183 : {'ddG'	: '-0.81', 'PDB' : '1BNI'}, # A 32 I ILE
+	184 : {'ddG'	: '-0.82', 'PDB' : '1BNI'}, # A 32 Y TYR
+	185 : {'ddG'	: '-0.88', 'PDB' : '1BNI'}, # A 32 V VAL
+	186 : {'ddG'	: '-0.91', 'PDB' : '1BNI'}, # A 32 G GLY
+	187 : {'ddG'	: '-0.98', 'PDB' : '1BNI'}, # A 32 W TRP
+	188 : {'ddG'	: '-1.00', 'PDB' : '1BNI'}, # A 32 C CYS
+	189 : {'ddG'	: '-4.08', 'PDB' : '1BNI'}, # A 32 P PRO
+	
 	
 	# More from these references need to be updated
-	19236 : {'ddG'	: str(6.0/4.184), 'PDB' : '5AZU'},
-	21991 : {'ddG'	: str(10.0/4.184), 'PDB' : '5AZU'},
+	19236 : {'ddG_H2O'	: str(-6.0/4.184), 'PDB' : '5AZU'},
+	21991 : {'ddG_H2O'	: str(-10.0/4.184), 'PDB' : '5AZU'},
 }
 PMIDReferencesInWhichToFixDDGPrecision = [
 	1569557, "Protherm 19236", "ProTherm 21991"
@@ -732,32 +811,20 @@ badPublicationReferences = {
 	13381 : 8390295,
 }	
 
-badSecondaryStructure = {
-	19893 : True,
-}
+badSecondaryStructure = dict.fromkeys(
+	[2747, 4611, 12310, 12701, 12702, 12979, 12980, 12982, 12983, 16895, 19886, 19887, 19888, 19889, 19893, 22231, 24335]
+	+ range(15529, 15534 + 1)
+	+ range(24921, 24929 + 1)
+	+ range(24931, 24939 + 1)
+	+ range(24962, 24964 + 1) + [24966]
+	+ range(24968, 24983 + 1)
+	+ range(24985, 25000 + 1)
+	,True)
 
 # In these cases, the protein is elongated at the 67th position. This is more than a mutation so I ignore it. 	
 skipTheseCases = [12156, 12159, 12161, 12188, 12191, 12193, 14468]
 
 # Note: The pair of records 12193 and 14468 are one example of duplicated data
-
-# todo: Most of these can probably be fixed. Usually just mutation parsing errors 	
-badCasesForDDGH2O = [2747, 3352, 3353, 3354, 3355, 3356, 3357, 3358, 3359, 3360, 3361, 
-			3362, 3363, 3364, 3365, 3366, 3367, 3368, 3369, 3370, 3371, 3372, 3373, 3374, 3375, 3376, 
-			3377, 3378, 3379, 3380, 3381, 3382, 3383, 4611, 5438, 5439, 5440, 5441, 6366, 6367, 6368, 
-			8470, 8471, 8472, 8473, 8474, 8475, 8476, 8477, 8478, 8479, 8480, 8481, 8482, 8483, 8484, 
-			8485, 8486, 8487, 8488, 8489, 8490, 8491, 8492, 8493, 8494, 8495, 8496, 8497, 8498, 8499,
-			8500, 8501, 8502, 8503, 8504, 10384, 12218, 12235, 12236, 12237, 12308, 12309, 12310, 12701, 
-			12702, 12979, 12980, 12982, 12983, 13080, 13081, 13083, 13084, 15402, 15403, 15404, 15405,
-			15406, 15407, 15408, 15529, 15530, 15531, 15532, 15533, 15534, 16251, 16252, 16253, 16255,
-			16256, 16257, 16259, 16260, 16261, 16263, 16264, 16265, 
-			18137, # QL
-			19886,
-			19887, 19888, 19889, 24283, 24335, 24921, 24922, 24923, 24924, 24925, 24926, 24927, 24928,
-			24929, 24931, 24932, 24933, 24934, 24935, 24936, 24937, 24938, 24939, 24962, 24963, 24964,
-			24966, 24968, 24969, 24970, 24971, 24972, 24973, 24974, 24975, 24976, 24977, 24978, 24979,
-			24980, 24981, 24982, 24983, 24985, 24986, 24987, 24988, 24989, 24990, 24991, 24992, 24993,
-			24994, 24995, 24996, 24997, 24998, 24999, 25000]
 
 #These cases fail parsing the mutation line - need to write a new regex
 #skipTheseCases.extend([19893,19894,19895])
@@ -768,6 +835,10 @@ skipTheseCases.extend([13451, 13452])
 
 # In this case, I couldn't map the paper's structure well enough onto 1YCC. The mutations mentioned e.g. A57 N->I do not correspond with the PDB structure (attributed to a later paper).
 skipTheseCases.append(11817)
+
+# The DDG value here is a limit rather than a value (the paper states that the mutant (G107V) "was too unstable to yield an accurate determination of DDG_H20".
+skipTheseCases.append(2043)
+
 skipTheseCases = set(skipTheseCases)
 
 # Mutations involving cysteine which have a different format involving bridges (S-H or S-S)
@@ -776,9 +847,23 @@ CysteineMutationCases = [13663, 13664, 13677, 13678]
 # Mutations with different parsing requirements and their regexes
 multimapCases1 = [16597, 16598, 16599, 16600, 19893, 19894, 22383, 22384]
 mmapCases1regex = re.compile("PDB:(.+[,]{0,1})+\)")
-multimapCases2 = range(17681, 17687 + 1) + range(17692, 17698 + 1) + range(18104, 18105 + 1) + range(18108, 18136 + 1) + range(18138, 18175 + 1)
-mmapCases2regex = re.compile("^.*PDB:(.*);PIR.*$")			
-multimapCases3 = range(14215, 14223 + 1) + [16991, 17678, 17679, 17680, 17689, 17690, 17691]
+
+multimapCases2Ranges = ((17681, 17687), (17692, 17698), (18104, 18105), (18108, 18136), (18138, 18175))
+multimapCases2 = []
+for m2r in multimapCases2Ranges:
+	multimapCases2.extend(range(m2r[0], m2r[1] + 1))
+#multimapCases2 = range(17681, 17687 + 1) + range(17692, 17698 + 1) + range(18104, 18105 + 1) +
+#				  range(18108, 18136 + 1) + range(18138, 18175 + 1)
+mmapCases2regex = re.compile("^.*PDB:(.*);PIR.*$")	
+
+		
+multimapCases3Ranges = ((3352, 3383), (14215, 14223), (6366, 6368), (8470, 8504), (12235, 12237),
+					(12308, 12310), (15402, 15408), (16251, 16253), (16255, 16257), 
+					(16259, 16261), (16263, 16265))
+multimapCases3 = []
+for m3r in multimapCases3Ranges:
+	multimapCases3.extend(range(m3r[0], m3r[1] + 1))
+multimapCases3.extend([10384, 16991, 17678, 17679, 17680, 17689, 17690, 17691])
 mmapCases3regex = re.compile("PDB:(\w.*?\w)[;)]")
 
 # 18125 - The PIR mutation has the wrong mutant (it should be A, not I)
@@ -792,6 +877,9 @@ missingRefMap = {
 	"PROTEIN SCI 6, 2196-2202 (1997)" 			: ("PMID", 9336842),
 	"J MOL BIOL 224, 819-835 (1992)"			: ("PMID", 1569559),
 	"STRUCTURE 14, 1401-1410 (2006)"			: ("PMID", 16962971),
+	"J AM CHEM SOC 115, 8523-8526 (1993) "		: ("PMID", 0), # No PMID for this article. "Phospholipase A2 Engineering.  10.  The Aspartate...Histidine Catalytic Diad Also Plays an Important Structural Role."  Y. Li and M.-D. Tsai, J. Am. Chem. Soc. 115, 8523-8526 (1993).
+	"J MOL BIOL 351, 402-416 (2005)"			: ("PMID", 16002092),
+	"PROTEIN SCI 16, 227-238 (2007)"			: ("PMID", 17189482),
 } 
 
 def getDDGUnitsUsedInDB(ddGDB = None):
@@ -864,12 +952,11 @@ class ProThermReader(object):
 			self.mmapCases2regex = mmapCases2regex
 			self.mmapCases3regex = mmapCases3regex
 			#self.mutationregex = re.compile("^(\w\d+\w,)+(\w\d+\w)[,]{0,1}$")
-			self.singlemutationregex = re.compile("^(\w)(\d+)(\w)$")
+			self.singlemutationregex = re.compile("^(\w)(\d+\w?)(\w)$")
 			self.missingRefMap = missingRefMap
 			self.updated_date = ProThermReader.updated_dates[lastrecord]
 			self.missingddGUnits = {}
 			self.secondary_structure_values = secondary_structure_values
-			self.badCasesForDDGH2O = badCasesForDDGH2O
 			# Experimental data
 			self.missingExpData = {}
 			self.maxDBfieldlengths = {}
@@ -935,6 +1022,25 @@ class ProThermReader(object):
 			self.ddGUnitsUsed["PMID:17400925"] = "kcal/mol"
 			self.ddGUnitsUsed["PMID:1569559"] = "kcal/mol"
 			
+			for pmidcase in ['PMID:0', 'PMID:10048932', 'PMID:10074361', 'PMID:10091653', 'PMID:10097082', 'PMID:10360367', 'PMID:10388575', 'PMID:10388847', 'PMID:10467093',
+ 				'PMID:10623553', 'PMID:10692339', 'PMID:10727242', 'PMID:10889040', 'PMID:10926502', 'PMID:10986129', 'PMID:11023787', 'PMID:11093260', 'PMID:11399087',
+ 				'PMID:11406632', 'PMID:11420446', 'PMID:11468365', 'PMID:11477222', 'PMID:11513583', 'PMID:11567094', 'PMID:11567097', 'PMID:11705392', 'PMID:11705393',
+ 				'PMID:11735410', 'PMID:11751325', 'PMID:11964251', 'PMID:12006985', 'PMID:12051856', 'PMID:12054791', 'PMID:12070321', 'PMID:12140288', 'PMID:12173940',
+ 				'PMID:12215410', 'PMID:12269800', 'PMID:12270718', 'PMID:12370184', 'PMID:12487987', 'PMID:12498804', 'PMID:12549934', 'PMID:12559923', 'PMID:12589767',
+ 				'PMID:12614625', 'PMID:12684013', 'PMID:12717025', 'PMID:12795599', 'PMID:12795600', 'PMID:12911302', 'PMID:1326327',
+  				'PMID:1334426', 'PMID:1390669', 'PMID:1420152', 'PMID:1420172', 'PMID:14529489', 'PMID:14659758', 'PMID:14672667', 'PMID:14729346', 'PMID:14769019', 
+  				'PMID:15037063', 'PMID:15099748', 'PMID:15350126', 'PMID:1537844', 'PMID:1540577', 'PMID:15449934', 'PMID:15544816', 'PMID:15567419', 'PMID:1567879', 'PMID:15722442',
+  				'PMID:15740745', 'PMID:15865421', 'PMID:15935381', 'PMID:15952787', 'PMID:16002092', 'PMID:16023136', 'PMID:16042382', 'PMID:16046626', 'PMID:1610799', 'PMID:16165156',
+  				'PMID:1620695', 'PMID:16246369', 'PMID:16246823', 'PMID:16274219', 'PMID:16337228', 'PMID:16430220', 'PMID:1645658', 'PMID:16473367', 'PMID:16489754', 'PMID:16522792',
+  				'PMID:16566582', 'PMID:16906769', 'PMID:17038664', 'PMID:17065159', 'PMID:17189482', 'PMID:1731883', 'PMID:17434659', 'PMID:17496026', 'PMID:17564441', 'PMID:1765074',
+  				'PMID:18189416', 'PMID:18293933', 'PMID:18434422', 'PMID:1850617', 'PMID:1854757', 'PMID:19099423', 'PMID:1911779', 'PMID:19683000', 'PMID:19683006', 'PMID:2148681',
+  				'PMID:2207072', 'PMID:2622906', 'PMID:2822088', 'PMID:2851328', 'PMID:2872918', 'PMID:2928323', 'PMID:3026439', 'PMID:3322388', 'PMID:3409879', 'PMID:378988', 'PMID:6757449',
+  				'PMID:7479862', 'PMID:7548170', 'PMID:7577989', 'PMID:7664079', 'PMID:7764048', 'PMID:7798183', 'PMID:7819231', 'PMID:8110795', 'PMID:8117679', 'PMID:8144550', 'PMID:8180214',
+  				'PMID:8218166', 'PMID:8257694', 'PMID:8380333', 'PMID:8399225', 'PMID:8454578', 'PMID:8475043', 'PMID:8476861', 'PMID:8564547', 'PMID:8611545', 'PMID:8626487', 'PMID:8646533',
+  				'PMID:8652517', 'PMID:8672446', 'PMID:8672513', 'PMID:8674528', 'PMID:8679642', 'PMID:8720127', 'PMID:8743572', 'PMID:8771183', 'PMID:8844847', 'PMID:8845764', 'PMID:8961937',
+  				'PMID:9020793', 'PMID:9020874', 'PMID:9041638', 'PMID:9231905', 'PMID:9655352', 'PMID:9878405', 'PMID:9890932', 'PMID:9973571',
+  				'PMID:10504393', 'PMID:11695900', 'PMID:11742108', 'PMID:12079394', 'PMID:19384991', 'PMID:19472325', 'PMID:19472328', 'PMID:7716165', 'PMID:9819209']:
+				self.ddGUnitsUsed[pmidcase] = "kcal/mol"
 			self.ExistingScores = {}		
 		else:
 			raise Exception("No patch data is available for %s. Run a diff against the most recent database to determine if any changes need to be made." % infilepath)
@@ -1303,6 +1409,10 @@ class ProThermReader(object):
 		'''Override bad data in ProTherm.'''
 		record = self._getRecord(ID, record)
 		
+		# Patch for typos
+		if 24390 <= ID <= 24421 and record["ddG_H2O"] and record["ddG_H2O"].find("kal/mol") != -1:
+			record["ddG_H2O"] = record["ddG_H2O"].replace("kal/mol", "kcal/mol")
+		
 		passed = True
 		overridden = self.overridden
 		singleChainPDBs = self.singleChainPDBs
@@ -1360,6 +1470,9 @@ class ProThermReader(object):
 		record = self._getRecord(ID, record)
 			
 		mutations = []
+		if ID == 24283:
+			record["MUTATION"] = record["MUTATION"].replace("Y236 F", "Y 236 F") # Hack for this special case
+			
 		mutationline = record["MUTATION"].split()
 		#print(len(mutationline))
 		cline = join(mutationline, "")
@@ -1403,8 +1516,8 @@ class ProThermReader(object):
 			else:
 				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
 		elif len(mutationline) == 3:
-			if not mutationline[1].isdigit():
-				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID)) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+			if (not mutationline[1].isdigit()) and (not mutationline[1][:-1].isdigit()):
+				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
 			mutations = [{"WildTypeAA" : mutationline[0], "ResidueID" : mutationline[1], "MutantAA" : mutationline[2]}] 
 		elif len(mutationline) == 1:
 			mline = mutationline[0]
@@ -1417,9 +1530,9 @@ class ProThermReader(object):
 			for mutation in cline:
 				m = self.singlemutationregex.match(mutation)
 				if m:
-					if not m.group(2).isdigit():
-						raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID)) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
-					mutations.append({"WildTypeAA" : m.group(1), "ResidueID" : m.group(2), "MutantAA" : m.group(3)}) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
+					if (not m.group(2).isdigit()) and (not m.group(2)[:-1].isdigit()):
+						raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
+					mutations.append({"WildTypeAA" : m.group(1), "ResidueID" : m.group(2), "MutantAA" : m.group(3)})
 				else:
 					# todo: I realized after the fact that the regexes below do not deal properly with insertion codes in
 					# the mutation e.g. "MUTATION        Y 27D D, S 29 D" in record 5438. However, none of these records
@@ -1455,6 +1568,7 @@ class ProThermReader(object):
 			ddGKey = "ddG_H2O"
 		
 		ddGline = record[ddGKey]
+		
 		if getDDGH2OInstead and not ddGline:
 			# todo: I should handle this better
 			return None
@@ -1478,7 +1592,7 @@ class ProThermReader(object):
 					return -val
 				return val
 			except:
-				colortext.error("Error processing %s: ID %d, %s" % (ddGKey, ID, record["ddG"]))
+				colortext.error("Error processing %s in kJ/mol: ID %d, %s" % (ddGKey, ID, record["ddG"]))
 				return None
 	
 		idx = ddGline.find("kcal/mol")
@@ -1489,7 +1603,7 @@ class ProThermReader(object):
 					return -val
 				return val
 			except:
-				colortext.error("Error processing %s: ID %d, %s" % (ddGKey, ID, record["ddG"]))
+				colortext.error("Error processing %s in kcal/mol: ID %d, %s" % (ddGKey, ID, record["ddG"]))
 				return None
 		
 		mutationline = record["MUTATION"]
@@ -1501,7 +1615,6 @@ class ProThermReader(object):
 				colortext.printf("No %s unit specified for new record: ID %d, %s, publication ID='%s'" % (ddGKey, ID, ddGline, dbReferencePK), "cyan")
 			mutations, mutation_locations = self.getMutations(ID, record)
 			mutations = join([join(map(str, m),"") for m in mutations], ",")
-			print(dbReferencePK)
 			#sys.exit(0)
 			self.missingddGUnits[dbReferencePK] = self.missingddGUnits.get(dbReferencePK) or []
 			self.missingddGUnits[dbReferencePK].append((ID, "*" + mutations + "=" + ddGline + "*"))
