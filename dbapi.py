@@ -210,7 +210,7 @@ class ddG(object):
 			
 			# Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
 			chains = [result[0] for result in self.ddGDB.callproc("GetChains", parameters = parameters, cursorClass = ddgproject.StdCursor)]
-			pdb.stripForDDG(chains, KeepHETATMLines)
+			pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
 			
 			# - Post stripping checks -
 			# Get the 'Chain ResidueID' PDB-formatted identifier for each mutation mapped to Rosetta numbering

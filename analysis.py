@@ -34,7 +34,7 @@ def _createMAEFile(results, outfname, average_fn = _mean):
 			n += c
 			scores.append(e["ddG"] * c)
 		 # Note the sign negation of average_fn(scores, n) as Rosetta convention is reverse to ProTherm
-		point = abs(- average_fn(scores, n) - predicted_ddG)
+		point = abs(average_fn(scores, n) - predicted_ddG)
 		output.append("%s,%s"% (X,point))
 		X += 1
 		
@@ -62,7 +62,7 @@ def _createAveragedInputFile(results, outfname, average_fn = _mean):
 			n += c
 			scores.append(e["ddG"] * c)
 		 # Note the sign negation as Rosetta convention is reverse to ProTherm.
-		eavg = - average_fn(scores, n)
+		eavg = average_fn(scores, n)
 		output.append("%s,%s,%s"% (eavg, predicted_ddG, join(sorted(sources)," & ") or "."))
 
 	F, fname = mkstemp(dir = ".")
@@ -155,7 +155,7 @@ def plot(RFunction, filecreator, results, outfname, average_fn = _mean):
 			colortext.error(traceback.format_exc())
 			os.remove(inputfname)
 			raise Exception(e)
-		os.remove(inputfname)
+		#os.remove(inputfname)
 			
 
 # R notes for Shane

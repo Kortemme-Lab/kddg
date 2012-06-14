@@ -227,6 +227,7 @@ class ExperimentFilter(Filter):
 	Potapov = "Potapov-2009"
 	SenLiu = "SenLiu-ComplexExperimentalDataset"
 	DummySource = "DummySource"
+	LizKellogg = "LizKellogg:10.1002/prot.22921"
 	large = "large"
 	small = "small"
 	
