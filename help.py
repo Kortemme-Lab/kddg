@@ -11,7 +11,7 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 import sys
 import re
 from string import join
-from common.ddgproject import FieldNames, StdCursor, ddGDatabase
+from ddgdbapi import FieldNames, StdCursor, ddGDatabase
 from common import colortext
 import ddglib#.filter import *
 import inspect
@@ -102,7 +102,7 @@ def ShowResultSet():
 ResultSets are used to store data retrieved from the database. They are the result of an SQL query or
 stored procedure call. To create a ResultSet, use the following format:''', 'silver'))
 	help.append(('''  SomeResultSet(db, <string:SQL>, <tuple:parameters>, <list:AdditionalIDs>)''', "lightblue"))
-	help.append(('''The argument db is a datbase connection retrieved from calling common.ddgproject.ddGDatabase().
+	help.append(('''The argument db is a datbase connection retrieved from calling ddgdbapi.ddGDatabase().
 
 The SQL string and associated parameters are optional. If they are not supplied and neither is AdditionalIDs
 then all records will be returned. If only AdditionalIDs is supplied then only records with those primary keys

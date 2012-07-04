@@ -10,11 +10,11 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 
 import pickle
 from string import join
-import common.ddgproject
+import ddgdbapi
 from ddglib.filter import *
 
-dbfields = common.ddgproject.FieldNames()
-StdCursor = common.ddgproject.StdCursor
+dbfields = ddgdbapi.FieldNames()
+StdCursor = ddgdbapi.StdCursor
 
 class StructureResultSet(ResultSet):
 	dbname = dbfields.Structure
@@ -300,7 +300,7 @@ class ExperimentFilter(Filter):
 	def setAminoAcids(self, wildtype = None, mutant = None):
 		valid_wildtype = None
 		valid_mutant = None
-		for aa in common.ddgproject.aas:
+		for aa in ddgdbapi.aas:
 			if wildtype == aa[0] or wildtype == aa[1]:
 				valid_wildtype = aa[0] 
 			if mutant == aa[0] or mutant == aa[1]:

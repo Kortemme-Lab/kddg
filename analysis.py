@@ -6,12 +6,12 @@ import subprocess
 from string import join
 import time
 import common.colortext as colortext
-import common.ddgproject as ddgproject
+import ddgdbapi
 from common.rosettahelper import kJtokcal
 from tempfile import mkstemp
 
-ddGdb = ddgproject.ddGDatabase()
-dbfields = ddgproject.FieldNames()
+ddGdb = ddgdbapi.ddGDatabase()
+dbfields = ddgdbapi.FieldNames()
 
 def _mean(points, numpoints):
 	'''Points is expected to be a list (or iterable), numpoints should be an integer.'''

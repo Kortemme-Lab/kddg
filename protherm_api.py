@@ -8,7 +8,7 @@ import string
 sys.path.insert(0, "..")
 from string import join
 import common.colortext as colortext
-import common.ddgproject as ddgproject
+import ddgdbapi
 from common.rosettahelper import kJtokcal
 from common.rosettahelper import NUMBER_KELVIN_AT_ZERO_CELSIUS
 
@@ -144,7 +144,7 @@ field_descriptions = {
 	"RELATED_ENTRIES"		: "Related entries",
 }
 
-fn = ddgproject.FieldNames()
+fn = ddgdbapi.FieldNames()
 fields_of_interest = {
 	"PROTEIN" 			: True,
 	"SOURCE" 			: True,
@@ -985,8 +985,7 @@ missingRefMap = {
 
 def getDDGUnitsUsedInDB(ddGDB = None):
 	if not ddGDB:
-		import common.ddgproject as ddgproject
-		ddGDB = ddgproject.ddGDatabase()
+		ddGDB = ddgdbapi.ddGDatabase()
 		results = ddGDB.execute('SELECT SourceID, UnitUsed FROM ProTherm_Units')
 		ddGDB.close()
 	else:
@@ -998,12 +997,11 @@ def getDDGUnitsUsedInDB(ddGDB = None):
 	
 def getIDsInDB(ddGDB = None, source = "ProTherm-2008-09-08-23581"):
 	if not ddGDB:
-		import common.ddgproject as ddgproject
-		ddGDB = ddgproject.ddGDatabase()
-		records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgproject.StdCursor)])
+		ddGDB = ddgdbapi.ddGDatabase()
+		records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgdbapi.StdCursor)])
 		ddGDB.close()
 	else:
-		records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgproject.StdCursor)])
+		records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgdbapi.StdCursor)])
 	return records_in_database
 	
 def summarizeList(l):

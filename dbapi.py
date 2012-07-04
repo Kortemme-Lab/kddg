@@ -10,7 +10,7 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 
 import os
 from string import join
-import common.ddgproject as ddgproject
+import ddgdbapi
 from pdb import PDB, ResidueID2String, checkPDBAgainstMutations, aa1
 #from Bio.PDB import *
 from rosettahelper import write_file
@@ -23,7 +23,7 @@ import score
 import analysis
 from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet 
 
-dbfields = ddgproject.FieldNames()
+dbfields = ddgdbapi.FieldNames()
 
 class MutationSet(object):
 	def __init__(self):
@@ -39,8 +39,8 @@ class ddG(object):
 	'''This class is responsible for inserting prediction jobs to the database.''' 
 	
 	def __init__(self):
-		self.ddGDB = ddgproject.ddGDatabase()
-		self.ddGDataDB = ddgproject.ddGPredictionDataDatabase()
+		self.ddGDB = ddgdbapi.ddGDatabase()
+		self.ddGDataDB = ddgdbapi.ddGPredictionDataDatabase()
 	
 	def __del__(self):
 		self.ddGDB.close()
@@ -105,7 +105,7 @@ class ddG(object):
 					for pub in pubs:
 						print("\t%s: %s" % (pub["Type"], pub["SourceLocation.ID"]))
 						
-				experimentsets = [e[0] for e in self.ddGDB.execute("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % join(map(str, list(experiments.IDs)), ","), cursorClass = ddgproject.StdCursor)]
+				experimentsets = [e[0] for e in self.ddGDB.execute("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % join(map(str, list(experiments.IDs)), ","), cursorClass = ddgdbapi.StdCursor)]
 				
 				if experimentsets:
 					colortext.printf("\nRelated publications for experiment-set sources:", "lightgreen")
@@ -155,12 +155,12 @@ class ddG(object):
 			rootname = pdbID
 		
 		try:
-			Structure = ddgproject.PDBStructure(rootname, protein = protein, source = source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly)
+			Structure = ddgdbapi.PDBStructure(rootname, protein = protein, source = source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly)
 			#Structure.getPDBContents(self.ddGDB)
 			sql = ("SELECT PDB_ID FROM Structure WHERE %s=" % dbfields.PDB_ID) + "%s"
 			results = self.ddGDB.execute(sql, parameters = (rootname,))
 			if results:
-				#ddgproject.getUniProtMapping(pdbID, storeInDatabase = True)
+				#ddgdbapi.getUniProtMapping(pdbID, storeInDatabase = True)
 				raise Exception("There is already a structure in the database with the ID %s." % rootname)
 			Structure.commit(self.ddGDB, testonly = testonly)
 		except Exception, e:
@@ -169,7 +169,7 @@ class ddG(object):
 			raise Exception("An exception occurred committing %s to the database." % filepath)
 
 	def createDummyExperiment(self, pdbID, mutationset, chains, sourceID, ddG, ExperimentSetName = "DummySource"):
-		Experiment = ddgproject.ExperimentSet(pdbID, ExperimentSetName)
+		Experiment = ddgdbapi.ExperimentSet(pdbID, ExperimentSetName)
 		for m in mutationset.mutations:
 			Experiment.addMutation(m[0], m[1], m[2], m[3])
 		for c in chains:
@@ -205,11 +205,11 @@ class ddG(object):
 			pdb = PDB(contents.split("\n"))
 			
 			# Check that the mutated positions exist and that the wild-type matches the PDB
-			mutations = [result for result in self.ddGDB.callproc("GetMutations", parameters = parameters, cursorClass = ddgproject.StdCursor)]
+			mutations = [result for result in self.ddGDB.callproc("GetMutations", parameters = parameters, cursorClass = ddgdbapi.StdCursor)]
 			checkPDBAgainstMutations(pdbID, pdb, mutations)
 			
 			# Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
-			chains = [result[0] for result in self.ddGDB.callproc("GetChains", parameters = parameters, cursorClass = ddgproject.StdCursor)]
+			chains = [result[0] for result in self.ddGDB.callproc("GetChains", parameters = parameters, cursorClass = ddgdbapi.StdCursor)]
 			pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
 			
 			# - Post stripping checks -
