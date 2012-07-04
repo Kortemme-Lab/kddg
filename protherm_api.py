@@ -197,6 +197,91 @@ secondary_structure_values = {
 	"Turn"		: "Turn",
 }
 
+MeasureMapping = {
+	'Abs' : 'Absorbance',
+	'Absorbance' : 'Absorbance',
+	'Absorption' : 'Absorbance',
+	'Activity' : 'Activity',
+	'activity' : 'Activity',
+	'Activity assay' : 'Activity',
+	'Anisotropy' : 'Anisotropy',
+	'ANS binding' : 'ANS binding',
+	'Capillary electrophoresis' : 'Capillary electrophoresis',
+	'CD' : 'CD',
+	'CD (far-UV)' : 'CD (far-UV)',
+	'CD(far-UV)' : 'CD (far-UV)',
+	'CD (near-UV)' : 'CD (near-UV)',
+	'CD(near-UV)' : 'CD (near-UV)',
+	'Chromatography' : 'Chromatography',
+	'DSC' : 'DSC',
+	'DSMC' : 'DSMC',
+	'Emission' : 'Emission',
+	'Enzyme activity' : 'Enzyme activity',
+	'enzyme activity' : 'Enzyme activity',
+	'Enzyme assay' : 'Enzyme assay',
+	'EPR' : 'EPR',
+	'ESR' : 'ESR',
+	'far-UV CD' : 'CD (far-UV)',
+	'Fluorescence' : 'Fluorescence',
+	'Fluorescence (ANS)' : 'Fluorescence (ANS)',
+	'Fluorescence (Trp)' : 'Fluorescence (Trp)',
+	'FTIR' : 'FTIR',
+	'Gel electrophoresis' : 'Gel electrophoresis',
+	'HPLC' : 'HPLC',
+	'Hydrogen exchange' : 'Hydrogen exchange',
+	'IATC' : 'IATC',
+	'IR spectroscopy' : 'IR spectroscopy',
+	'Isothermal denaturation' : 'Isothermal denaturation',
+	'Light scattering' : 'Light-scattering',
+	'Light-scattering' : 'Light-scattering',
+	'Magnetic Relaxation Dispersion' : 'Magnetic relaxation dispersion',
+	'near-UV CD' : 'CD (near-UV)',
+	'NMR' : 'NMR',
+	'NMR amide hydrogen exchange' : 'NMR amide hydrogen exchange',
+	'NMR hydrogen exchange' : 'NMR hydrogen exchange',
+	'NMR Hydrogen exchange' : 'NMR hydrogen exchange',
+	'optical' : 'Optical',
+	'Optical Density' : 'Optical density',
+	'Pulse Protolysis' : 'Pulse protolysis',
+	'Quantitative cysteine reactivity' : 'Quantitative cysteine reactivity',
+	'Refraction' : 'Refraction',
+	'SAXS' : 'SAXS',
+	'SEC' : 'SEC',
+	'SUPREX' : 'SUPREX',
+	'Thiol reactivity' : 'Thiol reactivity',
+	'UV spectroscopy' : 'UV spectroscopy',
+}
+
+MethodMapping = {
+	'2-Propanol' : '2-Propanol',
+	'Acid' : 'Acid',
+	'Activity' : 'Activity',
+	'DimethylUrea' : 'Dimethylurea',
+	'Dynamic fluctuation' : 'Dynamic fluctuation',
+	'GSH' : 'GSH',
+	'GSSG' : 'GSSG',
+	'GdnHCl' : 'GdnHCl',
+	'GdnHSCN' : 'GdnHSCN',
+	'GdnSCN' : 'GdnSCN',
+	'HClO4' : 'HClO4',
+	'Heat treatment' : 'Heat treatment',
+	'heat treatment' : 'Heat treatment',
+	'KSCN' : 'KSCN',
+	'LiCl' : 'LiCl',
+	'NaCl' : 'NaCl',
+	'NaClO4 titration' : 'NaClO4 titration',
+	'Pressure' : 'Pressure',
+	'pressure' : 'Pressure',
+	'Pressure denaturation' : 'Pressure denaturation',
+	'SDS' : 'SDS',
+	'TFE' : 'TFE',
+	'Thermal' : 'Thermal',
+	'Urea' : 'Urea',
+	'Urea/GdnHCl(0.5 M)' : 'Urea/GdnHCl(0.5 M)',
+	'Urea/GdnHCl(0.9 M)' : 'Urea/GdnHCl(0.9 M)',
+	'Urea/GdnHCl(1.35 M)' : 'Urea/GdnHCl(1.35 M)',
+}
+
 # These are the records where the mutations include insertion codes
 # It turns out that none of these are eligible for inclusion in the database
 # as they are all missing ddG values.
@@ -656,6 +741,22 @@ overridden = {
 	8304  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	8305  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	8306  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
+	11864 : {'dCp' 			 : None,'PDB' : '2FHA'},
+	11865 : {'dCp' 			 : None,'PDB' : '2FHA'},
+	11866 : {'dCp' 			 : None,'PDB' : '2FHA'},
+	11867 : {'dCp' 			 : None,'PDB' : '2FHA'},
+	24388 : {'dCp' 			 : None,'PDB' : ''},
+	16900 : {'m'			 : '6.86 kJ/mol/M', 'PDB' : '1C9O'},
+	
+	889   : {'Tm'			 : '53.4 C',	'PDB' : '1ARR'},
+	890   : {'Tm'			 : '67.3 C',	'PDB' : '1ARR'},
+	5303  : {'Tm'			 : '<= 10.0 C',	'PDB' : '1YCC'},
+	23589  : {'Tm'			 : '> 80 C', 	'PDB' : ''},
+	25269  : {'Tm'			 : '52-54 C',	'PDB' : ''},
+	
+	17877  : {'dTm'			 : None,	'PDB' : ''},
+	23676  : {'dTm'			 : None,	'PDB' : ''},
+	
 	14474 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	14475 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	14476 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
@@ -1403,8 +1504,181 @@ class ProThermReader(object):
 		self._getRecordHTMLSection(html, field_order, record, 2)
 		html.append("</table>")
 		return html
-			
+	
+	def fixThermodynamic_dG(self, ID, record):
+		# Leave these as are for the moment since we only really care about the DDG values
+		pass
+	
+	def fixThermodynamic_dG_H2O(self, ID, record):
+		# Leave these as are for the moment since we only really care about the DDG_H2O values
+		pass
+	
+	def fixThermodynamic_Tm(self, ID, record):
+		# Values are in degrees Celsius 
+		Tm = record["Tm"]
+		if Tm:
+			if overridden.get(ID) and overridden[ID].get("Tm"):
+				return
+			if Tm.endswith(" K"):
+				record["Tm"] = "%g C" % (float(Tm[:-2]) - NUMBER_KELVIN_AT_ZERO_CELSIUS)
+			elif Tm.endswith("K"):
+				record["Tm"] = "%g C" % (float(Tm[:-1]) - NUMBER_KELVIN_AT_ZERO_CELSIUS)
+			elif Tm.endswith(" C"):
+				TmInCelsius = float(Tm[:-2])
+			else:
+				try:
+					TmInCelsius = float(Tm)
+					if TmInCelsius > 200 and ID != 8530:
+						colortext.warning("Record %d has a high Tm (%s) which may be in Celsius or Kelvin. Check." % (ID, TmInCelsius))
+					record["Tm"] = "%s C" % record["Tm"]
+				except:
+					colortext.error("Error parsing Tm %s of record %d." % (Tm, ID))
 
+	def fixThermodynamic_dTm(self, ID, record):
+		# Values are in degrees Celsius 
+		dTm = record["dTm"]
+		if dTm:
+			if dTm.endswith(" K") or dTm.endswith(" k"):
+				dTm = dTm[:-2]
+			elif dTm.endswith("K"):
+				dTm = dTm[:-1]
+			elif dTm.endswith(" C"):
+				dTm = dTm[:-2]
+			try:
+				dTmInCelsius = float(dTm)
+				record["dTm"] = dTm
+			except:
+				colortext.error("Error parsing dTm %s of record %d." % (record["dTm"], ID))
+	
+	def fixThermodynamic_dHvH(self, ID, record):
+		# Probably in kcal/mol or kJ/mol unless otherwise specified but ProTherm does not explicitly specify the units. Unqualified values appear to be in both kJ/mol and kcal/mol. 
+		pass
+	
+	def fixThermodynamic_dHcal(self, ID, record):
+		# Probably in kcal/mol or kJ/mol unless otherwise specified but ProTherm does not explicitly specify the units. Unqualified values appear to be in both kJ/mol and kcal/mol. 
+		pass
+		
+	def fixThermodynamic_m(self, ID, record):
+		m = record["m"]
+		m_unit = None
+		if m:
+			m = m.strip()
+			tokens = [t for t in record["m"].split(' ') if t]
+			tokens[0] = tokens[0].replace(",", "")
+			assert(len(tokens) <= 3)
+			if len(tokens) == 1:
+				m = float(tokens[0])
+				m_unit = 'kcal/mol/M'
+			else:
+				m = float(tokens[0])
+				m_unit = join(map(string.strip, tokens[1:]), " ")
+			record['m'] = m
+			record['m_UNIT'] = m_unit
+
+	def fixThermodynamic_Cm(self, ID, record):
+		Cm = record["Cm"]
+		if Cm:
+			if Cm.endswith(" M"):
+				Cm = Cm[:-2]
+			if ID != 4919:
+				# We usually expect a float value so we hack the odd cases
+				floatvalue = float(Cm)
+			record["Cm"] = Cm
+	
+	def fixThermodynamic_dCp(self, ID, record):
+		dCp = record["dCp"]
+		if dCp:
+			kjIndex = dCp.find(" kJ/mol/K")
+			if kjIndex == -1:
+				kjIndex = dCp.find(" kJ/Kmol")
+			if kjIndex == -1:
+				kjIndex = dCp.find(" kJ/K/mol")
+			if kjIndex == -1:
+				kjIndex = dCp.find(" kJ/K mol")
+			if kjIndex == -1:
+				kjIndex = dCp.find(" kJ/K.mol")
+			if kjIndex == -1:
+				kjIndex = dCp.find("kJ/K/mol")
+			if kjIndex == -1:
+				kjIndex = dCp.find(" kJ/mol K")
+			if kjIndex == -1:
+				kjIndex = dCp.find(" kJ/m/K")
+			if kjIndex == -1:
+				kjIndex = dCp.find(" kJ/mol")
+				
+			if kjIndex != -1:
+				dCp = kJtokcal(float(dCp[:kjIndex]))
+			else:
+				kcalIndex = dCp.find(" kcal/mol/K")
+				if kcalIndex == -1:
+					kcalIndex = dCp.find(" kcal/mole/K")
+				if kcalIndex == -1:
+					kcalIndex = dCp.find(" kcal/mol/deg")
+				if kcalIndex == -1:
+					kcalIndex = dCp.find(" kcal/mol deg")
+				if kcalIndex == -1:
+					kcalIndex = dCp.find(" Kcal/(mol.deg)")
+				if kcalIndex == -1:
+					kcalIndex = dCp.find(" kcla/molK")
+				if kcalIndex == -1:
+					kcalIndex = dCp.find(" kcal/K mol")
+				if kcalIndex == -1:
+					kcalIndex = dCp.find(" Kcal/K mol")
+				if kcalIndex != -1:
+					dCp = float(dCp[:kcalIndex])
+				else:
+					calIndex = dCp.find(" cal/K/mol")
+					if calIndex != -1:
+						dCp = float(dCp[:calIndex])/1000.0
+					else:
+						# We expect a float value here
+						dCp = float(dCp)
+			record["dCp"] = dCp
+	
+	def fixThermodynamic_state(self, ID, record):
+		if record["STATE"]:
+			record["STATE"] = int(record["STATE"])
+			
+	def fixThermodynamic_reversibility(self, ID, record):
+		reversibility = record["REVERSIBILITY"]
+		level = None
+		if reversibility:
+			reversibility = reversibility.lower()
+			if reversibility == 'unknown' or reversibility == 'unknownnouwn':
+				reversibility = 'Unknown'
+			elif reversibility == 'yes, 90%':
+				# Hack for special case
+				reversibility = 'Yes'
+				level = "90%"
+			elif reversibility.startswith('yes'):
+				level = reversibility[3:].strip() or None
+				if level:
+					assert(level[0] == '(' and level[-1] == ')')
+					level = level[1:-1]
+				reversibility = 'Yes'
+			elif reversibility.startswith('no'):
+				level = reversibility[2:].strip() or None
+				if level:
+					assert(level[0] == '(' and level[-1] == ')')
+					level = level[1:-1]
+				reversibility = 'No'
+		else:
+			reversibility = 'Unknown'
+		record["REVERSIBILITY"] = reversibility
+		record["REVERSIBILITY_LEVEL"] = level
+	
+	def fixThermodynamic_activity(self, ID, record):
+		pass
+	
+	def fixThermodynamic_activity_Km(self, ID, record):
+		pass
+	
+	def fixThermodynamic_activity_Kcat(self, ID, record):
+		pass
+	
+	def fixThermodynamic_activity_Kd(self, ID, record):
+		pass
+	
 	def fixRecord(self, ID, record = None):
 		'''Override bad data in ProTherm.'''
 		record = self._getRecord(ID, record)
@@ -1414,6 +1688,7 @@ class ProThermReader(object):
 			record["ddG_H2O"] = record["ddG_H2O"].replace("kal/mol", "kcal/mol")
 		
 		passed = True
+		
 		overridden = self.overridden
 		singleChainPDBs = self.singleChainPDBs
 		identicalChainPDBs = self.identicalChainPDBs
@@ -1435,6 +1710,71 @@ class ProThermReader(object):
 				elif identicalChainPDBs.get(pdbID):
 					for k,v in identicalChainPDBs[pdbID].iteritems():
 						record[k] = v
+		
+		# ** Experimental conditions **
+		
+		# Normalize measures values
+		measures = []
+		msrs = record['MEASURE']
+		if msrs.find('+') != -1:
+			msrs = msrs.split('+')
+		elif msrs.find(',') != -1:
+			msrs = msrs.split(',')
+		else:
+			msrs = [msrs]
+		for m in msrs:
+			m = m.strip()
+			if not MeasureMapping.get(m):
+				passed = False
+				raise colortext.Exception("Cannot find match for measure '%s' in record %d." % (m, ID))
+			else:
+				measures.append(MeasureMapping[m])
+		if len(measures) > 3:
+				raise colortext.Exception("More than three measures (%s) were found for record %d. Our DDG database does not have enough fields to store all measures." % (str(measures), ID))
+		record['MEASURES'] = measures 
+		
+		# Normalize methods values
+		methods = []
+		mthds = record['METHOD']
+		if mthds != None:
+			if mthds.find('+') != -1:
+				raise colortext.Exception("Cannot find match for method '%s' in record %d." % (m, ID))
+			elif mthds.find(',') != -1:
+				mthds = mthds.split(',')
+			else:
+				mthds = [mthds]
+			for m in mthds:
+				m = m.strip()
+				if not MethodMapping.get(m):
+					passed = False
+					raise colortext.Exception("Cannot find match for method '%s' in record %d." % (m, ID))
+				else:
+					methods.append(MethodMapping[m])
+		if len(methods) > 2:
+				raise colortext.Exception("More than two methods (%s) were found for record %d. Our DDG database does not have enough fields to store all methods." % (str(methods), ID))
+		record['METHODS'] = methods 
+		
+		# ** Thermodynamic data **
+		self.fixThermodynamic_dG(ID, record)
+		self.fixThermodynamic_dG_H2O(ID, record)
+		self.fixThermodynamic_Tm(ID, record)
+		self.fixThermodynamic_dTm(ID, record)
+		self.fixThermodynamic_dHvH(ID, record)
+		self.fixThermodynamic_dHcal(ID, record)
+		self.fixThermodynamic_m(ID, record)
+		self.fixThermodynamic_Cm(ID, record)
+		self.fixThermodynamic_dCp(ID, record)
+		self.fixThermodynamic_state(ID, record)
+		self.fixThermodynamic_reversibility(ID, record)
+		self.fixThermodynamic_activity(ID, record)
+		self.fixThermodynamic_activity_Km(ID, record)
+		self.fixThermodynamic_activity_Kcat(ID, record)
+		self.fixThermodynamic_activity_Kd(ID, record)
+		
+		
+						
+				 
+		
 		
 		missingFields = []
 		for field in self.requiredFields:
