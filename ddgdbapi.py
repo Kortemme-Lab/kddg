@@ -12,7 +12,9 @@ from string import join, letters
 import math
 import getpass
 import itertools
-sys.path.insert(0, "common")
+if __name__ == "__main__":
+	sys.path.insert(0, "../common")
+from rosettadb import DatabaseInterface
 import rosettahelper
 import rcsb
 import colortext
@@ -178,30 +180,30 @@ def mapBetweenUniProtandPDB(IDs, fromtype, totype):
 			assert(MappedUniProtACs == IDs)
 		return MappedPDBIDs, MappedUniProtACs, MappingBetweenIDs 
 
-def commitUniProtMapping(db, ACtoID_mapping, PDBtoAC_mapping):
+def commitUniProtMapping(ddGdb, ACtoID_mapping, PDBtoAC_mapping):
 	for uACC, uID in ACtoID_mapping.iteritems():
-		results = db.execute(("SELECT * FROM UniProtKB WHERE %s" % FieldNames_.UniProtKB_AC)+"=%s", parameters=(uACC,))
+		results = ddGdb.locked_execute(("SELECT * FROM UniProtKB WHERE %s" % ddGdb.FlatFieldNames.UniProtKB_AC)+"=%s", parameters=(uACC,))
 		if results:
-			if results[0][FieldNames_.UniProtKB_ID] != uID:
-				raise Exception("Existing UniProt mapping (%s->%s) does not agree with the passed-in parameters (%s->%s)." % (results[0][FieldNames_.UniProtKB_AC],results[0][FieldNames_.UniProtKB_ID],uACC,uID))
+			if results[0][ddGdb.FlatFieldNames.UniProtKB_ID] != uID:
+				raise Exception("Existing UniProt mapping (%s->%s) does not agree with the passed-in parameters (%s->%s)." % (results[0][ddGdb.FlatFieldNames.UniProtKB_AC],results[0][ddGdb.FlatFieldNames.UniProtKB_ID],uACC,uID))
 		else:			
 			UniProtMapping = {
-				FieldNames_.UniProtKB_AC : uACC,
-				FieldNames_.UniProtKB_ID : uID,
+				ddGdb.FlatFieldNames.UniProtKB_AC : uACC,
+				ddGdb.FlatFieldNames.UniProtKB_ID : uID,
 			}
-			db.insertDict('UniProtKB', UniProtMapping)
+			ddGdb.insertDict('UniProtKB', UniProtMapping)
 	for updbID, uACCs in PDBtoAC_mapping.iteritems():
 		for uACC in uACCs:
-			results = db.execute(("SELECT * FROM UniProtKBMapping WHERE %s" % FieldNames_.UniProtKB_AC)+"=%s", parameters=(uACC,))
+			results = ddGdb.locked_execute(("SELECT * FROM UniProtKBMapping WHERE %s" % ddGdb.FlatFieldNames.UniProtKB_AC)+"=%s", parameters=(uACC,))
 			associatedPDBsInDB = []
 			if results:
-				associatedPDBsInDB = [r[FieldNames_.PDB_ID] for r in results]
+				associatedPDBsInDB = [r[ddGdb.FlatFieldNames.PDB_ID] for r in results]
 			if updbID not in associatedPDBsInDB:
 				UniProtPDBMapping = {
-					FieldNames_.UniProtKB_AC : uACC,
-					FieldNames_.PDB_ID : updbID,
+					ddGdb.FlatFieldNames.UniProtKB_AC : uACC,
+					ddGdb.FlatFieldNames.PDB_ID : updbID,
 				}
-				db.insertDict('UniProtKBMapping', UniProtPDBMapping)
+				ddGdb.insertDict('UniProtKBMapping', UniProtPDBMapping)
 
 class UPFatalException(Exception): pass
 def getUniProtMapping(pdbIDs, storeInDatabase = False):
@@ -312,17 +314,17 @@ def computeStandardDeviation(values):
 	
 	return stddev, variance
 
-def readUniProtMap(db):
+def readUniProtMap(ddGdb):
 	if not (UniProtACToID) or not(PDBToUniProt) or not(UniProtKBACToPDB):
-		results = db.execute("SELECT * FROM UniProtKB")
+		results = ddGdb.locked_execute("SELECT * FROM UniProtKB")
 		for r in results:
-			assert(not(UniProtACToID.get(r[FieldNames_.UniProtKB_AC])))
-			UniProtACToID[r[FieldNames_.UniProtKB_AC]] = r[FieldNames_.UniProtKB_ID]
+			assert(not(UniProtACToID.get(r[ddGdb.FlatFieldNames.UniProtKB_AC])))
+			UniProtACToID[r[ddGdb.FlatFieldNames.UniProtKB_AC]] = r[ddGdb.FlatFieldNames.UniProtKB_ID]
 	
-		results = db.execute("SELECT * FROM UniProtKBMapping")
+		results = ddGdb.locked_execute("SELECT * FROM UniProtKBMapping")
 		for r in results:
-			pdbID = r[FieldNames_.PDB_ID]
-			UPAC = r[FieldNames_.UniProtKB_AC]
+			pdbID = r[ddGdb.FlatFieldNames.PDB_ID]
+			UPAC = r[ddGdb.FlatFieldNames.UniProtKB_AC]
 			UPID = UniProtACToID[UPAC]
 			if PDBToUniProt.get(pdbID):
 				PDBToUniProt[pdbID].append((UPAC, UPID))
@@ -332,108 +334,6 @@ def readUniProtMap(db):
 				UniProtKBACToPDB[UPAC].append(pdbID)
 			else:
 				UniProtKBACToPDB[UPAC] = [pdbID]
-
-class FieldNames(dict):
-	'''Define database fieldnames here so we can change them in one place if need be.'''
-		
-	def __init__(self):
-		self.queued = "queued"
-		self.active = "active"
-		self.done = "done"
-		self.failed = "failed"
-		
-		self.Structure = "Structure"
-		self.PDB_ID = "PDB_ID"	
-		self.Content = "Content"
-		self.FASTA = "FASTA"
-		self.Resolution = "Resolution"
-		self.Source = "Source"
-		self.Protein = "Protein"
-		self.Techniques = "Techniques"
-		self.BFactors = "BFactors"
-		
-		self.UniProtKB = "UniProtKB"
-		self.UniProtKB_AC = "UniProtKB_AC"
-		self.UniProtKB_ID = "UniProtKB_ID"
-		
-		self.Experiment = "Experiment"
-		self.ID = "ID"
-		self.Mutant = "Mutant"
-		self.ScoreVariance = "ScoreVariance"
-						
-		self.ExperimentID = "ExperimentID"
-		self.Chain = "Chain"
-		self.ResidueID = "ResidueID"
-		self.WildTypeAA = "WildTypeAA"
-		self.MutantAA = "MutantAA"
-		self.SecondaryStructurePosition = "SecondaryStructurePosition"
-		
-		self.SourceID = "SourceID"
-		self.ddG = "ddG"
-		self.NumberOfMeasurements = "NumberOfMeasurements"
-		self.ExpConTemperature = "ExpConTemperature" 
-		self.ExpConpH = "ExpConpH"
-		self.ExpConBuffer = "ExpConBuffer"
-		self.ExpConBufferConcentration = "ExpConBufferConcentration"
-		self.ExpConIon = "ExpConIon"
-		self.ExpConIonConcentration = "ExpConIonConcentration"
-		self.ExpConProteinConcentration = "ExpConProteinConcentration"
-		self.ExpConMeasure = "ExpConMeasure"
-		self.ExpConMethodOfDenaturation = "ExpConMethodOfDenaturation"
-		self.ExpConAdditives = "ExpConAdditives"
-		self.Publication = "Publication"
-		
-		self.Name = "Name"
-		self.Version = "Version"
-		self.SVNRevision = "SVNRevision"
-		
-		self.Type = "Type"
-		self.Command = "Command"
-		
-		self.Prediction = "Prediction"
-		self.PredictionSet = "PredictionSet"
-		self.ProtocolID = "ProtocolID"
-		self.ResidueMapping = "ResidueMapping"
-		self.KeptHETATMLines = "KeptHETATMLines"
-		self.StrippedPDB = "StrippedPDB"
-		self.InputFiles = "InputFiles"
-		self.Description = "Description"
-		self.EntryDate = "EntryDate"
-		self.StartDate = "StartDate"
-		self.EndDate = "EndDate"
-		self.CryptID = "cryptID"
-		self.Status = "Status"
-		self.Errors = "Errors"
-		self.AdminCommand = "AdminCommand"
-		self.ExtraParameters = "ExtraParameters"
-		self.StoreOutput = "StoreOutput"
-		
-		self.Protocol = "Protocol"
-		self.ProtocolID = "ProtocolID"
-		self.StepID = "StepID"
-		self.ToolID = "ToolID"
-		self.CommandID = "CommandID"
-		self.DatabaseToolID = "DatabaseToolID"
-		self.DirectoryName = "DirectoryName"
-		self.ClassName = "ClassName"
-
-		self.SourceLocation = "SourceLocation"
-		self.SourceID = "SourceID"
-		self.Type = "Type"
-		self.RIS = "RIS"
-		self.URL = "URL"
-		self.DOI = "DOI"
-		self.ISSN = "ISSN"
-		self.ESSN = "ESSN"
-		
-		self.FromStep = "FromStep" 
-		self.ToStep = "ToStep" 
-		
-
-	def __getitem__(self, key):
-		return self.__dict__[key]
-	
-FieldNames_ = FieldNames()
 
 class DBObject(object):
 	dict = {}
@@ -451,7 +351,7 @@ class DBObject(object):
 		else:
 			return self.databaseID
 		
-	def commit(self, db):
+	def commit(self):
 		raise Exception("Concrete function commit needs to be defined.")
 	
 	def __repr__(self):
@@ -465,8 +365,11 @@ class PDBStructure(DBObject):
 	# At the time of writing, these PDB IDs had no JRNL lines
 	NoPublicationData = ['2FX5']
 	
-	def __init__(self, pdbID, content = None, protein = None, source = None, filepath = None, UniProtAC = None, UniProtID = None, testonly = False):
+	def __init__(self, ddGdb, pdbID, content = None, protein = None, source = None, filepath = None, UniProtAC = None, UniProtID = None, testonly = False):
 		'''UniProtACs have forms like 'P62937' whereas UniProtIDs have forms like 'PPIA_HUMAN.'''
+		
+		self.ddGdb = ddGdb
+		FieldNames_ = ddGdb.FlatFieldNames
 		
 		self.dict = {
 			FieldNames_.PDB_ID : pdbID,
@@ -485,7 +388,8 @@ class PDBStructure(DBObject):
 		self.ACtoID_mapping = None
 		self.PDBtoAC_mapping = None
 		
-	def getPDBContents(self, db):
+	def getPDBContents(self):
+		FieldNames_ = ddGdb.FlatFieldNames
 		d = self.dict
 		id = d[FieldNames_.PDB_ID]
 		if len(id) != 4:
@@ -566,7 +470,7 @@ class PDBStructure(DBObject):
 		UniqueIDs[id] = True
 			
 		if id not in self.NoUniProtIDs:
-			readUniProtMap(db)
+			readUniProtMap(self.ddGdb)
 			if not PDBToUniProt.get(id):
 				if not (self.UniProtAC and self.UniProtID):
 					ACtoID_mapping, PDBtoAC_mapping = getUniProtMapping(id, storeInDatabase = False)
@@ -580,7 +484,7 @@ class PDBStructure(DBObject):
 		d[FieldNames_.Techniques] = techniques
 		
 		if id not in self.NoPublicationData:
-			self.getPublication(db)
+			self.getPublication()
 		self.getFASTA()
 		
 		pdb = PDB(lines)
@@ -596,8 +500,9 @@ class PDBStructure(DBObject):
 		d[FieldNames_.BFactors] = pickle.dumps(pdb.ComputeBFactors()) 
 		return contents
 	
-	def getPublication(self, db):
+	def getPublication(self):
 		'''Extracts the PDB source information.'''
+		FieldNames_ = ddGdb.FlatFieldNames
 		d = self.dict
 		 
 		PUBTYPES = ['ISSN', 'ESSN']
@@ -622,14 +527,14 @@ class PDBStructure(DBObject):
 		
 		# We identify the sources for a PDB identifier with that identifier
 		SourceID = "PDB:%s" % pdbID 
-		sourceExists = db.execute("SELECT ID FROM Source WHERE ID=%s", parameters=(SourceID,))
+		sourceExists = self.ddGdb.locked_execute("SELECT ID FROM Source WHERE ID=%s", parameters=(SourceID,))
 		if not sourceExists:
 			if not self.testonly:
-				db.insertDict(FieldNames_.Source, {FieldNames_.ID : SourceID})
+				self.ddGdb.insertDict(FieldNames_.Source, {FieldNames_.ID : SourceID})
 		
 		d[FieldNames_.Publication] = SourceID
 		
-		locations = db.execute("SELECT * FROM SourceLocation WHERE SourceID=%s", parameters=(SourceID,))
+		locations = self.ddGdb.locked_execute("SELECT * FROM SourceLocation WHERE SourceID=%s", parameters=(SourceID,))
 		publocations = [location for location in locations if location[FieldNames_.Type] in PUBTYPES]
 		doilocations = [location for location in locations if location[FieldNames_.Type] == "DOI"]
 		assert(len(publocations) <= 1)
@@ -649,7 +554,7 @@ class PDBStructure(DBObject):
 					FieldNames_.Type		: j["REFN"]["type"],
 				}
 				if not self.testonly:
-					db.insertDict(FieldNames_.SourceLocation, source_location_dict)		
+					self.ddGdb.insertDict(FieldNames_.SourceLocation, source_location_dict)		
 				else:
 					print(source_location_dict)		
 		if j["DOI"]:
@@ -664,11 +569,12 @@ class PDBStructure(DBObject):
 					FieldNames_.Type		: FieldNames_.DOI,
 				}
 				if not self.testonly:
-					db.insertDict(FieldNames_.SourceLocation, source_location_dict)
+					self.ddGdb.insertDict(FieldNames_.SourceLocation, source_location_dict)
 				else:
 					print(source_location_dict)		
 	
 	def getFASTA(self):
+		FieldNames_ = ddGdb.FlatFieldNames
 		pdbID = self.dict[FieldNames_.PDB_ID]
 		if len(pdbID) == 4:
 			try:
@@ -679,17 +585,18 @@ class PDBStructure(DBObject):
 				pass
 		raise Exception("No FASTA file could be found for %s." % pdbID)
 	
-	def commit(self, db, testonly = False):
+	def commit(self, testonly = False):
 		'''Returns the database record ID if an insert occurs but will typically return None if the PDB is already in the database.'''
+		FieldNames_ = ddGdb.FlatFieldNames
 		d = self.dict
 		testonly = testonly or self.testonly
 		
-		self.getPDBContents(db)
+		self.getPDBContents()
 		assert(PDBChains.get(d[FieldNames_.PDB_ID]))
 		
 		if self.UniProtAC and self.UniProtID:
 			# todo: Append to uniprotmapping.csv file
-			results = db.execute(("SELECT * FROM %s WHERE %s" % (FieldNames_.UniProtKB, FieldNames_.UniProtKB_AC))+"=%s", parameters=(self.UniProtAC,))
+			results = self.ddGdb.locked_execute(("SELECT * FROM %s WHERE %s" % (FieldNames_.UniProtKB, FieldNames_.UniProtKB_AC))+"=%s", parameters=(self.UniProtAC,))
 			if results:
 				if results[0][FieldNames_.UniProtKB_ID] != self.UniProtID:
 					raise Exception("Existing UniProt mapping (%s->%s) does not agree with the passed-in parameters (%s->%s)." % (results[0][FieldNames_.UniProtKB_AC],results[0][FieldNames_.UniProtKB_ID],self.UniProtAC,self.UniProtID))
@@ -699,9 +606,9 @@ class PDBStructure(DBObject):
 					FieldNames_.UniProtKB_ID : self.UniProtID,
 				}
 				if not testonly:
-					db.insertDict(FieldNames_.UniProtKB, UniProtMapping)
+					self.ddGdb.insertDict(FieldNames_.UniProtKB, UniProtMapping)
 		
-		results = db.execute("SELECT * FROM Structure WHERE PDB_ID=%s", parameters = (d[FieldNames_.PDB_ID]))
+		results = self.ddGdb.locked_execute("SELECT * FROM Structure WHERE PDB_ID=%s", parameters = (d[FieldNames_.PDB_ID]))
 		
 		if results:
 			assert(len(results) == 1)
@@ -713,12 +620,12 @@ class PDBStructure(DBObject):
 						SQL = "UPDATE Structure SET %s" % k
 						SQL += "=%s WHERE PDB_ID=%s" 
 						if not testonly:
-							results = db.execute(SQL, parameters = (v, pdbID))
+							results = self.ddGdb.locked_execute(SQL, parameters = (v, pdbID))
 					if d[k] and not(result[k]):
 						SQL = "UPDATE Structure SET %s" % k
 						SQL += "=%s WHERE PDB_ID=%s" 
 						if not testonly:
-							results = db.execute(SQL, parameters = (v, pdbID))
+							results = self.ddGdb.locked_execute(SQL, parameters = (v, pdbID))
 		else:
 			if not testonly:
 				pdb_dict = { 
@@ -732,11 +639,11 @@ class PDBStructure(DBObject):
 					FieldNames_.Techniques	: d[FieldNames_.Techniques], 
 					FieldNames_.BFactors	: d[FieldNames_.BFactors],
 				}
-				db.insertDict(FieldNames_.Structure, pdb_dict)
-				self.databaseID = db.getLastRowID()
+				self.ddGdb.insertDict(FieldNames_.Structure, pdb_dict)
+				self.databaseID = self.ddGdb.getLastRowID()
 		
 		if self.UniProtAC and self.UniProtID:
-			results = db.execute(("SELECT * FROM UniProtKBMapping WHERE %s" % FieldNames_.UniProtKB_AC)+"=%s", parameters=(self.UniProtAC,))
+			results = self.ddGdb.locked_execute(("SELECT * FROM UniProtKBMapping WHERE %s" % FieldNames_.UniProtKB_AC)+"=%s", parameters=(self.UniProtAC,))
 			if results:
 				if results[0][FieldNames_.PDB_ID] != d[FieldNames_.PDB_ID]:
 					raise Exception("Existing UniProt mapping (%s->%s) does not agree with the passed-in parameters (%s->%s)." % (results[0][FieldNames_.UniProtKB_AC],results[0][FieldNames_.PDB_ID],self.UniProtAC,d[FieldNames_.PDB_ID]))
@@ -746,14 +653,14 @@ class PDBStructure(DBObject):
 					FieldNames_.PDB_ID : d[FieldNames_.PDB_ID],
 				}
 				if not testonly:
-					db.insertDict('UniProtKBMapping', UniProtPDBMapping)
+					self.ddGdb.insertDict('UniProtKBMapping', UniProtPDBMapping)
 		
 		# Store the UniProt mapping in the database
 		if d[FieldNames_.PDB_ID] not in self.NoUniProtIDs:
 			if not (self.ACtoID_mapping and self.PDBtoAC_mapping):
 				self.ACtoID_mapping, self.PDBtoAC_mapping = getUniProtMapping(d[FieldNames_.PDB_ID], storeInDatabase = False)
 			assert(self.ACtoID_mapping and self.PDBtoAC_mapping)
-			commitUniProtMapping(db, self.ACtoID_mapping, self.PDBtoAC_mapping)
+			commitUniProtMapping(self.ddGdb, self.ACtoID_mapping, self.PDBtoAC_mapping)
 		
 		if not testonly:
 			return self.databaseID
@@ -763,6 +670,7 @@ class PDBStructure(DBObject):
 		return self.databaseID			
 		
 	def __repr__(self):
+		FieldNames_ = ddGdb.FlatFieldNames
 		d = self.dict
 		str = []
 		str.append("%s: %s" % (FieldNames_.PDB_ID, d[FieldNames_.PDB_ID]))
@@ -771,7 +679,9 @@ class PDBStructure(DBObject):
 
 class ExperimentSet(DBObject):
 	
-	def __init__(self, pdbid, source, interface = None):
+	def __init__(self, ddGdb, pdbid, source, interface = None):
+		self.ddGdb = ddGdb
+		FieldNames_ = ddGdb.FlatFieldNames
 		self.dict = {
 			FieldNames_.Structure	: pdbid,
 			FieldNames_.Source		: source,
@@ -888,14 +798,14 @@ class ExperimentSet(DBObject):
 				str.append("\t%s\t%0.2f" % (score[FieldNames_.SourceID], score[FieldNames_.ddG]))
 		return join(str, "\n")
 			
-	def commit(self, db, testonly = False, pdbPath = None):
+	def commit(self, testonly = False, pdbPath = None):
 		'''Commits the set of experiments associated with the mutation to the database. Returns the unique ID of the associated Experiment record.'''
 		d = self.dict
 		failed = False
 		
 		for score in d["ExperimentScores"]:
 			scoresPresent = True
-			results = db.execute("SELECT Source, SourceID FROM Experiment INNER JOIN ExperimentScore ON Experiment.ID=ExperimentID WHERE Source=%s AND SourceID=%s", parameters = (d[FieldNames_.Source], score[FieldNames_.SourceID]))
+			results = self.ddGdb.locked_execute("SELECT Source, SourceID FROM Experiment INNER JOIN ExperimentScore ON Experiment.ID=ExperimentID WHERE Source=%s AND SourceID=%s", parameters = (d[FieldNames_.Source], score[FieldNames_.SourceID]))
 			if results:
 				return
 		
@@ -907,8 +817,8 @@ class ExperimentSet(DBObject):
 		
 		if d["Mutants"]:
 			for mutant in d["Mutants"].keys():
-				MutantStructure = PDBStructure(mutant)
-				MutantStructure.commit(db)
+				MutantStructure = PDBStructure(self.ddGdb, mutant)
+				MutantStructure.commit()
 		
 		# Sanity check that the chain information is correct (ProTherm has issues)
 		pdbID = d[FieldNames_.Structure] 
@@ -922,18 +832,18 @@ class ExperimentSet(DBObject):
 			if not c in chainsInPDB:
 				if len(chainsInPDB) == 1 and len(self.dict["ExperimentChains"]) == 1:
 					colortext.warning("%s: Chain '%s' of %s does not exist in the PDB %s. Chain %s exists. Use that chain instead." % (pdbID, c, associatedRecordsStr, pdbID, chainsInPDB[0]))
-					db.addChainWarning(pdbID, associatedRecords, c)
+					self.ddGdb.addChainWarning(pdbID, associatedRecords, c)
 					failed = True
 				else:
-					db.addChainError(pdbID, associatedRecords, c)
+					self.ddGdb.addChainError(pdbID, associatedRecords, c)
 					raise colortext.Exception("Error committing experiment:\n%s: Chain '%s' of %s does not exist in the PDB %s. Chains %s exist." % (pdbID, c, associatedRecordsStr, pdbID, join(chainsInPDB, ", ")))
 				
 		# Sanity check that the wildtypes of all mutations are correct
 		if pdbPath:
-			WildTypeStructure = PDBStructure(pdbID, filepath = os.path.join(pdbPath, "%s.pdb" % pdbID))
+			WildTypeStructure = PDBStructure(self.ddGdb, pdbID, filepath = os.path.join(pdbPath, "%s.pdb" % pdbID))
 		else:
-			WildTypeStructure = PDBStructure(pdbID)
-		contents = WildTypeStructure.getPDBContents(db)
+			WildTypeStructure = PDBStructure(self.ddGdb, pdbID)
+		contents = WildTypeStructure.getPDBContents()
 		pdb = PDB(contents.split("\n"))
 		
 		badResidues = ["CSE", "MSE"]
@@ -966,8 +876,8 @@ class ExperimentSet(DBObject):
 		vals = (d[FieldNames_.Structure], d[FieldNames_.Source]) 
 		#print(SQL % vals)
 		if not testonly:
-			db.execute(SQL, parameters = vals)
-			self.databaseID = db.getLastRowID()
+			self.ddGdb.locked_execute(SQL, parameters = vals)
+			self.databaseID = self.ddGdb.getLastRowID()
 			ExperimentID = self.databaseID
 			#print(ExperimentID)
 		else:
@@ -978,7 +888,7 @@ class ExperimentSet(DBObject):
 			vals = (ExperimentID, chain) 
 			#print(SQL % vals)
 			if not testonly:
-				db.execute(SQL, parameters = vals)
+				self.ddGdb.locked_execute(SQL, parameters = vals)
 		
 		interface = d["Interface"]
 		if interface:
@@ -986,28 +896,28 @@ class ExperimentSet(DBObject):
 			vals = (ExperimentID, interface) 
 			#print(SQL % vals)
 			if not testonly:
-				db.execute(SQL, parameters = vals)
+				self.ddGdb.locked_execute(SQL, parameters = vals)
 		
 		for mutant in d["Mutants"].keys():
 			SQL = 'INSERT INTO ExperimentMutant (ExperimentID, Mutant) VALUES (%s, %s);'
 			vals = (ExperimentID, mutant) 
 			#print(SQL % vals)
 			if not testonly:
-				db.execute(SQL, parameters = vals)
+				self.ddGdb.locked_execute(SQL, parameters = vals)
 		
 		for mutation in d["Mutations"]:
 			SQL = 'INSERT INTO ExperimentMutation (ExperimentID, Chain, ResidueID, WildTypeAA, MutantAA) VALUES (%s, %s, %s, %s, %s);'
 			vals = (ExperimentID, mutation[FieldNames_.Chain], mutation[FieldNames_.ResidueID], mutation[FieldNames_.WildTypeAA], mutation[FieldNames_.MutantAA]) 
 			#print(SQL % vals)
 			if not testonly:
-				db.execute(SQL, parameters = vals)
+				self.ddGdb.locked_execute(SQL, parameters = vals)
 			
 		for score in d["ExperimentScores"]:
 			SQL = 'INSERT INTO ExperimentScore (ExperimentID, SourceID, ddG, NumberOfMeasurements) VALUES (%s, %s, %s, %s);'
 			vals = (ExperimentID, score[FieldNames_.SourceID], score[FieldNames_.ddG], score[FieldNames_.NumberOfMeasurements]) 
 			#print(SQL % vals)
 			if not testonly:
-				db.execute(SQL, parameters = vals)
+				self.ddGdb.locked_execute(SQL, parameters = vals)
 		
 		if not testonly:
 			return self.databaseID
@@ -1016,7 +926,9 @@ class ExperimentSet(DBObject):
 
 class Prediction(DBObject):
 	
-	def __init__(self, ExperimentID, PredictionSet, ProtocolID, ddG, status, NumberOfMeasurements = 1):
+	def __init__(self, ddGdb, ExperimentID, PredictionSet, ProtocolID, ddG, status, NumberOfMeasurements = 1):
+		self.ddGdb = ddGdb
+		FieldNames_ = ddGdb.FlatFieldNames
 		self.dict = {
 			FieldNames_.ExperimentID		: ExperimentID,
 			FieldNames_.PredictionSet		: PredictionSet,
@@ -1047,7 +959,7 @@ class Prediction(DBObject):
 		if Description:
 			d[FieldNames_.Description] = Description			
 			
-	def commit(self, db):
+	def commit(self):
 		d = self.dict
 		d[FieldNames_.InputFiles] = pickle.dumps(d[FieldNames_.InputFiles])
 		d[FieldNames_.Description] = pickle.dumps(d[FieldNames_.Description]) 
@@ -1055,10 +967,10 @@ class Prediction(DBObject):
 				FieldNames_.StrippedPDB, FieldNames_.ResidueMapping, FieldNames_.InputFiles, FieldNames_.Description, 
 				FieldNames_.ddG, FieldNames_.NumberOfMeasurements, FieldNames_.Status, FieldNames_.ExtraParameters]
 		try:
-			db.insertDict('Prediction', d, fields)
+			self.ddGdb.insertDict('Prediction', d, fields)
 		except Exception, e:
 			raise Exception("\nError committing prediction to database.\n***\n%s\n%s\n***" % (self, str(e)))
-		self.databaseID = db.getLastRowID()
+		self.databaseID = self.ddGdb.getLastRowID()
 		return self.databaseID
 
 	def __repr__(self):
@@ -1117,7 +1029,7 @@ class ddGPredictionDataDatabase(object):
 		self.connectToServer()
 		self.numTries = 32
 		self.lastrowid = None
-
+		
 	def close(self):
 		self.connection.close()
 
@@ -1161,7 +1073,7 @@ class ddGPredictionDataDatabase(object):
 			sys.stderr.flush()
 		raise MySQLdb.OperationalError(caughte)
 		
-class ddGDatabase(object):
+class ddGDatabase(DatabaseInterface):
 	
 	chainErrors = {}
 	chainWarnings= {}
@@ -1175,13 +1087,16 @@ class ddGDatabase(object):
 			else:
 				passwd = getpass.getpass("Enter password to connect to MySQL database:")
 		self.passwd = passwd
-		self.connectToServer()
-		self.numTries = 32
-		self.lastrowid = None
-	
-	def connectToServer(self):
-		#print("[CONNECTING TO SQL SERVER]")
-		self.connection = MySQLdb.Connection(host = "kortemmelab.ucsf.edu", db = "ddG", user = "kortemmelab", passwd = self.passwd, port = 3306, unix_socket = "/var/lib/mysql/mysql.sock")
+		
+		super(ddGDatabase, self).__init__({}, 
+			isInnoDB = True, 
+			numTries = 32, 
+			host = "kortemmelab.ucsf.edu",
+			db = "ddG",
+			user = "kortemmelab",
+			passwd = passwd,
+			port = 3306,
+			unix_socket = "/var/lib/mysql/mysql.sock")
 		
 	def addChainWarning(self, pdbID, associatedRecords, c):
 		chainWarnings = self.chainWarnings
@@ -1193,34 +1108,10 @@ class ddGDatabase(object):
 		chainErrors[pdbID] = chainErrors.get(pdbID) or []
 		chainErrors[pdbID].append((associatedRecords, c))
 
-	def getLastRowID(self):
-		return self.lastrowid
-		
-	def close(self):
-		self.connection.close()
-	
-	def insertDict(self, tblname, d, fields = None):
-		'''Simple function for inserting a dictionary whose keys match the fieldnames of tblname.'''
-		
-		if fields == None:
-			fields = sorted(d.keys())
-		values = None
-		try:
-			SQL = 'INSERT INTO %s (%s) VALUES (%s)' % (tblname, join(fields, ", "), join(['%s' for x in range(len(fields))], ','))
-			values = tuple([d[k] for k in fields])
-	 		#print(SQL % values)
-			self.execute(SQL, parameters = values)
-		except Exception, e:
-			if SQL and values:
-				sys.stderr.write("\nSQL execution error in query '%s' %% %s at %s:" % (SQL, values, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-			sys.stderr.write("\nError: '%s'.\n" % (str(e)))
-			sys.stderr.flush()
-			raise Exception("Error occurred during database insertion.")
-
 	def addTechniquesFields(self):
 		'''Used to update missing Techniques fields as this field was added after the initial PDB import.'''
 		return
-		results = self.execute("SELECT * FROM Structure")
+		results = self.locked_execute("SELECT * FROM Structure")
 		for result in results:
 			pdbID = result[FieldNames_.PDB_ID]
 			contents = result[FieldNames_.Content]
@@ -1235,42 +1126,9 @@ class ddGDatabase(object):
 			if not result[FieldNames_.Techniques]:
 				SQL = "UPDATE Structure SET %s" % FieldNames_.Techniques
 				SQL += "=%s WHERE PDB_ID=%s"
-				self.execute(SQL, parameters = (techniques, pdbID))
-
-	def callproc(self, procname, parameters = (), cursorClass = MySQLdb.cursors.DictCursor, quiet = False):
-		"""Calls a MySQL stored procedure procname. This uses DictCursor by default."""
-		i = 0
-		errcode = 0
-		caughte = None
-		while i < self.numTries:
-			i += 1
-			try:    
-				cursor = self.connection.cursor(cursorClass)
-				if type(parameters) != type(()):
-					parameters = (parameters,)
-				errcode = cursor.callproc(procname, parameters)
-				results = cursor.fetchall()
-				self.lastrowid = int(cursor.lastrowid)
-				cursor.close()
-				return results
-			except MySQLdb.OperationalError, e:
-				errcode = e[0]
-				if errcode == 2006 or errcode == 2013:
-					self.connectToServer()
-				self.connection.ping()
-				caughte = e
-				continue
-			except:
-				traceback.print_exc()
-				break
-		
-		if not quiet:
-			sys.stderr.write("\nSQL execution error call stored procedure %s at %s:" % (procname, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-			sys.stderr.write("\nErrorcode/Error: %d - '%s'.\n" % (errcode, str(caughte)))
-			sys.stderr.flush()
-		raise MySQLdb.OperationalError(caughte)
+				self.locked_execute(SQL, parameters = (techniques, pdbID))
 	
-	def insert(self, table, fieldnames, values):
+	def REMOVE_THIS_FUNCTION_insert(self, table, fieldnames, values):
 		try:
 			sql = None
 			valuestring = join(["%s" for field in fieldnames], ", ")
@@ -1279,7 +1137,7 @@ class ddGDatabase(object):
 			if not len(fieldnames) == len(values):
 				raise Exception("Fieldnames and values lists are not of equal size.")
 			return
-			self.execute(sql, parameters)
+			self.locked_execute(sql, parameters)
 		except Exception, e:
 			if sql:
 				sys.stderr.write("\nSQL execution error in query '%s' %% %s at %s:" % (sql, values, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
@@ -1287,42 +1145,6 @@ class ddGDatabase(object):
 			sys.stderr.flush()
 			raise Exception("Error occurred during database insertion.")
 		
-	def execute(self, sql, parameters = None, cursorClass = MySQLdb.cursors.DictCursor, quiet = False):
-		"""Execute SQL query. This uses DictCursor by default."""
-		i = 0
-		errcode = 0
-		caughte = None
-		while i < self.numTries:
-			i += 1
-			try:    
-				cursor = self.connection.cursor(cursorClass)
-				if parameters:
-					errcode = cursor.execute(sql, parameters)
-				else:
-					errcode = cursor.execute(sql)
-				self.connection.commit()
-				results = cursor.fetchall()
-				self.lastrowid = int(cursor.lastrowid)
-				cursor.close()
-				return results
-			except MySQLdb.OperationalError, e:
-				caughte = str(e)
-				errcode = e[0]
-				if errcode == 2006 or errcode == 2013:  
-					self.connectToServer()
-				self.connection.ping()
-				continue
-			except Exception, e:
-				caughte = str(e)
-				traceback.print_exc()
-				break
-		
-		if not quiet:
-			sys.stderr.write("\nSQL execution error in query %s at %s:" % (sql, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-			sys.stderr.write("\nErrorcode/Error: %d - '%s'.\n" % (errcode, str(caughte)))
-			sys.stderr.flush()
-		raise MySQLdb.OperationalError(caughte)
-	
 	def getStandardDeviation(self, ID):
 		results = self.callproc("GetScores", ID)
 		scores = []
@@ -1348,18 +1170,18 @@ class DatabasePrimer(object):
 	
 	def computeBFactors(self):
 		SQL = 'SELECT PDB_ID, Content FROM Structure'
-		results = self.ddGdb.execute(SQL)
+		results = self.ddGdb.locked_execute(SQL)
 		for result in results:
 			pdbID = result["PDB_ID"]
 			colortext.message(pdbID)
 			pdb = PDB(result["Content"].split("\n"))
 			BF = pickle.dumps(pdb.ComputeBFactors())
 			SQL = ('UPDATE Structure SET %s=' % FieldNames_.BFactors) + '%s WHERE PDB_ID = %s'
-			results = self.ddGdb.execute(SQL, parameters = (BF, pdbID))
+			results = self.ddGdb.locked_execute(SQL, parameters = (BF, pdbID))
 	
 	def checkForCSEandMSE(self):
 		SQL = 'SELECT PDB_ID, Content FROM Structure'
-		results = self.ddGdb.execute(SQL)
+		results = self.ddGdb.locked_execute(SQL)
 		for result in results:
 			pdbID = result["PDB_ID"]
 			pdb = PDB(result["Content"].split("\n"))
@@ -1518,11 +1340,11 @@ class DatabasePrimer(object):
 	
 		for t in Tools:
 			SQL = 'SELECT * FROM Tool WHERE Name=%s AND Version=%s AND SVNRevision=%s'
-			numresults = len(self.ddGdb.execute(SQL, parameters = (t[0], t[1], t[2])))
+			numresults = len(self.ddGdb.locked_execute(SQL, parameters = (t[0], t[1], t[2])))
 			assert(numresults == 0 or numresults == 1)
 			if numresults == 0:
 				SQL = 'INSERT INTO Tool (Name, Version, SVNRevision, SVNRevisionInfo) VALUES (%s, %s, %s, %s)'
-				self.ddGdb.execute(SQL, parameters = t)
+				self.ddGdb.locked_execute(SQL, parameters = t)
 	
 	def deleteAllExperimentalData(self):
 		'''THIS WILL REMOVE *ALL* EXPERIMENTAL DATA FROM THE DATABASE. USE AT GREAT RISK!
@@ -1532,14 +1354,14 @@ class DatabasePrimer(object):
 		   To avoid deleting the other records associated with the Experiment, we raise an exception first.
 		  '''
 		
-		predictions = self.ddGdb.execute('SELECT * FROM Prediction')
+		predictions = self.ddGdb.locked_execute('SELECT * FROM Prediction')
 		if not predictions:
-			results = self.ddGdb.execute('DELETE FROM ExperimentInterface')
-			results = self.ddGdb.execute('DELETE FROM ExperimentChain')
-			results = self.ddGdb.execute('DELETE FROM ExperimentMutation')
-			results = self.ddGdb.execute('DELETE FROM ExperimentMutant')
-			results = self.ddGdb.execute('DELETE FROM ExperimentScore')
-			results = self.ddGdb.execute('DELETE FROM Experiment')
+			results = self.ddGdb.locked_execute('DELETE FROM ExperimentInterface')
+			results = self.ddGdb.locked_execute('DELETE FROM ExperimentChain')
+			results = self.ddGdb.locked_execute('DELETE FROM ExperimentMutation')
+			results = self.ddGdb.locked_execute('DELETE FROM ExperimentMutant')
+			results = self.ddGdb.locked_execute('DELETE FROM ExperimentScore')
+			results = self.ddGdb.locked_execute('DELETE FROM Experiment')
 		else:
 			raise Exception("Database integrity failure: Cannot delete an Experiment (ID = %s) with an associated Prediction (ID = %s)." % (ID, predictions[0]['ID']))
 
@@ -1554,19 +1376,19 @@ class DatabasePrimer(object):
 		experimentIDs = []
 		for dataset in removethese:
 			SQL = 'SELECT ID FROM Experiment WHERE Source=%s'
-			results = self.ddGdb.execute(SQL, parameters = (dataset,))
+			results = self.ddGdb.locked_execute(SQL, parameters = (dataset,))
 			for result in results:
 				experimentIDs.append(result['ID'])
 		
 		for ID in experimentIDs:
-			predictions = self.ddGdb.execute('SELECT * FROM Prediction WHERE ExperimentID=%s', parameters = (ID,))
+			predictions = self.ddGdb.locked_execute('SELECT * FROM Prediction WHERE ExperimentID=%s', parameters = (ID,))
 			if not predictions:
-				results = self.ddGdb.execute('DELETE FROM ExperimentInterface WHERE ExperimentID=%s', parameters = (ID,))
-				results = self.ddGdb.execute('DELETE FROM ExperimentChain WHERE ExperimentID=%s', parameters = (ID,))
-				results = self.ddGdb.execute('DELETE FROM ExperimentMutation WHERE ExperimentID=%s', parameters = (ID,))
-				results = self.ddGdb.execute('DELETE FROM ExperimentMutant WHERE ExperimentID=%s', parameters = (ID,))
-				results = self.ddGdb.execute('DELETE FROM ExperimentScore WHERE ExperimentID=%s', parameters = (ID,))
-				results = self.ddGdb.execute('DELETE FROM Experiment WHERE ID=%s', parameters = (ID,))
+				results = self.ddGdb.locked_execute('DELETE FROM ExperimentInterface WHERE ExperimentID=%s', parameters = (ID,))
+				results = self.ddGdb.locked_execute('DELETE FROM ExperimentChain WHERE ExperimentID=%s', parameters = (ID,))
+				results = self.ddGdb.locked_execute('DELETE FROM ExperimentMutation WHERE ExperimentID=%s', parameters = (ID,))
+				results = self.ddGdb.locked_execute('DELETE FROM ExperimentMutant WHERE ExperimentID=%s', parameters = (ID,))
+				results = self.ddGdb.locked_execute('DELETE FROM ExperimentScore WHERE ExperimentID=%s', parameters = (ID,))
+				results = self.ddGdb.locked_execute('DELETE FROM Experiment WHERE ID=%s', parameters = (ID,))
 			else:
 				raise Exception("Database integrity failure: Cannot delete an Experiment (ID = %s) with an associated Prediction (ID = %s)." % (ID, predictions[0]['ID']))
 	
@@ -1590,17 +1412,17 @@ class DatabasePrimer(object):
 				UniProtKBMapping[AC].append(PDBID)
 		
 		for AC, ID in sorted(UniProtKB.iteritems()):
-			if not self.ddGdb.execute("SELECT * FROM UniProtKB WHERE UniProtKB_AC=%s", parameters = (AC,)):
+			if not self.ddGdb.locked_execute("SELECT * FROM UniProtKB WHERE UniProtKB_AC=%s", parameters = (AC,)):
 				SQL = 'INSERT INTO UniProtKB (UniProtKB_AC, UniProtKB_ID) VALUES (%s, %s);'
-				self.ddGdb.execute(SQL, parameters = (AC, ID))
+				self.ddGdb.locked_execute(SQL, parameters = (AC, ID))
 		
 		for AC, pdbIDs in sorted(UniProtKBMapping.iteritems()):
 			for pdbID in pdbIDs:
 				
-				if not self.ddGdb.execute("SELECT * FROM UniProtKBMapping WHERE UniProtKB_AC=%s AND PDB_ID=%s", parameters = (AC, pdbID)):
+				if not self.ddGdb.locked_execute("SELECT * FROM UniProtKBMapping WHERE UniProtKB_AC=%s AND PDB_ID=%s", parameters = (AC, pdbID)):
 					SQL = 'INSERT INTO UniProtKBMapping (UniProtKB_AC, PDB_ID) VALUES (%s, %s);'
 					try:
-						self.ddGdb.execute(SQL, parameters = (AC, pdbID), quiet = True)
+						self.ddGdb.locked_execute(SQL, parameters = (AC, pdbID), quiet = True)
 					except:
 						print("Error inserting UniProt record AC %s for PDB ID %s." % (AC, pdbID))
 			
@@ -1609,7 +1431,7 @@ class DatabasePrimer(object):
 		global aas
 		for aa in aas:
 			SQL = 'INSERT INTO AminoAcids (Code, LongCode, Name, Polarity, Size) VALUES (%s, %s, %s, %s, %s);'
-			self.ddGdb.execute(SQL, parameters = tuple(aa))
+			self.ddGdb.locked_execute(SQL, parameters = tuple(aa))
 	
 	def insertKelloggLeaverFayBakerProtocols(self):
 		
@@ -1659,7 +1481,7 @@ class DatabasePrimer(object):
 				'-score:patch', 'score12']),
 			FieldNames_.Description : "Preminimization for Kellogg:10.1002/prot.22921:protocol16:32231",
 		}
-		alreadyExists = self.ddGdb.execute("SELECT ID FROM Command WHERE Type=%s AND Command=%s", parameters = (preminCmd[FieldNames_.Type], preminCmd[FieldNames_.Command]))
+		alreadyExists = self.ddGdb.locked_execute("SELECT ID FROM Command WHERE Type=%s AND Command=%s", parameters = (preminCmd[FieldNames_.Type], preminCmd[FieldNames_.Command]))
 		if not alreadyExists:
 			self.ddGdb.insertDict('Command', preminCmd)
 			preminCmdID = self.ddGdb.getLastRowID()
@@ -1672,7 +1494,7 @@ class DatabasePrimer(object):
 			FieldNames_.Command : pickle.dumps(['%(BIN_DIR)s/fix_bb_monomer_ddg.linuxgccrelease'] + commonstr + softrep +  protocols1617),
 			FieldNames_.Description : "ddG for Kellogg:10.1002/prot.22921:protocol16:32231",
 		}
-		alreadyExists = self.ddGdb.execute("SELECT ID FROM Command WHERE Type=%s AND Command=%s", parameters = (ddGCmd[FieldNames_.Type], ddGCmd[FieldNames_.Command]))
+		alreadyExists = self.ddGdb.locked_execute("SELECT ID FROM Command WHERE Type=%s AND Command=%s", parameters = (ddGCmd[FieldNames_.Type], ddGCmd[FieldNames_.Command]))
 		if not alreadyExists:
 			self.ddGdb.insertDict('Command', ddGCmd)
 			ddGCmdID = self.ddGdb.getLastRowID()
@@ -1681,11 +1503,11 @@ class DatabasePrimer(object):
 	
 		# Protocol 16
 		name = "Kellogg:10.1002/prot.22921:protocol16:32231"
-		alreadyExists = self.ddGdb.execute("SELECT ID FROM Protocol WHERE ID=%s", parameters = (name,))
+		alreadyExists = self.ddGdb.locked_execute("SELECT ID FROM Protocol WHERE ID=%s", parameters = (name,))
 		if not alreadyExists:
-			PreMinTool = self.ddGdb.execute("SELECT ID FROM Tool WHERE Name=%s and Version=%s", parameters = ("Rosetta", 3.3))
-			ddGTool = self.ddGdb.execute("SELECT ID FROM Tool WHERE Name=%s and SVNRevision=%s", parameters = ("Rosetta", 32231))
-			ddGDatabaseToolID = self.ddGdb.execute("SELECT ID FROM Tool WHERE Name=%s and SVNRevision=%s", parameters = ("Rosetta", 32257))
+			PreMinTool = self.ddGdb.locked_execute("SELECT ID FROM Tool WHERE Name=%s and Version=%s", parameters = ("Rosetta", 3.3))
+			ddGTool = self.ddGdb.locked_execute("SELECT ID FROM Tool WHERE Name=%s and SVNRevision=%s", parameters = ("Rosetta", 32231))
+			ddGDatabaseToolID = self.ddGdb.locked_execute("SELECT ID FROM Tool WHERE Name=%s and SVNRevision=%s", parameters = ("Rosetta", 32257))
 			if PreMinTool and ddGTool and ddGDatabaseToolID:
 				PreMinTool = PreMinTool[0]["ID"]
 				ddGTool = ddGTool[0]["ID"]
@@ -1756,7 +1578,7 @@ class DatabasePrimer(object):
 		]
 		 
 		newcmd = pickle.dumps(['%(BIN_DIR)s/fix_bb_monomer_ddg.linuxgccrelease'] + commonstr + softrep +  protocols1617)
-		ddGdb.execute("UPDATE Command SET Command=%s WHERE ID=5;", parameters = (newcmd,))
+		ddGdb.locked_execute("UPDATE Command SET Command=%s WHERE ID=5;", parameters = (newcmd,))
 		newcmd = pickle.dumps([
 				'%(BIN_DIR)s/minimize_with_cst.static.linuxgccrelease',
 				'-in:file:l', '%(in:file:l)s',
@@ -1770,18 +1592,185 @@ class DatabasePrimer(object):
 				'-ddg::out_pdb_prefix', 'min_cst_0.5',
 				'-ddg::sc_min_only', 'false',
 				'-score:patch', 'score12'])
-		ddGdb.execute("UPDATE Command SET Command=%s WHERE ID=4;", parameters = (newcmd,))
+		ddGdb.locked_execute("UPDATE Command SET Command=%s WHERE ID=4;", parameters = (newcmd,))
 		
 		newcmd = "%(BIN_DIR)s/minimize_with_cst.static.linuxgccrelease -in:file:l %(in:file:l)s -in:file:fullatom -ignore_unrecognized_res -fa_max_dis 9.0 -database %(DATABASE_DIR)s -ddg::harmonic_ca_tether 0.5 -score:weights standard -ddg::constraint_weight 1.0 -ddg::out_pdb_prefix min_cst_0.5 -ddg::sc_min_only false -score:patch score12"		
-		ddGdb.execute("UPDATE Command SET Command=%s WHERE ID=4;", parameters = (newcmd,))
+		ddGdb.locked_execute("UPDATE Command SET Command=%s WHERE ID=4;", parameters = (newcmd,))
 		
 		newcmd = "%(BIN_DIR)s/fix_bb_monomer_ddg.linuxgccrelease -in:file:s %(in:file:s)s -resfile %(resfile)s -database %(DATABASE_DIR)s -ignore_unrecognized_res -in:file:fullatom -constraints::cst_file %(constraints::cst_file)s -score:weights soft_rep_design -ddg::weight_file soft_rep_design -ddg::iterations 50 -ddg::local_opt_only false -ddg::min_cst true -ddg::mean false -ddg::min true -ddg::sc_min_only false -ddg::ramp_repulsive true -ddg::minimization_scorefunction standard -ddg::minimization_patch score12"
-		ddGdb.execute("UPDATE Command SET Command=%s WHERE ID=5;", parameters = (newcmd,))
+		ddGdb.locked_execute("UPDATE Command SET Command=%s WHERE ID=5;", parameters = (newcmd,))
 		
 		
 if __name__ == "__main__":
 	ddGdb = ddGDatabase()
-	primer = DatabasePrimer(ddGdb)
+	#print([r["Tables_in_ddG"] for r in ddGdb.execute("SHOW TABLES")])
+	
+	TableNames = ddGdb.TableNames
+	FieldNames = ddGdb.FieldNames
+	PTUnits = FieldNames._MERGE_ProTherm_Units
+	
+	existingSources = {}
+	results = ddGdb.execute("SELECT * FROM Source")
+	for r in results:
+		existingSources[r[FieldNames.Source.ID]] = r
+	
+	existingSourcesIdentifiers = {}
+	results = ddGdb.execute("SELECT * FROM SourceIdentifier")
+	for r in results:
+		existingSourcesIdentifiers[(r[FieldNames.SourceIdentifier.SourceID], r[FieldNames.SourceIdentifier.Type])] = r
+	
+	existingSourcesValueLocations = {}
+	results = ddGdb.execute("SELECT * FROM SourceDDGValueLocation")
+	for r in results:
+		existingSourcesValueLocations[(r[FieldNames.SourceDDGValueLocation.SourceID], r[FieldNames.SourceDDGValueLocation.Location])] = r
+	
+	results = ddGdb.execute("SELECT * FROM _MERGE_ProTherm_Units")
+	
+	for r in results:
+		assert(r[PTUnits.SourceID].startswith("PMID:"))
+		PMID = r[PTUnits.SourceID][5:]
+		if r[PTUnits.URL] != '%s[uid]' % PMID:
+			assert(r[PTUnits.URL].startswith("http://"))
+		assert(r[PTUnits.UnitUsed] == "kcal/mol" or r[PTUnits.UnitUsed] == "kcal/mol ?")
+		assert(r[PTUnits.RIS])
+	
+	resultsSections = set()
+	for r in results:
+		PMID = r[PTUnits.SourceID][5:]
+		URL = None
+		if r[PTUnits.URL] != '%s[uid]' % PMID:
+			URL = r[PTUnits.URL]
+		
+		if existingSources.get(r[PTUnits.SourceID]):
+			if existingSources[r[PTUnits.SourceID]]['RIS']:
+				pass
+			else:
+				print("Adding RIS")
+				ddGdb.execute("UPDATE Source SET RIS=%s WHERE ID=%s", parameters = (r[PTUnits.RIS], r[PTUnits.SourceID]))
+			if existingSources[r[PTUnits.SourceID]]['Notes'] or not(r[PTUnits.Notes]) or  r[PTUnits.Notes].strip() == "":
+				pass
+			else:
+				print("Adding Notes")
+				ddGdb.execute("UPDATE Source SET Notes=%s WHERE ID=%s", parameters = (r[PTUnits.Notes], r[PTUnits.SourceID]))
+			if existingSources[r[PTUnits.SourceID]]['DDGUnit']:
+				pass
+			else:
+				print("Adding Units")
+				if r[PTUnits.UnitUsed] == "kcal/mol":
+					ddGdb.execute("UPDATE Source SET DDGUnit='kcal/mol' WHERE ID=%s", parameters = (r[PTUnits.SourceID],))
+				elif r[PTUnits.UnitUsed] == "kcal/mol ?":
+					ddGdb.execute("UPDATE Source SET DDGUnit='Unknown' WHERE ID=%s", parameters = (r[PTUnits.SourceID],))
+				else:
+					print(r[PTUnits.SourceID], r[PTUnits.UnitUsed])
+		else:
+			print("Adding a new Source record")
+			d = {
+				FieldNames.Source.ID 			: r[PTUnits.SourceID],
+				FieldNames.Source.DDGUnit 		: None, 
+				FieldNames.Source.DDGConvention : None, 
+				FieldNames.Source.Notes 		: None, 
+				FieldNames.Source.RIS 			: r[PTUnits.RIS], 
+			}
+			ddGdb.insertDict(FieldNames.Source._name, d)
+			
+		if existingSourcesIdentifiers.get((r[PTUnits.SourceID], 'PMID')):
+			assert(existingSourcesIdentifiers[(r[PTUnits.SourceID], 'PMID')]['ID'] == PMID)
+		else:
+			print("Adding a PMID source identifier for %s" % r[PTUnits.SourceID])
+			d = {
+				FieldNames.SourceIdentifier.SourceID	: r[PTUnits.SourceID],
+				FieldNames.SourceIdentifier.ID	 		: PMID, 
+				FieldNames.SourceIdentifier.Type 		: 'PMID', 
+			}
+			ddGdb.insertDict(FieldNames.SourceIdentifier._name, d)
+			
+		if URL:
+			if existingSourcesIdentifiers.get((r[PTUnits.SourceID], 'URL')):
+				assert(existingSourcesIdentifiers.get((r[PTUnits.SourceID], 'URL'))['ID'] == URL)
+			else:
+				print("Adding a URL source identifier for %s" % r[PTUnits.SourceID])
+				d = {
+					FieldNames.SourceIdentifier.SourceID	: r[PTUnits.SourceID],
+					FieldNames.SourceIdentifier.ID	 		: URL, 
+					FieldNames.SourceIdentifier.Type 		: 'URL', 
+				}
+				ddGdb.insertDict(FieldNames.SourceIdentifier._name, d)
+
+		ResultSectionNotes = None
+		usualsections = ['Table 1', 'Table 2', 'Table 3', 'Table 4', 'Table 5', 'Table 6', 'Table I', 'Table II', 'Table III', 'Table IV', 'Table V', 'Figure 6']
+		if r[PTUnits.ResultsSection]:
+			if r[PTUnits.ResultsSection] not in usualsections:
+				if r[PTUnits.ResultsSection] == 'Tables 1 and 2':
+					r[PTUnits.ResultsSection] = ['Table 1', 'Table 2']
+				elif r[PTUnits.ResultsSection] == 'Tables 2 and 3':
+					r[PTUnits.ResultsSection] = ['Table 2', 'Table 3']
+				elif r[PTUnits.ResultsSection] == 'Tables 3, 4, and 6':
+					r[PTUnits.ResultsSection] = ['Table 3', 'Table 4','Table 6']
+				elif r[PTUnits.ResultsSection] == 'Tables I and II':
+					r[PTUnits.ResultsSection] = ['Table I', 'Table II']
+				elif r[PTUnits.ResultsSection] == 'Tables I and III':
+					r[PTUnits.ResultsSection] = ['Table I', 'Table III']
+				elif r[PTUnits.ResultsSection] == 'Results and discussion section':
+					r[PTUnits.ResultsSection] = ['Results and discussion']				
+				elif r[PTUnits.ResultsSection] == 'The first set of numbers is from Table 2. The second set of values might be derived?':
+					r[PTUnits.ResultsSection] = ['Table 2']
+					ResultSectionNotes = 'The first set of numbers is from Table 2. The second set of values might be derived?'
+				elif r[PTUnits.ResultsSection] == 'Table 2, bottom-rightmost set of numbers (both pHs).':
+					r[PTUnits.ResultsSection] = ['Table 2']
+					ResultSectionNotes = 'Bottom-rightmost set of numbers (both pHs).'
+				elif r[PTUnits.ResultsSection] == 'Table 1 (and Table 5?)':
+					r[PTUnits.ResultsSection] = ['Table 1']
+					ResultSectionNotes = 'Possibly Table 5 as well.'
+				elif r[PTUnits.ResultsSection] == 'Sections 3.1 and 3.2, page 486':
+					r[PTUnits.ResultsSection] = ['Section 3.1', 'Section 3.2']
+					ResultSectionNotes = 'Page 486.'
+				elif r[PTUnits.ResultsSection] == 'Results and Discussion, p7573, right column':
+					r[PTUnits.ResultsSection] = ['Results and discussion']
+					ResultSectionNotes = 'Page 7573, right column.'
+				elif r[PTUnits.ResultsSection] == 'Tables 1 (right column) for 2092-2099. For the pairs (2814,2815), (2816,2817), etc. the two ddG values are, respectively, from the Native->Intermediate (right column minus left column) and from the Intermediate->Unfolded (left column). 2814 is wrong as is ':
+					r[PTUnits.ResultsSection] = ['Table 1']
+					ResultSectionNotes = 'Table 1 (right column) for ProTherm records 2092-2099. For the pairs (2814,2815), (2816,2817), etc. the two ddG values are, respectively, from the Native->Intermediate (right column minus left column) and from the Intermediate->Unfolded (left column). 2814 is wrong as is.'
+				elif r[PTUnits.ResultsSection] == 'Table 1, ddG^a column':
+					r[PTUnits.ResultsSection] = ['Table 1']
+					ResultSectionNotes = 'ddG^a column.'
+				elif r[PTUnits.ResultsSection] == 'Table I, dG_TS values, I think.':
+					r[PTUnits.ResultsSection] = ['Table I']
+					ResultSectionNotes = 'I think ProTherm uses the dG_TS values.'
+				elif r[PTUnits.ResultsSection] == 'Seemingly from Results, p2405, left column. Numbers are approximate. Is the double mutant roughly -5 rather than -4?':
+					r[PTUnits.ResultsSection] = ['Results']
+					ResultSectionNotes = 'The values seemingly come from the Results section on page 2405, left column but the numbers are approximate. Is the double mutant roughly -5 rather than -4?.'
+				else:
+					raise Exception("Should not have reached here.")
+			else:
+				r[PTUnits.ResultsSection] = [r[PTUnits.ResultsSection]]
+			
+			for rsection in r[PTUnits.ResultsSection]:
+				d = {
+					FieldNames.SourceDDGValueLocation.SourceID	: r[PTUnits.SourceID],
+					FieldNames.SourceDDGValueLocation.Location	: rsection,
+					FieldNames.SourceDDGValueLocation.Notes		: ResultSectionNotes,
+				}
+				if existingSourcesValueLocations.get((r[PTUnits.SourceID], rsection)):
+					assert(existingSourcesValueLocations[(r[PTUnits.SourceID], rsection)]['Notes'] == ResultSectionNotes)
+				else:
+					ddGdb.insertDict(FieldNames.SourceDDGValueLocation._name, d)
+				
+			resultsSections.add(join(r[PTUnits.ResultsSection], ","))
+			 
+	
+	existingSources = {}
+	newresults = ddGdb.execute("SELECT * FROM Source")
+	for r in newresults:
+		existingSources[r[FieldNames.Source.ID]] = r
+	for r in results:
+		assert(existingSources.get(r[PTUnits.SourceID]))
+		
+	
+
+		
+			
+	
+	#primer = DatabasePrimer(ddGdb)
 	#primer.insertUniProtKB()
 	#primer.checkForCSEandMSE()
 	#primer.computeBFactors()
