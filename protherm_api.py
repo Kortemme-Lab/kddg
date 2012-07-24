@@ -12,7 +12,6 @@ import ddgdbapi
 from common.rosettahelper import kJtokcal
 from common.rosettahelper import NUMBER_KELVIN_AT_ZERO_CELSIUS
 
-
 sometimesFields = ["ION_NAME_2", "ION_CONC_2", "ION_NAME_3", "ION_CONC_3", "ION_CON_1C"] # ION_CON_1C seems to be a weird typo in version 23581
 
 field_order = [
@@ -144,7 +143,6 @@ field_descriptions = {
 	"RELATED_ENTRIES"		: "Related entries",
 }
 
-fn = ddgdbapi.FieldNames()
 fields_of_interest = {
 	"PROTEIN" 			: True,
 	"SOURCE" 			: True,
@@ -153,38 +151,24 @@ fields_of_interest = {
 	"PDB_mutant" 		: True,
 	"MUTATION" 			: True,
 	"MUTATED_CHAIN" 	: True,
-	"T" 				: fn.ExpConTemperature,
-	"pH" 				: fn.ExpConpH,
-	"BUFFER_NAME" 		: fn.ExpConBuffer,
-	"BUFFER_CONC" 		: fn.ExpConBufferConcentration,
-	"ION_NAME_1" 		: fn.ExpConIon,
-	"ION_CONC_1" 		: fn.ExpConIonConcentration,
+	"T" 				: True,
+	"pH" 				: True,
+	"BUFFER_NAME" 		: True,
+	"BUFFER_CONC" 		: True,
+	"ION_NAME_1" 		: True,
+	"ION_CONC_1" 		: True,
 	"ION_NAME_2" 		: True,
 	"ION_CONC_2" 		: True,
 	"ION_NAME_3" 		: True,
 	"ION_CONC_3" 		: True,
 	"ION_NAME_1C" 		: True,
-	"PROTEIN_CONC" 		: fn.ExpConProteinConcentration,
-	"MEASURE" 			: fn.ExpConMeasure,
-	"METHOD" 			: fn.ExpConMethodOfDenaturation,
+	"PROTEIN_CONC" 		: True,
+	"MEASURE" 			: True,
+	"METHOD" 			: True,
 	"ddG" 				: True,
 	"REFERENCE" 		: True,
 }
 
-exp2DBfield = {
-	"T"				: fn.ExpConTemperature,
-	"pH"			: fn.ExpConpH,
-	"BUFFER_NAME"	: fn.ExpConBuffer,
-	"BUFFER_CONC"	: fn.ExpConBufferConcentration,
-	"ION_NAME_1"	: fn.ExpConIon,
-	"ION_CONC_1"	: fn.ExpConIonConcentration,
-	"PROTEIN_CONC"	: fn.ExpConProteinConcentration,
-	"MEASURE"		: fn.ExpConMeasure,
-	"METHOD"		: fn.ExpConMethodOfDenaturation,
-	"ADDITIVES"		: fn.ExpConAdditives,
-}
-expfields = exp2DBfield.keys()
-numericexpfields = ["T", "pH"]  
 fields_requiring_qualification = ["ddG"]  
 		
 secondary_structure_values = {
@@ -773,6 +757,46 @@ overridden = {
 	15807 : {'ddG_H2O'			 : '2.72', 'PDB' : '1FKJ'}, # Wrong sign
 	15808 : {'ddG_H2O'			 : '2.35', 'PDB' : '1FKJ'}, # Wrong sign
 	17873 : {'ddG_H2O'		 : None, 'PDB' : '1RN1'},# I would need to check the reference
+	
+	# PMID: 11513583 - dG values entered as ddG
+	11745 : {'ddG_H2O' :  '3.1', 'dG_H2O' : '12.1', 'PDB' : '2TRX'}, # D26I is a stabilizing mutation
+	11746 : {'ddG_H2O' : '-3.7', 'dG_H2O' : '5.3',  'PDB' : '2TRX'}, # Destabilizing mutation
+	11747 : {'ddG_H2O' : '-3.1', 'dG_H2O' : '5.9',  'PDB' : '2TRX'}, # Destabilizing mutation
+	11748 : {'ddG_H2O' : '-1.4', 'dG_H2O' : '7.6',  'PDB' : '2TRX'}, # Destabilizing mutation
+	11749 : {'ddG_H2O' : '-1.1', 'dG_H2O' : '7.9',  'PDB' : '2TRX'}, # Destabilizing mutation
+	
+	# PMID:11695900 - ProTherm appears to use the wrong sign
+	12235 : {'ddG_H2O' :  '-11.9', 'PDB' : '1OH0'}, # Y14S  is a destabilizing mutation
+	12236 : {'ddG_H2O' :  '-13.7', 'PDB' : '1OH0'}, # Destabilizing mutation
+	12237 : {'ddG_H2O' :   '-9.5', 'PDB' : '1OH0'}, # Destabilizing mutation
+
+	
+	# PMID:8652517 - ProTherm appears to use the wrong sign
+	5038 : {'ddG_H2O' :  '1.2', 'PDB' : '1YCC'}, # N52I is a stabilizing mutation
+	
+	# PMID:11964251 - ProTherm uses kJ/mol but does not specify them
+	13086 : {'ddG_H2O' :   '-9.9 kJ/mol', 'PDB' : '5AZU'},
+	13087 : {'ddG_H2O' :   '-10.9 kJ/mol', 'PDB' : '5AZU'},
+	
+	# PMID:18189416 - ProTherm uses the wrong sign # todo: put this in a separate dict so we can check that the values are the same as ProTherm, just the opposite sign i.e. sanity-check against bad data entry here
+	23154 : {'ddG_H2O' :  '-9.2', 'PDB' : '1CAH'},
+	23155 : {'ddG_H2O' :  '-8.3', 'PDB' : '1CAH'},
+	23156 : {'ddG_H2O' :  '-8.6', 'PDB' : '1CAH'},
+	23157 : {'ddG_H2O' :  '-5.4', 'PDB' : '1CAH'},
+	23158 : {'ddG_H2O' :  '-4.7', 'PDB' : '1CAH'},
+	23159 : {'ddG_H2O' :  '-3.0', 'PDB' : '1CAH'},
+	23160 : {'ddG_H2O' :  '-3.2', 'PDB' : '1CAH'},
+	23161 : {'ddG_H2O' :  '-1.4', 'PDB' : '1CAH'},
+	23162 : {'ddG_H2O' :  '-2.8', 'PDB' : '1CAH'},
+	23163 : {'ddG_H2O' :  '-0.8', 'PDB' : '1CAH'},
+	23164 : {'ddG_H2O' :  '-1.8', 'PDB' : '1CAH'},
+	
+	# PMID:8771183 - ProTherm uses the wrong sign # todo: put this in a separate dict so we can check that the values are the same as ProTherm, just the opposite sign i.e. sanity-check against bad data entry here
+	11246 : {'ddG_H2O' :  '-1.92', 'PDB' : '4LYZ'},
+	11247 : {'ddG_H2O' :  '-1.27', 'PDB' : '4LYZ'},
+	11248 : {'ddG_H2O' :  '-2.00', 'PDB' : '4LYZ'},
+	
+	
 }
 
 RoundingErrors = {
@@ -903,14 +927,12 @@ for ID, data in RoundingErrors.iteritems():
 	overridden[ID] = data
 	
 
-badPublicationReferences = {
-	13376 : 8390295,
-	13377 : 8390295,
-	13378 : 8390295,
-	13379 : 8390295,
-	13380 : 8390295,
-	13381 : 8390295,
-}	
+# Records with the wrong PMID
+badPublicationReferences = {}
+for recordID in range(13376, 13381 + 1):
+	badPublicationReferences[recordID] = 8390295
+for recordID in range(15714, 15733 + 1):
+	badPublicationReferences[recordID] = 12473461
 
 badSecondaryStructure = dict.fromkeys(
 	[2747, 4611, 12310, 12701, 12702, 12979, 12980, 12982, 12983, 16895, 19886, 19887, 19888, 19889, 19893, 22231, 24335]
@@ -983,25 +1005,15 @@ missingRefMap = {
 	"PROTEIN SCI 16, 227-238 (2007)"			: ("PMID", 17189482),
 } 
 
-def getDDGUnitsUsedInDB(ddGDB = None):
-	if not ddGDB:
-		ddGDB = ddgdbapi.ddGDatabase()
-		results = ddGDB.execute('SELECT SourceID, UnitUsed FROM ProTherm_Units')
-		ddGDB.close()
-	else:
-		results = ddGDB.execute('SELECT SourceID, UnitUsed FROM ProTherm_Units')
+def getDDGUnitsUsedInDB(ddGDB):
+	results = ddGDB.locked_execute('SELECT SourceID, DGUnitUsedInProTherm FROM ProThermUnits')
 	unitsUsed = {}
 	for r in results:
-		unitsUsed[r["SourceID"]] = r["UnitUsed"]
+		unitsUsed[r["SourceID"]] = r["DGUnitUsedInProTherm"]
 	return unitsUsed
 	
 def getIDsInDB(ddGDB = None, source = "ProTherm-2008-09-08-23581"):
-	if not ddGDB:
-		ddGDB = ddgdbapi.ddGDatabase()
-		records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgdbapi.StdCursor)])
-		ddGDB.close()
-	else:
-		records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgdbapi.StdCursor)])
+	records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgdbapi.StdCursor)])
 	return records_in_database
 	
 def summarizeList(l):
@@ -1026,8 +1038,12 @@ class ProThermReader(object):
 		25616 : "2011-12-21",
 	}
 	
-	def __init__(self, infilepath, ddgDB = None, quiet = False, skipIndexStore = False):
-		self.ddgDB = ddgDB
+	def __init__(self, infilepath, ddGDB = None, quiet = False, skipIndexStore = False):
+		
+		if not ddGDB:
+			ddGDB = ddgdbapi.ddGDatabase()
+		self.ddGDB = ddGDB
+		
 		mtchs = re.match(".*(ProTherm)(\d+)[.]dat$", infilepath, re.IGNORECASE)
 		if mtchs:
 			lastrecord = int(mtchs.group(2))
@@ -1065,81 +1081,8 @@ class ProThermReader(object):
 			self.missingReferences = 0
 			self.noPMIDs = {}
 			self.ExistingDBIDs = {}
-			self.ddGUnitsUsed = getDDGUnitsUsedInDB(self.ddgDB)
+			self.ddGUnitsUsed = getDDGUnitsUsedInDB(self.ddGDB)
 			
-			# todo: Hack for Guerois matching. Should be checked and added to the database
-			self.ddGUnitsUsed["PMID:1610820"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8399139"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8639591"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:2261461"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:7577991"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:9315853"] = "kcal/mol"
-			# todo: Hack for Liz matching. Should be checked and added to the database
-			self.ddGUnitsUsed["PMID:7681323"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8448112"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:2021603"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:3300767"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:1602471"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:1920420"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:7479708"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:1610817"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8515459"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:3167015"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:1980207"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8355268"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:3449854"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8897601"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:9578580"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:9558354"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:9565753"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:2015219"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:1988046"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:7893716"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8422372"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:7756312"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:10438631"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:10051585"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:7773177"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:2023260"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:1569552"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8158639"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8648619"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8289248"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:8580845"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:2266554"] = "kcal/mol"
-			
-			self.ddGUnitsUsed["PMID:1569558"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:11254388"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:11438757"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:11705391"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:11841216"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:10467094"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:12600203"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:14607120"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:14516751"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:15504411"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:17400925"] = "kcal/mol"
-			self.ddGUnitsUsed["PMID:1569559"] = "kcal/mol"
-			
-			for pmidcase in ['PMID:0', 'PMID:10048932', 'PMID:10074361', 'PMID:10091653', 'PMID:10097082', 'PMID:10360367', 'PMID:10388575', 'PMID:10388847', 'PMID:10467093',
- 				'PMID:10623553', 'PMID:10692339', 'PMID:10727242', 'PMID:10889040', 'PMID:10926502', 'PMID:10986129', 'PMID:11023787', 'PMID:11093260', 'PMID:11399087',
- 				'PMID:11406632', 'PMID:11420446', 'PMID:11468365', 'PMID:11477222', 'PMID:11513583', 'PMID:11567094', 'PMID:11567097', 'PMID:11705392', 'PMID:11705393',
- 				'PMID:11735410', 'PMID:11751325', 'PMID:11964251', 'PMID:12006985', 'PMID:12051856', 'PMID:12054791', 'PMID:12070321', 'PMID:12140288', 'PMID:12173940',
- 				'PMID:12215410', 'PMID:12269800', 'PMID:12270718', 'PMID:12370184', 'PMID:12487987', 'PMID:12498804', 'PMID:12549934', 'PMID:12559923', 'PMID:12589767',
- 				'PMID:12614625', 'PMID:12684013', 'PMID:12717025', 'PMID:12795599', 'PMID:12795600', 'PMID:12911302', 'PMID:1326327',
-  				'PMID:1334426', 'PMID:1390669', 'PMID:1420152', 'PMID:1420172', 'PMID:14529489', 'PMID:14659758', 'PMID:14672667', 'PMID:14729346', 'PMID:14769019', 
-  				'PMID:15037063', 'PMID:15099748', 'PMID:15350126', 'PMID:1537844', 'PMID:1540577', 'PMID:15449934', 'PMID:15544816', 'PMID:15567419', 'PMID:1567879', 'PMID:15722442',
-  				'PMID:15740745', 'PMID:15865421', 'PMID:15935381', 'PMID:15952787', 'PMID:16002092', 'PMID:16023136', 'PMID:16042382', 'PMID:16046626', 'PMID:1610799', 'PMID:16165156',
-  				'PMID:1620695', 'PMID:16246369', 'PMID:16246823', 'PMID:16274219', 'PMID:16337228', 'PMID:16430220', 'PMID:1645658', 'PMID:16473367', 'PMID:16489754', 'PMID:16522792',
-  				'PMID:16566582', 'PMID:16906769', 'PMID:17038664', 'PMID:17065159', 'PMID:17189482', 'PMID:1731883', 'PMID:17434659', 'PMID:17496026', 'PMID:17564441', 'PMID:1765074',
-  				'PMID:18189416', 'PMID:18293933', 'PMID:18434422', 'PMID:1850617', 'PMID:1854757', 'PMID:19099423', 'PMID:1911779', 'PMID:19683000', 'PMID:19683006', 'PMID:2148681',
-  				'PMID:2207072', 'PMID:2622906', 'PMID:2822088', 'PMID:2851328', 'PMID:2872918', 'PMID:2928323', 'PMID:3026439', 'PMID:3322388', 'PMID:3409879', 'PMID:378988', 'PMID:6757449',
-  				'PMID:7479862', 'PMID:7548170', 'PMID:7577989', 'PMID:7664079', 'PMID:7764048', 'PMID:7798183', 'PMID:7819231', 'PMID:8110795', 'PMID:8117679', 'PMID:8144550', 'PMID:8180214',
-  				'PMID:8218166', 'PMID:8257694', 'PMID:8380333', 'PMID:8399225', 'PMID:8454578', 'PMID:8475043', 'PMID:8476861', 'PMID:8564547', 'PMID:8611545', 'PMID:8626487', 'PMID:8646533',
-  				'PMID:8652517', 'PMID:8672446', 'PMID:8672513', 'PMID:8674528', 'PMID:8679642', 'PMID:8720127', 'PMID:8743572', 'PMID:8771183', 'PMID:8844847', 'PMID:8845764', 'PMID:8961937',
-  				'PMID:9020793', 'PMID:9020874', 'PMID:9041638', 'PMID:9231905', 'PMID:9655352', 'PMID:9878405', 'PMID:9890932', 'PMID:9973571',
-  				'PMID:10504393', 'PMID:11695900', 'PMID:11742108', 'PMID:12079394', 'PMID:19384991', 'PMID:19472325', 'PMID:19472328', 'PMID:7716165', 'PMID:9819209']:
-				self.ddGUnitsUsed[pmidcase] = "kcal/mol"
 			self.ExistingScores = {}		
 		else:
 			raise Exception("No patch data is available for %s. Run a diff against the most recent database to determine if any changes need to be made." % infilepath)
@@ -1164,6 +1107,30 @@ class ProThermReader(object):
 		
 		if not quiet:
 			self.printSummary()
+		
+		self.setUpExperimentalFieldNames()
+		
+	def setUpExperimentalFieldNames(self):
+		dbAssayFieldNames = self.ddGDB.FieldNames.ExperimentAssay
+		self.exp2DBfield = {
+			"T"				: dbAssayFieldNames.Temperature,
+			"pH"			: dbAssayFieldNames.pH,
+			"BUFFER_NAME"	: dbAssayFieldNames.Buffer,
+			"BUFFER_CONC"	: dbAssayFieldNames.BufferConcentration,
+			"ION_NAME_1"	: dbAssayFieldNames.Ion1,
+			"ION_NAME_1C"	: dbAssayFieldNames.Ion1,
+			"ION_CONC_1"	: dbAssayFieldNames.Ion1Concentration,
+			"ION_NAME_2"	: dbAssayFieldNames.Ion2, 
+			"ION_CONC_2"	: dbAssayFieldNames.Ion2Concentration,
+			"ION_NAME_3"	: dbAssayFieldNames.Ion3,
+			"ION_CONC_3"	: dbAssayFieldNames.Ion3Concentration, 
+			"ADDITIVES"		: dbAssayFieldNames.Additives,
+			"PROTEIN_CONC"	: dbAssayFieldNames.ProteinConcentration,
+			"MEASURE"		: "Measure",
+			"METHOD"		: "MethodOfDenaturation",
+		}
+		self.expfields = self.exp2DBfield.keys()
+		self.numericexpfields = ["T", "pH"]  
 	
 	def open(self):
 		if not self.fhandle:
@@ -1264,6 +1231,7 @@ class ProThermReader(object):
 			record["dbReferencePK"] = "PMID:%s" % referenceID
 			ddG = self.getDDGInKcal(ID, record)
 			if expectedDDG != ddG:
+				print("Record %d: Expected %s, got %s." % (ID, str(expectedDDG), str(ddG)))
 				errors.append("Record %d: Expected %f, got %f." % (ID, expectedDDG, ddG))
 			if numerrormsgs < len(errors):
 				colortext.write(".", "red")
@@ -1682,7 +1650,7 @@ class ProThermReader(object):
 		record = self._getRecord(ID, record)
 		
 		# Patch for typos
-		if 24390 <= ID <= 24421 and record["ddG_H2O"] and record["ddG_H2O"].find("kal/mol") != -1:
+		if 24390 <= ID <= 24420 and record["ddG_H2O"] and record["ddG_H2O"].find("kal/mol") != -1:
 			record["ddG_H2O"] = record["ddG_H2O"].replace("kal/mol", "kcal/mol")
 		
 		passed = True
@@ -1695,7 +1663,7 @@ class ProThermReader(object):
 			if record.get('PDB_wild'):
 				if record["PDB_wild"] != overridden[ID]["PDB"]:
 					raise colortext.Exception("Error in overridden table: Record %d. Read '%s' for PDB_wild, expected '%s'." % (ID, record["PDB_wild"], overridden[ID]["PDB"]))
-			for k,v in overridden[ID].iteritems():
+			for k, v in overridden[ID].iteritems():
 				if k != "PDB":
 					record[k] = v
 		if record["PDB_wild"]:
@@ -1768,11 +1736,6 @@ class ProThermReader(object):
 		self.fixThermodynamic_activity_Km(ID, record)
 		self.fixThermodynamic_activity_Kcat(ID, record)
 		self.fixThermodynamic_activity_Kd(ID, record)
-		
-		
-						
-				 
-		
 		
 		missingFields = []
 		for field in self.requiredFields:
@@ -1906,7 +1869,6 @@ class ProThermReader(object):
 			ddGKey = "ddG_H2O"
 		
 		ddGline = record[ddGKey]
-		
 		if getDDGH2OInstead and not ddGline:
 			# todo: I should handle this better
 			return None
@@ -1998,6 +1960,16 @@ class ProThermReader(object):
 	def getExperimentalConditions(self, ID, record):
 		record = self._getRecord(ID, record)
 		
+		exp2DBfield = self.exp2DBfield
+		expfields = self.expfields
+		
+		#if record['MEASURE'] and
+		if not record.get('MEASURES'):
+			raise Exception("No measures stored for record %d." % ID)
+		#if record['METHOD'] and
+		if not record.get('METHODS'):
+			raise Exception("No methods stored for record %d." % ID)
+
 		ExperimentalConditions = {}
 		for h in expfields:
 			if not record[h]:
@@ -2007,7 +1979,15 @@ class ProThermReader(object):
 				self.maxDBfieldlengths[h] = max(self.maxDBfieldlengths.get(h, 0), len(fielddata))
 			if fielddata == "Unknown":
 				fielddata = None
-			if fielddata and h in numericexpfields:
+			if fielddata and h == "METHOD":
+				assert(record['METHODS'])
+				for i in range(len(record['METHODS'])):
+					ExperimentalConditions["%s%d" % (exp2DBfield[h], i + 1)] = record['METHODS'][i]
+			elif fielddata and h == "MEASURE":
+				assert(record['MEASURES'])
+				for i in range(len(record['MEASURES'])):
+					ExperimentalConditions["%s%d" % (exp2DBfield[h], i + 1)] = record['MEASURES'][i]
+			elif fielddata and h in self.numericexpfields:
 				try:
 					fielddata = float(fielddata)
 				except:
@@ -2022,8 +2002,9 @@ class ProThermReader(object):
 							fielddata = None
 				if fielddata == None:
 					colortext.error("Failed to convert field %s's number %s for record %d." % (h, fielddata, ID))
-					
-			ExperimentalConditions[exp2DBfield[h]] = fielddata or None
+				ExperimentalConditions[exp2DBfield[h]] = fielddata or None
+			else:
+				ExperimentalConditions[exp2DBfield[h]] = fielddata or None
 		
 		return ExperimentalConditions
 	
@@ -2129,7 +2110,7 @@ class ProThermReader(object):
 		if openedhere[1]:
 			secondDB.close()
 					
-		existingIDs = getIDsInDB(self.ddgDB, source = "ProTherm-2008-09-08-23581")
+		existingIDs = getIDsInDB(self.ddGDB, source = "ProTherm-2008-09-08-23581")
 		for i in added_info:
 			if showall:
 				colortext.error("Record %10.d: %s (%s). Value '%s' deleted." % (i[0], i[1], field_descriptions[i[1]], i[2]))
