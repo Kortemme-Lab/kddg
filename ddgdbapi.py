@@ -1014,6 +1014,121 @@ class Prediction(DBObject):
 	def __getitem__(self, key):
 		return dict_[key]
 
+class DataSet(DBObject):
+
+	def __init__(self, ddGdb, ID, ShortID, Description, CreationDateStart, CreationDateEnd, DDGConvention, UserID = None):
+		self.ddGdb = ddGdb
+		FieldNames = ddGdb.FieldNames.DataSet
+		self.dict = {
+			FieldNames.ID					: ID,
+			FieldNames.ShortID				: ShortID,
+			FieldNames.UserID				: UserID,
+			FieldNames.Description			: Description,
+			FieldNames.CreationDateStart	: CreationDateStart,
+			FieldNames.CreationDateEnd		: CreationDateEnd,
+			FieldNames.DDGConvention		: DDGConvention,
+		}
+		self.References = []
+	
+	def addReference(self, SourceID):
+		self.References.append(SourceID)
+	
+	def commit(self):
+		d = self.dict
+		ddGdb = self.ddGdb
+		FieldNames = ddGdb.FieldNames
+		IDfield = FieldNames.DataSet.ID
+		DataSetID = None
+		try:
+			DataSetID = self.ddGdb.insertDictIfNew(FieldNames.DataSet._name, d, IDfield)[1][IDfield]
+		except Exception, e:
+			raise Exception("\nError committing DataSet to database.\n***\n%s\n%s\n***" % (self, str(e)))
+
+		self.databaseID = self.ddGdb.getLastRowID()
+		for reference in self.References:
+			try:
+				d = {
+					FieldNames.DataSetReference.DataSetID	: DataSetID, 
+					FieldNames.DataSetReference.Publication	: reference 
+				}
+				self.ddGdb.insertDictIfNew(FieldNames.DataSetReference._name, d, [FieldNames.DataSetReference.DataSetID, FieldNames.DataSetReference.Publication])
+			except Exception, e:
+				raise Exception("\nError committing DataSetReference to database.\n***\n%s\n%s\n***" % (self, str(e)))
+		
+		return self.databaseID
+
+	def __repr__(self):
+		return str(self.dict) + "\n" + join(self.References, "\n")
+		
+	def __getitem__(self, key):
+		return dict_[key]
+	
+	
+class Publication(DBObject):
+	
+	def __init__(self, ddGdb, ID, DDGUnit = None, DDGConvention = None, Notes = None, RIS = None):
+		self.ddGdb = ddGdb
+		FieldNames = ddGdb.FieldNames.Source
+		self.dict = {
+			FieldNames.ID				: ID,
+			FieldNames.DDGUnit			: DDGUnit,
+			FieldNames.DDGConvention	: DDGConvention,
+			FieldNames.Notes			: Notes,
+			FieldNames.RIS				: RIS,
+		}
+		self.IDs = []
+		self.DDGLocations = []
+	
+	def addIdentifier(self, IDType, ID):
+		self.IDs.append((ID, IDType))
+	
+	def addDDGValueLocation(self, Location, Notes):
+		self.IDs.append((Location, Notes))
+					
+	def commit(self):
+		d = self.dict
+		ddGdb = self.ddGdb
+		FieldNames = ddGdb.FieldNames
+		IDfield = FieldNames.Source.ID
+		SourceID = None
+		try:
+			SourceID = self.ddGdb.insertDictIfNew(FieldNames.Source._name, d, [IDfield])[1][IDfield]
+		except Exception, e:
+			raise Exception("\nError committing Source to database.\n***\n%s\n%s\n***" % (self, str(e)))
+
+		self.databaseID = self.ddGdb.getLastRowID()
+
+		for ID in self.IDs:
+			try:
+				d = {
+					FieldNames.SourceIdentifier.SourceID	: SourceID, 
+					FieldNames.SourceIdentifier.ID 			: ID[0], 
+					FieldNames.SourceIdentifier.Type		: ID[1], 
+				}
+				self.ddGdb.insertDictIfNew(FieldNames.SourceIdentifier._name, d, [FieldNames.SourceIdentifier.SourceID, FieldNames.SourceIdentifier.ID])
+			except Exception, e:
+				raise Exception("\nError committing SourceIdentifier to database.\n***\n%s\n%s\n***" % (self, str(e)))
+		
+		for Location in self.DDGLocations:
+			try:
+				d = {
+					FieldNames.SourceDDGValueLocation.SourceID	: SourceID, 
+					FieldNames.SourceDDGValueLocation.Location 	: Location[0], 
+					FieldNames.SourceDDGValueLocation.Notes		: Location[1], 
+				}
+				self.ddGdb.insertDictIfNew(FieldNames.SourceDDGValueLocation._name, d, [FieldNames.SourceDDGValueLocation.SourceID, FieldNames.SourceDDGValueLocation.Location])
+			except Exception, e:
+				raise Exception("\nError committing SourceDDGValueLocation to database.\n***\n%s\n%s\n***" % (self, str(e)))
+		
+		return self.databaseID
+
+	def __repr__(self):
+		raise Exception('''Not implemented.''')
+		
+	def __getitem__(self, key):
+		return dict_[key]
+
+
 class ddGPredictionDataDatabase(object):
 	
 	def __init__(self, passwd = None):
@@ -1146,6 +1261,7 @@ class ddGDatabase(DatabaseInterface):
 			raise Exception("Error occurred during database insertion.")
 		
 	def getStandardDeviation(self, ID):
+		raise Exception("getStandardDeviation needs to be updated.")
 		results = self.callproc("GetScores", ID)
 		scores = []
 		if len(results) == 1:
@@ -1157,7 +1273,7 @@ class ddGDatabase(DatabaseInterface):
 			scores = [result["ddG"] for result in results]
 			stddev, variance = computeStandardDeviation(scores)
 			return stddev
-
+	
 class DatabasePrimer(object):
 	'''This class fills in initial values for Tool, AminoAcid, UniProtKB, and UniProtKBMapping. The last will print errors if the corresponding PDB is not in the database.'''
 	
@@ -1603,172 +1719,6 @@ class DatabasePrimer(object):
 		
 if __name__ == "__main__":
 	ddGdb = ddGDatabase()
-	#print([r["Tables_in_ddG"] for r in ddGdb.execute("SHOW TABLES")])
-	
-	TableNames = ddGdb.TableNames
-	FieldNames = ddGdb.FieldNames
-	PTUnits = FieldNames._MERGE_ProTherm_Units
-	
-	existingSources = {}
-	results = ddGdb.execute("SELECT * FROM Source")
-	for r in results:
-		existingSources[r[FieldNames.Source.ID]] = r
-	
-	existingSourcesIdentifiers = {}
-	results = ddGdb.execute("SELECT * FROM SourceIdentifier")
-	for r in results:
-		existingSourcesIdentifiers[(r[FieldNames.SourceIdentifier.SourceID], r[FieldNames.SourceIdentifier.Type])] = r
-	
-	existingSourcesValueLocations = {}
-	results = ddGdb.execute("SELECT * FROM SourceDDGValueLocation")
-	for r in results:
-		existingSourcesValueLocations[(r[FieldNames.SourceDDGValueLocation.SourceID], r[FieldNames.SourceDDGValueLocation.Location])] = r
-	
-	results = ddGdb.execute("SELECT * FROM _MERGE_ProTherm_Units")
-	
-	for r in results:
-		assert(r[PTUnits.SourceID].startswith("PMID:"))
-		PMID = r[PTUnits.SourceID][5:]
-		if r[PTUnits.URL] != '%s[uid]' % PMID:
-			assert(r[PTUnits.URL].startswith("http://"))
-		assert(r[PTUnits.UnitUsed] == "kcal/mol" or r[PTUnits.UnitUsed] == "kcal/mol ?")
-		assert(r[PTUnits.RIS])
-	
-	resultsSections = set()
-	for r in results:
-		PMID = r[PTUnits.SourceID][5:]
-		URL = None
-		if r[PTUnits.URL] != '%s[uid]' % PMID:
-			URL = r[PTUnits.URL]
-		
-		if existingSources.get(r[PTUnits.SourceID]):
-			if existingSources[r[PTUnits.SourceID]]['RIS']:
-				pass
-			else:
-				print("Adding RIS")
-				ddGdb.execute("UPDATE Source SET RIS=%s WHERE ID=%s", parameters = (r[PTUnits.RIS], r[PTUnits.SourceID]))
-			if existingSources[r[PTUnits.SourceID]]['Notes'] or not(r[PTUnits.Notes]) or  r[PTUnits.Notes].strip() == "":
-				pass
-			else:
-				print("Adding Notes")
-				ddGdb.execute("UPDATE Source SET Notes=%s WHERE ID=%s", parameters = (r[PTUnits.Notes], r[PTUnits.SourceID]))
-			if existingSources[r[PTUnits.SourceID]]['DDGUnit']:
-				pass
-			else:
-				print("Adding Units")
-				if r[PTUnits.UnitUsed] == "kcal/mol":
-					ddGdb.execute("UPDATE Source SET DDGUnit='kcal/mol' WHERE ID=%s", parameters = (r[PTUnits.SourceID],))
-				elif r[PTUnits.UnitUsed] == "kcal/mol ?":
-					ddGdb.execute("UPDATE Source SET DDGUnit='Unknown' WHERE ID=%s", parameters = (r[PTUnits.SourceID],))
-				else:
-					print(r[PTUnits.SourceID], r[PTUnits.UnitUsed])
-		else:
-			print("Adding a new Source record")
-			d = {
-				FieldNames.Source.ID 			: r[PTUnits.SourceID],
-				FieldNames.Source.DDGUnit 		: None, 
-				FieldNames.Source.DDGConvention : None, 
-				FieldNames.Source.Notes 		: None, 
-				FieldNames.Source.RIS 			: r[PTUnits.RIS], 
-			}
-			ddGdb.insertDict(FieldNames.Source._name, d)
-			
-		if existingSourcesIdentifiers.get((r[PTUnits.SourceID], 'PMID')):
-			assert(existingSourcesIdentifiers[(r[PTUnits.SourceID], 'PMID')]['ID'] == PMID)
-		else:
-			print("Adding a PMID source identifier for %s" % r[PTUnits.SourceID])
-			d = {
-				FieldNames.SourceIdentifier.SourceID	: r[PTUnits.SourceID],
-				FieldNames.SourceIdentifier.ID	 		: PMID, 
-				FieldNames.SourceIdentifier.Type 		: 'PMID', 
-			}
-			ddGdb.insertDict(FieldNames.SourceIdentifier._name, d)
-			
-		if URL:
-			if existingSourcesIdentifiers.get((r[PTUnits.SourceID], 'URL')):
-				assert(existingSourcesIdentifiers.get((r[PTUnits.SourceID], 'URL'))['ID'] == URL)
-			else:
-				print("Adding a URL source identifier for %s" % r[PTUnits.SourceID])
-				d = {
-					FieldNames.SourceIdentifier.SourceID	: r[PTUnits.SourceID],
-					FieldNames.SourceIdentifier.ID	 		: URL, 
-					FieldNames.SourceIdentifier.Type 		: 'URL', 
-				}
-				ddGdb.insertDict(FieldNames.SourceIdentifier._name, d)
-
-		ResultSectionNotes = None
-		usualsections = ['Table 1', 'Table 2', 'Table 3', 'Table 4', 'Table 5', 'Table 6', 'Table I', 'Table II', 'Table III', 'Table IV', 'Table V', 'Figure 6']
-		if r[PTUnits.ResultsSection]:
-			if r[PTUnits.ResultsSection] not in usualsections:
-				if r[PTUnits.ResultsSection] == 'Tables 1 and 2':
-					r[PTUnits.ResultsSection] = ['Table 1', 'Table 2']
-				elif r[PTUnits.ResultsSection] == 'Tables 2 and 3':
-					r[PTUnits.ResultsSection] = ['Table 2', 'Table 3']
-				elif r[PTUnits.ResultsSection] == 'Tables 3, 4, and 6':
-					r[PTUnits.ResultsSection] = ['Table 3', 'Table 4','Table 6']
-				elif r[PTUnits.ResultsSection] == 'Tables I and II':
-					r[PTUnits.ResultsSection] = ['Table I', 'Table II']
-				elif r[PTUnits.ResultsSection] == 'Tables I and III':
-					r[PTUnits.ResultsSection] = ['Table I', 'Table III']
-				elif r[PTUnits.ResultsSection] == 'Results and discussion section':
-					r[PTUnits.ResultsSection] = ['Results and discussion']				
-				elif r[PTUnits.ResultsSection] == 'The first set of numbers is from Table 2. The second set of values might be derived?':
-					r[PTUnits.ResultsSection] = ['Table 2']
-					ResultSectionNotes = 'The first set of numbers is from Table 2. The second set of values might be derived?'
-				elif r[PTUnits.ResultsSection] == 'Table 2, bottom-rightmost set of numbers (both pHs).':
-					r[PTUnits.ResultsSection] = ['Table 2']
-					ResultSectionNotes = 'Bottom-rightmost set of numbers (both pHs).'
-				elif r[PTUnits.ResultsSection] == 'Table 1 (and Table 5?)':
-					r[PTUnits.ResultsSection] = ['Table 1']
-					ResultSectionNotes = 'Possibly Table 5 as well.'
-				elif r[PTUnits.ResultsSection] == 'Sections 3.1 and 3.2, page 486':
-					r[PTUnits.ResultsSection] = ['Section 3.1', 'Section 3.2']
-					ResultSectionNotes = 'Page 486.'
-				elif r[PTUnits.ResultsSection] == 'Results and Discussion, p7573, right column':
-					r[PTUnits.ResultsSection] = ['Results and discussion']
-					ResultSectionNotes = 'Page 7573, right column.'
-				elif r[PTUnits.ResultsSection] == 'Tables 1 (right column) for 2092-2099. For the pairs (2814,2815), (2816,2817), etc. the two ddG values are, respectively, from the Native->Intermediate (right column minus left column) and from the Intermediate->Unfolded (left column). 2814 is wrong as is ':
-					r[PTUnits.ResultsSection] = ['Table 1']
-					ResultSectionNotes = 'Table 1 (right column) for ProTherm records 2092-2099. For the pairs (2814,2815), (2816,2817), etc. the two ddG values are, respectively, from the Native->Intermediate (right column minus left column) and from the Intermediate->Unfolded (left column). 2814 is wrong as is.'
-				elif r[PTUnits.ResultsSection] == 'Table 1, ddG^a column':
-					r[PTUnits.ResultsSection] = ['Table 1']
-					ResultSectionNotes = 'ddG^a column.'
-				elif r[PTUnits.ResultsSection] == 'Table I, dG_TS values, I think.':
-					r[PTUnits.ResultsSection] = ['Table I']
-					ResultSectionNotes = 'I think ProTherm uses the dG_TS values.'
-				elif r[PTUnits.ResultsSection] == 'Seemingly from Results, p2405, left column. Numbers are approximate. Is the double mutant roughly -5 rather than -4?':
-					r[PTUnits.ResultsSection] = ['Results']
-					ResultSectionNotes = 'The values seemingly come from the Results section on page 2405, left column but the numbers are approximate. Is the double mutant roughly -5 rather than -4?.'
-				else:
-					raise Exception("Should not have reached here.")
-			else:
-				r[PTUnits.ResultsSection] = [r[PTUnits.ResultsSection]]
-			
-			for rsection in r[PTUnits.ResultsSection]:
-				d = {
-					FieldNames.SourceDDGValueLocation.SourceID	: r[PTUnits.SourceID],
-					FieldNames.SourceDDGValueLocation.Location	: rsection,
-					FieldNames.SourceDDGValueLocation.Notes		: ResultSectionNotes,
-				}
-				if existingSourcesValueLocations.get((r[PTUnits.SourceID], rsection)):
-					assert(existingSourcesValueLocations[(r[PTUnits.SourceID], rsection)]['Notes'] == ResultSectionNotes)
-				else:
-					ddGdb.insertDict(FieldNames.SourceDDGValueLocation._name, d)
-				
-			resultsSections.add(join(r[PTUnits.ResultsSection], ","))
-			 
-	
-	existingSources = {}
-	newresults = ddGdb.execute("SELECT * FROM Source")
-	for r in newresults:
-		existingSources[r[FieldNames.Source.ID]] = r
-	for r in results:
-		assert(existingSources.get(r[PTUnits.SourceID]))
-		
-	
-
-		
-			
 	
 	#primer = DatabasePrimer(ddGdb)
 	#primer.insertUniProtKB()
