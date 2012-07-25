@@ -1066,15 +1066,19 @@ class DataSet(DBObject):
 	
 class Publication(DBObject):
 	
-	def __init__(self, ddGdb, ID, DDGUnit = None, DDGConvention = None, Notes = None, RIS = None):
+	def __init__(self, ddGdb, ID, DDGUnit = None, DDGConvention = None, Notes = None, DGNotes = None, DGUnitUsedInProTherm = None, DDGProThermSignNotes = None, DDGValuesNeedToBeChecked = None, RIS = None):
 		self.ddGdb = ddGdb
 		FieldNames = ddGdb.FieldNames.Source
 		self.dict = {
-			FieldNames.ID				: ID,
-			FieldNames.DDGUnit			: DDGUnit,
-			FieldNames.DDGConvention	: DDGConvention,
-			FieldNames.Notes			: Notes,
-			FieldNames.RIS				: RIS,
+			FieldNames.ID							: ID,
+			FieldNames.DGUnit						: DDGUnit,
+			FieldNames.DDGConvention				: DDGConvention,
+			FieldNames.Notes						: Notes,
+			FieldNames.DGNotes						: DGNotes,
+			FieldNames.DGUnitUsedInProTherm			: DGUnitUsedInProTherm,
+			FieldNames.DDGProThermSignNotes			: DDGProThermSignNotes,
+			FieldNames.DDGValuesNeedToBeChecked		: DDGValuesNeedToBeChecked,
+			FieldNames.RIS							: RIS,
 		}
 		self.IDs = []
 		self.DDGLocations = []
