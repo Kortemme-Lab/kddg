@@ -9,8 +9,8 @@ sys.path.insert(0, "..")
 from string import join
 import common.colortext as colortext
 import ddgdbapi
-from common.rosettahelper import kJtokcal
-from common.rosettahelper import NUMBER_KELVIN_AT_ZERO_CELSIUS
+import ddgobjects
+from common.rosettahelper import kJtokcal, NUMBER_KJ_IN_KCAL, NUMBER_KELVIN_AT_ZERO_CELSIUS
 
 sometimesFields = ["ION_NAME_2", "ION_CONC_2", "ION_NAME_3", "ION_CONC_3", "ION_CON_1C"] # ION_CON_1C seems to be a weird typo in version 23581
 
@@ -433,7 +433,7 @@ singleChainPDBs = {
 	'1BPR' : {'MUTATED_CHAIN' : 'A'},
 	'1BTA' : {'MUTATED_CHAIN' : 'A'},
 	'1BVC' : {'MUTATED_CHAIN' : 'A'},
-	'1BZO' : {'MUTATED_CHAIN' : 'A'},	
+	'1BZO' : {'MUTATED_CHAIN' : 'A'},
 	'1C52' : {'MUTATED_CHAIN' : 'A'},
 	'1C53' : {'MUTATED_CHAIN' : 'A'},
 	'1C5G' : {'MUTATED_CHAIN' : 'A'},
@@ -645,33 +645,52 @@ identicalChainPDBs = {
 	'1AZP' : {'MUTATED_CHAIN' : 'A'},
 	'1B26' : {'MUTATED_CHAIN' : 'A'},
 	'1BNI' : {'MUTATED_CHAIN' : 'A'},
+	'1CYC' : {'MUTATED_CHAIN' : 'A'},
 	'1FC1' : {'MUTATED_CHAIN' : 'A'},
 	'1G6N' : {'MUTATED_CHAIN' : 'A'},
 	'1HFY' : {'MUTATED_CHAIN' : 'A'},
 	'1HFZ' : {'MUTATED_CHAIN' : 'A'},
+	'1HTI' : {'MUTATED_CHAIN' : 'A'},
+	'1IDS' : {'MUTATED_CHAIN' : 'A'},
 	'1LRP' : {'MUTATED_CHAIN' : 'A'},
+	'1MYL' : {'MUTATED_CHAIN' : 'A'},
 	'1N0J' : {'MUTATED_CHAIN' : 'A'},
 	'1RGG' : {'MUTATED_CHAIN' : 'A'},
-	#'1RN1' : {'MUTATED_CHAIN' : 'B'}, # Three identical chains A, B, C. This case is an odd one - we choose chain B since while the PDB file contains identical chains, residue 45 is missing in chain A but required for records 10057 and 10058.
+	'1RN1' : {'MUTATED_CHAIN' : 'B'}, # Three identical chains A, B, C. This case is a special one - we choose chain B since while the PDB file contains identical chains, residue 45 is missing in chain A but required for records 10057 and 10058.
+	'1SAK' : {'MUTATED_CHAIN' : 'A'},
 	'1WQ5' : {'MUTATED_CHAIN' : 'A'},
 	'2AFG' : {'MUTATED_CHAIN' : 'A'},
 	'2TRX' : {'MUTATED_CHAIN' : 'A'},
 	'2ZTA' : {'MUTATED_CHAIN' : 'A'},
-	'1HTI' : {'MUTATED_CHAIN' : 'A'},
 }
+
+mutationsAllowedToBeStoredDespiteMissingCoordinates = set([
+	965, 966, 2288, # 1WQ5 
+	1577, 1578, 1579, 1580, 1603, 1604, 1605, 1606, 2012, 2013, 2054, 2055, 2066, 2073, 2074, 3166, 15947, 15948, # 1STN
+	11869, # 1YCC
+])
 
 # In these cases, the data in ProTherm is incorrect according to the publication
 overridden = {
-	# These cases have ambiguous entries
+	# ** These cases have ambiguous chain entries **
+	# 1WQ5. Two identical chains A, B. Only B has the information for residue 57.
+	963   : {'MUTATED_CHAIN' : 'B', 'MUTATION' : 'P 1057 A', 'PDB' : '1WQ5'},
+	964   : {'MUTATED_CHAIN' : 'B', 'MUTATION' : 'P 1057 A', 'PDB' : '1WQ5'},
+	2287  : {'MUTATED_CHAIN' : 'B', 'MUTATION' : 'P 1057 A', 'PDB' : '1WQ5'},
 	
-	3047  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'}, # Two identical chains A, B, and C (and two DNA chains E and F) but '-' specified in ProTherm
+	# 1TUP. Three identical chains A, B, and C (and two DNA chains E and F) but '-' specified in ProTherm.
+	3047  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
 	3048  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
 	3049  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
 	3050  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
 	3051  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
-	3469  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1G6N'}, # Two identical chains A and B but '-' specified in ProTherm
+	
+	# 1G6N. Two identical chains A and B but '-' specified in ProTherm.
+	3469  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1G6N'}, # 
 	3470  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1G6N'},
-	2418  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'}, # Two identical chains A and B but '-' specified in ProTherm
+	
+	# 1AAR. Two identical chains A and B but '-' specified in ProTherm.
+	2418  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
 	5979  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
 	5980  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
 	5981  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
@@ -680,8 +699,10 @@ overridden = {
 	5984  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
 	5985  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
 	5986  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	5987  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},	
-	3629  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'}, # Two identical chains A and B but '-' specified in ProTherm
+	5987  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
+	
+	# 1FC1. Two identical chains A and B but '-' specified in ProTherm.
+	3629  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
 	3630  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
 	3631  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
 	3632  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
@@ -697,7 +718,9 @@ overridden = {
 	3642  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
 	3643  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
 	3644  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3604  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'}, # Three identical chains A, B, and C but '-' specified in ProTherm
+	
+	# 1LRP. Three identical chains A, B, and C but '-' specified in ProTherm
+	3604  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
 	3605  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
 	3606  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
 	3607  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
@@ -720,27 +743,13 @@ overridden = {
 	14253 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
 	14254 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
 	14255 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	8302  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'}, # Four identical chains A, B, C, and D but '-' specified in ProTherm
+	
+	# 2AFG. Four identical chains A, B, C, and D but '-' specified in ProTherm
+	8302  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	8303  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	8304  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	8305  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	8306  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	11864 : {'dCp' 			 : None,'PDB' : '2FHA'},
-	11865 : {'dCp' 			 : None,'PDB' : '2FHA'},
-	11866 : {'dCp' 			 : None,'PDB' : '2FHA'},
-	11867 : {'dCp' 			 : None,'PDB' : '2FHA'},
-	24388 : {'dCp' 			 : None,'PDB' : ''},
-	16900 : {'m'			 : '6.86 kJ/mol/M', 'PDB' : '1C9O'},
-	
-	889   : {'Tm'			 : '53.4 C',	'PDB' : '1ARR'},
-	890   : {'Tm'			 : '67.3 C',	'PDB' : '1ARR'},
-	5303  : {'Tm'			 : '<= 10.0 C',	'PDB' : '1YCC'},
-	23589  : {'Tm'			 : '> 80 C', 	'PDB' : ''},
-	25269  : {'Tm'			 : '52-54 C',	'PDB' : ''},
-	
-	17877  : {'dTm'			 : None,	'PDB' : ''},
-	23676  : {'dTm'			 : None,	'PDB' : ''},
-	
 	14474 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	14475 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	14476 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
@@ -748,194 +757,822 @@ overridden = {
 	24299 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	24300 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
 	24301 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	14153 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1N0J'}, # Two identical chains A and B but '-' specified in ProTherm
-	17394 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}, # Two distinct chains. There's no mutation here so there's no harm in specifying B as the chain.
-	17395 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}, # 
-	17396 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}, # 
-	8498  : {'ddG_H2O' 		 : '-2.82', 		'PDB' : '1TEN'}, # Typo 
-	14192 : {'ddG' 		 	 : '-0.6453154876', 'PDB' : '1LZ1'}, # Bad computation
-	15807 : {'ddG_H2O'			 : '2.72', 'PDB' : '1FKJ'}, # Wrong sign
-	15808 : {'ddG_H2O'			 : '2.35', 'PDB' : '1FKJ'}, # Wrong sign
-	17873 : {'ddG_H2O'		 : None, 'PDB' : '1RN1'},# I would need to check the reference
 	
-	# PMID: 11513583 - dG values entered as ddG
-	11745 : {'ddG_H2O' :  '3.1', 'dG_H2O' : '12.1', 'PDB' : '2TRX'}, # D26I is a stabilizing mutation
-	11746 : {'ddG_H2O' : '-3.7', 'dG_H2O' : '5.3',  'PDB' : '2TRX'}, # Destabilizing mutation
-	11747 : {'ddG_H2O' : '-3.1', 'dG_H2O' : '5.9',  'PDB' : '2TRX'}, # Destabilizing mutation
-	11748 : {'ddG_H2O' : '-1.4', 'dG_H2O' : '7.6',  'PDB' : '2TRX'}, # Destabilizing mutation
-	11749 : {'ddG_H2O' : '-1.1', 'dG_H2O' : '7.9',  'PDB' : '2TRX'}, # Destabilizing mutation
+	# 1N0J. Two identical chains A and B but '-' specified in ProTherm
+	14153 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1N0J'},
 	
-	# PMID:11695900 - ProTherm appears to use the wrong sign
-	12235 : {'ddG_H2O' :  '-11.9', 'PDB' : '1OH0'}, # Y14S  is a destabilizing mutation
-	12236 : {'ddG_H2O' :  '-13.7', 'PDB' : '1OH0'}, # Destabilizing mutation
-	12237 : {'ddG_H2O' :   '-9.5', 'PDB' : '1OH0'}, # Destabilizing mutation
+	# 1OTR. Two distinct chains. There's no mutation here so there's no harm in specifying B as the chain.
+	17394 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'},#
+	17395 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'},# 
+	17396 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'},# 
+	
+	# PMID:15449934. Two distinct chains. All mutations in this publication are on the I chain (Eglin c).
+	18378 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
+	18379 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
+	18380 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
+	18381 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
+	18382 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
+	18383 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
+	18384 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
+	18385 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
+	
+	# ** These cases have bad PDB IDs for the wild-type structure **
+	# PMID:12487987. This publication concerns MYL Arc repressor, not 1ARR. Only positions 31, 36, and 40 differ. 
+	17567 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17568 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17569 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17570 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17571 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17572 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17573 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17574 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17575 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17576 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17577 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17578 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17579 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17580 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17581 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17582 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	17583 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+	
+	# ** These cases have bad PDB IDs for the mutant structure **
+	303   : {'PDB_mutant'	 : None, 'PDB' : '1STN'}, # The two listed structures are not homologous so presumably only one is correct? 1SYC and 1SYD are homologous 
+	13535 : {'PDB_mutant'	 : None, 'PDB' : '2LZM'}, # 166H is not a valid PDB ID. 166L has the T115A mutation but also has other mutations.
 
+	# Standardizing record for parsing
+	24283  : {'MUTATION' : 'M 133 L, C 141 V, Y 236 F, T 253 L', 'PDB' : '2AC0'},
 	
-	# PMID:8652517 - ProTherm appears to use the wrong sign
-	5038 : {'ddG_H2O' :  '1.2', 'PDB' : '1YCC'}, # N52I is a stabilizing mutation
+	# ** These cases have bad mutations **
+	6367  : {'MUTATION' : 'Y 68 F', 'PDB' : '1TTG'}, # Removing bad PDB residue ID corrections (meant for 1TEN)
+	2554  : {'MUTATION' : 'A 18 G', 'PDB' : '2WSY'},
+	11869 : {'MUTATION' : 'P 76 L, K 72 M', 'PDB' : '1YCC'}, # Table 3 describes 3R22 as a double mutant (also noted in the footnote of Table 4)
+
+	# PMID:10956017
+	14434 : {'MUTATION' : 'I 30 V', 'SEC.STR.' : 'Coil', 'PDB' : '1OTR'}, # Typo. I 30 V, I 36 L is the next mutation in the table. 
+	14438 : {'MUTATION' : 'I 30 F', 'SEC.STR.' : 'Coil', 'PDB' : '1OTR'}, # Typo. I 30 F, I 36 L is the next mutation in the table. 
+	
+	# PMID:16503630
+	19894 : {'MUTATION' : 'Q 19 E, Q 23 K, K 32 E, E 39 K, Q 60 K, S 65 K, E 69 K (PDB: Q28A E, Q 32A K, K 39A E, E 50A K, Q 71A K, S 76A K, E 80A K)', 'PDB' : '1AYE'}, # Typo: K 41A E given instead of K 39A E    
+	19897 : {'MUTATION' : 'Q 7 K, L 19 K, D 49 K, T 89 K (PDB: Q 808 K, L 820 K, D 850 K, T 890 K)', 'PDB' : '1TEN'}, # Missing PDB mapping.
+	19898 : {'MUTATION' : 'Q 7 K, L 19 K, D 49 K, T 89 K (PDB: Q 808 K, L 820 K, D 850 K, T 890 K)', 'PDB' : '1TEN'}, # Missing PDB mapping.
+	
+	# PMID:19695265
+	24290 : {'MUTATION' : 'V 31 I', 'PDB' : '2AFG'}, # Typo. Val31 is described as mutated to Ile in both Table 2 and throughout the text.
+	24296 : {'MUTATION' : 'K 12 V, C 83 T, C 117 V', 'PDB' : '2AFG'}, # Typo. L 12 V was entered instead of K 12 V - see Table 2.
+	
+	# PMID:8142362. Entries 4489-4492 use the proper PDB numbering. Entries 14261-14264 do not.
+	14261 : {'MUTATION' : 'R 53 E',				'PDB' : '1C5G'},
+	14262 : {'MUTATION' : 'E 373 R',			'PDB' : '1C5G'},
+	14263 : {'MUTATION' : 'E 373 P',			'PDB' : '1C5G'},
+	14264 : {'MUTATION' : 'R 53 E, E 373 R',	'PDB' : '1C5G'},
+	
+	# ** These cases do not have normalized experimental conditions for parsing by my script. **
+	11864 : {'dCp' 			 : None,'PDB' : '2FHA'},
+	11865 : {'dCp' 			 : None,'PDB' : '2FHA'},
+	11866 : {'dCp' 			 : None,'PDB' : '2FHA'},
+	11867 : {'dCp' 			 : None,'PDB' : '2FHA'},
+	24388 : {'dCp' 			 : None,'PDB' : ''},
+	
+	16900 : {'m'			 : '6.86 kJ/mol/M', 'PDB' : '1C9O'},
+	
+	16093  : {'T'			 : '298 K', 	'PDB' : '2AFG'}, # Adding a space so the regex passes
+
+	889    : {'Tm'			 : '53.4 C',	'PDB' : '1ARR'},
+	890    : {'Tm'			 : '67.3 C',	'PDB' : '1ARR'},
+	5303   : {'Tm'			 : '<= 10.0 C',	'PDB' : '1YCC'},
+	23589  : {'Tm'			 : '> 80 C', 	'PDB' : ''},
+	25269  : {'Tm'			 : '52-54 C',	'PDB' : ''},
+	
+	17877  : {'dTm'			 : None,	'PDB' : ''},
+	23676  : {'dTm'			 : None,	'PDB' : ''},
+	
+	14592  : {'ASA'			 : '114.3', 'PDB' : '1AM7'},
+}
+
+ddGTypos = {
+	970  : {'ddG'	:   "%s kcal/mol" % str(-0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}, # Wrong sign
+	
+	2232 : {'ddG'		:  '-3.46 kcal/mol',	'PDB' : '1VQB'}, # Incorrectly entered as -3.86
+
+	2508 : {'ddG'		:  '-0.06 kcal/mol',	'PDB' : '1HFY'}, # Incorrectly entered as -0.06. This is a one-off mistake for this publication so it is not included in the ddGWrongSigns dict.
+
+	2814 : {'ddG'		:   '0.2 kcal/mol',		'PDB' : '1BVC'}, # 2.9 - 2.7 (2.9 and 2.7 are the values of DG_NU - DG_IU for the mutant and wildtype respectively)
+	
+	# PMID:10079068. Wrong sign and rounding error.
+	5429 : {'ddG'		: "%s kcal/mol" % str( -0.7/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}, # This also has the wrong sign in ProTherm.
+	
+	# PMID:10600102. There is a mistake in the publication.
+	5982 : {'ddG'		:   '-6.2 kJ/mol',	'PDB' : '1AAR'},
+	5983 : {'ddG'		:   '-7.0 kJ/mol',	'PDB' : '1AAR'},
+	
+	# PMID:7663349. I do not know where ProTherm gets -1.4 kJ/mol (−0.3346 kcal/mol) from. It is close to the difference of the Cmid * m values i.e. 4.5*1.1 - 4.09*1.13.
+	#7272 : {'ddG'		:   '%s kJ/mol' % ((1.115 * 0.41) * NUMBER_KJ_IN_KCAL),	'PDB' : '1POH'},
+	
+	8498  : {'ddG_H2O' 	: '-2.82 kcal/mol', 'PDB' : '1TEN'}, # Typo 
+	
+	# PMID:11513583. DG values entered as DDG. Note: I am adding DDG values here. These should be double-checked.
+	11745 : {'ddG_H2O' :  '3.1 kcal/mol', 'dG_H2O' : '12.1', 'PDB' : '2TRX'}, # D26I is a stabilizing mutation
+	11746 : {'ddG_H2O' : '-3.7 kcal/mol', 'dG_H2O' : '5.3',  'PDB' : '2TRX'}, # Destabilizing mutation
+	11747 : {'ddG_H2O' : '-3.1 kcal/mol', 'dG_H2O' : '5.9',  'PDB' : '2TRX'}, # Destabilizing mutation
+	11748 : {'ddG_H2O' : '-1.4 kcal/mol', 'dG_H2O' : '7.6',  'PDB' : '2TRX'}, # Destabilizing mutation
+	11749 : {'ddG_H2O' : '-1.1 kcal/mol', 'dG_H2O' : '7.9',  'PDB' : '2TRX'}, # Destabilizing mutation
+
+	11893 : {'ddG'		: "%s kcal/mol" % str(( 8.6 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'}, # Bad computation?
 	
 	# PMID:11964251 - ProTherm uses kJ/mol but does not specify them
-	13086 : {'ddG_H2O' :   '-9.9 kJ/mol', 'PDB' : '5AZU'},
-	13087 : {'ddG_H2O' :   '-10.9 kJ/mol', 'PDB' : '5AZU'},
+	13086 : {'ddG_H2O'	:   '-9.9 kJ/mol',	'PDB' : '5AZU'},
+	13087 : {'ddG_H2O'	:   '-10.9 kJ/mol',	'PDB' : '5AZU'},	
+
+	# PMID:9228039
+	13204 : {'ddG'		:  '-0.46 kcal/mol', 'PDB' : '2RN2'}, # Wrong sign and rounding: "The mutant proteins A52Y, A52F, A52H, and A52K are unexpectedly unstable"
 	
-	# PMID:18189416 - ProTherm uses the wrong sign # todo: put this in a separate dict so we can check that the values are the same as ProTherm, just the opposite sign i.e. sanity-check against bad data entry here
-	23154 : {'ddG_H2O' :  '-9.2', 'PDB' : '1CAH'},
-	23155 : {'ddG_H2O' :  '-8.3', 'PDB' : '1CAH'},
-	23156 : {'ddG_H2O' :  '-8.6', 'PDB' : '1CAH'},
-	23157 : {'ddG_H2O' :  '-5.4', 'PDB' : '1CAH'},
-	23158 : {'ddG_H2O' :  '-4.7', 'PDB' : '1CAH'},
-	23159 : {'ddG_H2O' :  '-3.0', 'PDB' : '1CAH'},
-	23160 : {'ddG_H2O' :  '-3.2', 'PDB' : '1CAH'},
-	23161 : {'ddG_H2O' :  '-1.4', 'PDB' : '1CAH'},
-	23162 : {'ddG_H2O' :  '-2.8', 'PDB' : '1CAH'},
-	23163 : {'ddG_H2O' :  '-0.8', 'PDB' : '1CAH'},
-	23164 : {'ddG_H2O' :  '-1.8', 'PDB' : '1CAH'},
+	14192 : {'ddG' 		: "%s kcal/mol" % str(-2.7/NUMBER_KJ_IN_KCAL),	'PDB' : '1LZ1'}, # Bad computation
 	
-	# PMID:8771183 - ProTherm uses the wrong sign # todo: put this in a separate dict so we can check that the values are the same as ProTherm, just the opposite sign i.e. sanity-check against bad data entry here
-	11246 : {'ddG_H2O' :  '-1.92', 'PDB' : '4LYZ'},
-	11247 : {'ddG_H2O' :  '-1.27', 'PDB' : '4LYZ'},
-	11248 : {'ddG_H2O' :  '-2.00', 'PDB' : '4LYZ'},
+	# PMID:12080133. DG values taken as DDG values
+	15280 : {'ddG_H2O' 		: "%s kJ/mol" % str(22.7 - 31.4),	'PDB' : '1TIT'},
+	15281 : {'ddG_H2O' 		: "%s kJ/mol" % str(13.4 - 31.4),	'PDB' : '1TIT'},
 	
+	# PMID:12215419. Also, ProTherm calls some values DDG and others DDG_H2O. Is this correct?
+	15688 : {'ddG_H2O' 	: "%s kJ/mol" % str(-7.2 + 3.5),	'PDB' : '1OTR'}, # Error in calculation.
+	15692 : {'dG' 		: "-16.4 kJ/mol", 'ddG'		: "%s kJ/mol" % str(-16.4 + 3.5),	'PDB' : '1OTR'}, # DG and DDG are swapped.
 	
+	17873 : {'ddG_H2O'	: "-0.5 kcal/mol",	'PDB' : '1RN1'},# I would need to check the reference
+	
+	20134 : {'ddG'		: '-0.51 kcal/mol',			'PDB' : '1RTB'}, # minor typo (was -0.57)
+	
+	# PMID:19565466.
+	25186 : {'ddG' : '-8.58 kJ/mol', 'PDB' : '1PIN'}, # Arithmetic error (ignored minus sign)
+	25198 : {'ddG' : '-4.00 kJ/mol', 'PDB' : '1PIN'}, # Arithmetic error
+}	
+
+ddGWrongSigns = {
+	# PMID:8392867. The text explains that the stability is lowered by ~0.3 kcal/mol.
+	2418 : 'ddG',
+	
+	# PMID:8504078. Only one case wrong out of the set.
+	2566 : 'ddG',
+	
+	# PMID:2248951 - ProTherm appears to use the wrong sign
+	3683 : 'ddG',
+	3684 : 'ddG',
+	3685 : 'ddG',
+	
+	# PMID:8652517 - ProTherm appears to use the wrong sign
+	5038 : 'ddG_H2O', # N52I is a stabilizing mutation
+	
+	# PMID:9931001. "With the exception of L50V, all the single mutations reduce the stability of the folded state"
+	5692 : 'ddG',
+	5693 : 'ddG',
+	5694 : 'ddG',
+	5695 : 'ddG',
+	5696 : 'ddG',
+	5697 : 'ddG',
+	5698 : 'ddG',
+	5699 : 'ddG',
+	5700 : 'ddG',
+	5701 : 'ddG',
+	5702 : 'ddG',
+	5703 : 'ddG',
+	5704 : 'ddG',
+
+	#PMID:10623553. See PMID:10986129.
+	6364 : 'ddG_H2O',
+	6365 : 'ddG_H2O',
+	6366 : 'ddG_H2O',
+	6367 : 'ddG_H2O',
+	6368 : 'ddG_H2O',
+	
+	#PMID:8917450. The Pro73->Val mutation destabilizes the folded conformation of RNase T1 by about 8.5 kJ/mol	
+	8725 : 'ddG_H2O',
+	8726 : 'ddG_H2O',
+	8727 : 'ddG_H2O',
+	8728 : 'ddG_H2O',
+
+	# PMID:7937708 - S31A and S31G are destabilizing
+	9820 : 'ddG',
+	9821 : 'ddG',
+	9822 : 'ddG',
+	9823 : 'ddG',
+	9824 : 'ddG',
+	
+	# PMID:7908135
+	10564 : 'ddG_H2O',
+	10565 : 'ddG_H2O',
+	10566 : 'ddG_H2O',
+	10567 : 'ddG_H2O',
+	14565 : 'ddG',
+	14566 : 'ddG',
+	14567 : 'ddG',
+	14568 : 'ddG',
+	
+	# PMID:8771183 - ProTherm uses the wrong sign
+	11246 : 'ddG_H2O',
+	11247 : 'ddG_H2O',
+	11248 : 'ddG_H2O',
+
+	# PMID:11695900 - ProTherm appears to use the wrong sign
+	12235 : 'ddG_H2O', # Y14S is a destabilizing mutation
+	12236 : 'ddG_H2O', # Destabilizing mutation
+	12237 : 'ddG_H2O', # Destabilizing mutation
+
+	# PMID:7918421 - ProTherm appears to use the wrong sign
+	14287 : 'ddG',
+	14288 : 'ddG',
+	
+	# PMID:12600203 - ProTherm appears to use the wrong sign			
+	15807 : 'ddG_H2O',
+	15808 : 'ddG_H2O',
+	
+	# PMID:15504413 - ProTherm appears to use the wrong sign for DDG values but the correct sign for DDG_H2O values
+	17953 : 'ddG',
+	17954 : 'ddG',
+	17955 : 'ddG',
+	17956 : 'ddG',
+	17957 : 'ddG',
+	17958 : 'ddG',
+	17959 : 'ddG',
+	17960 : 'ddG',
+	17961 : 'ddG',
+	17962 : 'ddG',
+	17963 : 'ddG',
+	17964 : 'ddG',
+	17965 : 'ddG',
+	17966 : 'ddG',
+	17967 : 'ddG',
+	17968 : 'ddG',
+	17969 : 'ddG',
+	17970 : 'ddG',
+	17971 : 'ddG',
+	17972 : 'ddG',
+	17973 : 'ddG',
+	17974 : 'ddG',
+	17975 : 'ddG',
+	17976 : 'ddG',
+	17991 : 'ddG',
+	17992 : 'ddG',
+	17993 : 'ddG',
+	17994 : 'ddG',
+	17995 : 'ddG',
+	17996 : 'ddG',
+	17997 : 'ddG',
+	17998 : 'ddG',
+	17999 : 'ddG',
+	18000 : 'ddG',
+	18001 : 'ddG',
+	18002 : 'ddG',
+	18003 : 'ddG',
+	18004 : 'ddG',
+	18005 : 'ddG',
+	18006 : 'ddG',
+	18007 : 'ddG',
+	18008 : 'ddG',
+	
+	# PMID:18189416 - ProTherm uses the wrong sign
+	23154 : 'ddG_H2O',
+	23155 : 'ddG_H2O',
+	23156 : 'ddG_H2O',
+	23157 : 'ddG_H2O',
+	23158 : 'ddG_H2O',
+	23159 : 'ddG_H2O',
+	23160 : 'ddG_H2O',
+	23161 : 'ddG_H2O',
+	23162 : 'ddG_H2O',
+	23163 : 'ddG_H2O',
+	23164 : 'ddG_H2O',
 }
 
 RoundingErrors = {
-	# PMID: 1404369. Rounding errors
-	180 : {'ddG' 		 	 : '-0.71', 'PDB'	:	'1BNI'},
-	179 : {'ddG' 		 	 : '-0.69', 'PDB'	:	'1BNI'},
-	186 : {'ddG' 		 	 : '-0.91', 'PDB'	:	'1BNI'},
-	181 : {'ddG' 		 	 : '-0.78', 'PDB'	:	'1BNI'},
-	183 : {'ddG' 		 	 : '-0.81', 'PDB'	:	'1BNI'},
-	172 : {'ddG' 		 	 : '-0.19', 'PDB'	:	'1BNI'},
-	174 : {'ddG' 		 	 : '-0.35', 'PDB'	:	'1BNI'},
-	173 : {'ddG' 		 	 : '-0.31', 'PDB'	:	'1BNI'},
-	178 : {'ddG' 		 	 : '-0.66', 'PDB'	:	'1BNI'},
-	189 : {'ddG' 		 	 : '-4.08', 'PDB'	:	'1BNI'},
-	176 : {'ddG' 		 	 : '-0.48', 'PDB'	:	'1BNI'},
-	171 : {'ddG' 		 	 : '-0.14', 'PDB'	:	'1BNI'},
-	175 : {'ddG' 		 	 : '-0.41', 'PDB'	:	'1BNI'},
-	182 : {'ddG' 		 	 : '-0.79', 'PDB'	:	'1BNI'},
-	185 : {'ddG' 		 	 : '-0.88', 'PDB'	:	'1BNI'},
-	187 : {'ddG' 		 	 : '-0.98', 'PDB'	:	'1BNI'},
-	184 : {'ddG' 		 	 : '-0.82', 'PDB'	:	'1BNI'},
+	# PMID:1569557. Loss of precision on data entry.
+	# 39 : No loss of precision.
+	40 : {'ddG'	: '-1.35 kcal/mol', 'PDB' : '1BNI'},
+	41 : {'ddG'	: '-1.85 kcal/mol', 'PDB' : '1BNI'},
+	42 : {'ddG'	: '-1.24 kcal/mol', 'PDB' : '1BNI'},
+	43 : {'ddG'	: '-2.15 kcal/mol', 'PDB' : '1BNI'},
+	44 : {'ddG'	: '-0.89 kcal/mol', 'PDB' : '1BNI'},
+	45 : {'ddG'	: '-2.48 kcal/mol', 'PDB' : '1BNI'},
+	46 : {'ddG'	: '-3.39 kcal/mol', 'PDB' : '1BNI'},
+	47 : {'ddG'	: '-0.31 kcal/mol', 'PDB' : '1BNI'},
+	48 : {'ddG'	: '-3.34 kcal/mol', 'PDB' : '1BNI'},
+	49 : {'ddG'	: '-4.32 kcal/mol', 'PDB' : '1BNI'},
+	50 : {'ddG'	: '-1.68 kcal/mol', 'PDB' : '1BNI'},
+	51 : {'ddG'	:  '0.54 kcal/mol', 'PDB' : '1BNI'},
+	52 : {'ddG'	: '-2.03 kcal/mol', 'PDB' : '1BNI'},
+	53 : {'ddG'	: '-2.25 kcal/mol', 'PDB' : '1BNI'},
+	54 : {'ddG'	: '-0.02 kcal/mol', 'PDB' : '1BNI'},
+	55 : {'ddG'	: '-1.12 kcal/mol', 'PDB' : '1BNI'},
+	56 : {'ddG'	: '-3.52 kcal/mol', 'PDB' : '1BNI'},
+	57 : {'ddG'	: '-1.46 kcal/mol', 'PDB' : '1BNI'},
+	58 : {'ddG'	: '-1.94 kcal/mol', 'PDB' : '1BNI'},
+	59 : {'ddG'	: '-0.44 kcal/mol', 'PDB' : '1BNI'},
+	60 : {'ddG'	: '-1.76 kcal/mol', 'PDB' : '1BNI'},
+	61 : {'ddG'	: '-0.23 kcal/mol', 'PDB' : '1BNI'},
+	62 : {'ddG'	:  '0.14 kcal/mol', 'PDB' : '1BNI'},
+	63 : {'ddG'	: '-1.31 kcal/mol', 'PDB' : '1BNI'},
+	64 : {'ddG'	: '-1.30 kcal/mol', 'PDB' : '1BNI'},
+	65 : {'ddG'	: '-1.15 kcal/mol', 'PDB' : '1BNI'},
+	66 : {'ddG'	: '-2.51 kcal/mol', 'PDB' : '1BNI'},
+	67 : {'ddG'	: '-1.75 kcal/mol', 'PDB' : '1BNI'},
+	68 : {'ddG'	: '-2.44 kcal/mol', 'PDB' : '1BNI'},
+	69 : {'ddG'	: '-1.80 kcal/mol', 'PDB' : '1BNI'},
+	70 : {'ddG'	: '-4.71 kcal/mol', 'PDB' : '1BNI'},
+	71 : {'ddG'	: '-2.97 kcal/mol', 'PDB' : '1BNI'},
+	72 : {'ddG'	: '-2.42 kcal/mol', 'PDB' : '1BNI'},
+	73 : {'ddG'	: '-0.27 kcal/mol', 'PDB' : '1BNI'},
+	74 : {'ddG'	: '-1.15 kcal/mol', 'PDB' : '1BNI'},
+	75 : {'ddG'	: '-0.60 kcal/mol', 'PDB' : '1BNI'},
+	76 : {'ddG'	: '-2.71 kcal/mol', 'PDB' : '1BNI'},
+	77 : {'ddG'	:  '0.47 kcal/mol', 'PDB' : '1BNI'},
+	78 : {'ddG'	: '-0.43 kcal/mol', 'PDB' : '1BNI'},
+	79 : {'ddG'	: '-0.82 kcal/mol', 'PDB' : '1BNI'},
+	80 : {'ddG'	: '-1.89 kcal/mol', 'PDB' : '1BNI'},
+	81 : {'ddG'	: '-1.65 kcal/mol', 'PDB' : '1BNI'},
+	82 : {'ddG'	: '-1.35 kcal/mol', 'PDB' : '1BNI'},
+	83 : {'ddG'	: '-2.02 kcal/mol', 'PDB' : '1BNI'},
+	84 : {'ddG'	: '-1.34 kcal/mol', 'PDB' : '1BNI'},
+	85 : {'ddG'	: '-4.01 kcal/mol', 'PDB' : '1BNI'},
+	86 : {'ddG'	: '-0.30 kcal/mol', 'PDB' : '1BNI'},
+	87 : {'ddG'	: '-2.55 kcal/mol', 'PDB' : '1BNI'},
+	88 : {'ddG'	: '-1.93 kcal/mol', 'PDB' : '1BNI'},
+	89 : {'ddG'	: '-2.79 kcal/mol', 'PDB' : '1BNI'},
+	90 : {'ddG'	: '-0.88 kcal/mol', 'PDB' : '1BNI'},
+	91 : {'ddG'	: '-3.17 kcal/mol', 'PDB' : '1BNI'},
+	92 : {'ddG'	: '-2.67 kcal/mol', 'PDB' : '1BNI'},
+	93 : {'ddG'	:  '0.00 kcal/mol', 'PDB' : '1BNI'},
+	94 : {'ddG'	: '-2.24 kcal/mol', 'PDB' : '1BNI'},
+	95 : {'ddG'	: '-0.76 kcal/mol', 'PDB' : '1BNI'},
+	96 : {'ddG'	: '-2.07 kcal/mol', 'PDB' : '1BNI'},
+	97 : {'ddG'	: '-0.41 kcal/mol', 'PDB' : '1BNI'},
+	#2149 : No loss of precision.
+	#2150 : No loss of precision.
+	#2151 : No loss of precision.
+	#2152 : No loss of precision.
+	#2153 : No loss of precision.
+	#2154 : No loss of precision.
 	
-	# PMID: 8358293. Rounding errors
-	13328 : {'ddG'	: '1.05', 'PDB' : '1BVC'},
-	13329 : {'ddG'	: '0.75', 'PDB' : '1BVC'},
-	13330 : {'ddG'	: '0.59', 'PDB' : '1BVC'},
-	13331 : {'ddG'	: '0.16', 'PDB' : '1BVC'},
-	13332 : {'ddG'	: '-0.67', 'PDB' : '1BVC'},
-	13333 : {'ddG'	: '-0.26', 'PDB' : '1BVC'},
-	13334 : {'ddG'	: '-0.26', 'PDB' : '1BVC'},
-	13335 : {'ddG'	: '-0.44', 'PDB' : '1BVC'},
-	13336 : {'ddG'	: '-0.41', 'PDB' : '1BVC'},
-	13337 : {'ddG'	: '-1.12', 'PDB' : '1BVC'},
-	13338 : {'ddG'	: '-1.78', 'PDB' : '1BVC'},
-	13339 : {'ddG'	: '-1.45', 'PDB' : '1BVC'},
-	13340 : {'ddG'	: '-1.41', 'PDB' : '1BVC'},
-	13341 : {'ddG'	: '-1.60', 'PDB' : '1BVC'},
-	13342 : {'ddG'	: '-1.92', 'PDB' : '1BVC'},
+	# PMID:1404369. Loss of precision on data entry.
+	171 : {'ddG' : '-0.14 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.52 * 1.91)), 'PDB'	:	'1BNI'}, #-0.1988
+	172 : {'ddG' : '-0.19 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.50 * 1.94)), 'PDB'	:	'1BNI'}, #-0.102
+	173 : {'ddG' : '-0.31 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.44 * 1.97)), 'PDB'	:	'1BNI'}, #-0.0852
+	174 : {'ddG' : '-0.35 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.41 * 2.02)), 'PDB'	:	'1BNI'}, #0.0762
+	175 : {'ddG' : '-0.41 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.38 * 1.98)), 'PDB'	:	'1BNI'}, #-0.1596
+	176 : {'ddG' : '-0.48 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.35 * 1.95)), 'PDB'	:	'1BNI'}, #-0.3495
+	177 : {'ddG' : '-0.55 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.31 * 2.08)), 'PDB'	:	'1BNI'}, #0.1328
+	178 : {'ddG' : '-0.66 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.25 * 2.00)), 'PDB'	:	'1BNI'}, #-0.332
+	179 : {'ddG' : '-0.69 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.24 * 1.98)), 'PDB'	:	'1BNI'}, #-0.4368
+	180 : {'ddG' : '-0.71 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.23 * 1.99)), 'PDB'	:	'1BNI'}, #-0.4143
+	181 : {'ddG' : '-0.78 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.19 * 1.94)), 'PDB'	:	'1BNI'}, #-0.7034
+	182 : {'ddG' : '-0.79 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.19 * 1.99)), 'PDB'	:	'1BNI'}, #-0.4939
+	183 : {'ddG' : '-0.81 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.18 * 1.95)), 'PDB'	:	'1BNI'}, #-0.681
+	184 : {'ddG' : '-0.82 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.17 * 1.95)), 'PDB'	:	'1BNI'}, #-0.7005
+	185 : {'ddG' : '-0.88 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.14 * 2.05)), 'PDB'	:	'1BNI'}, #-0.345
+	186 : {'ddG' : '-0.91 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.13 * 1.98)), 'PDB'	:	'1BNI'}, #-0.6546
+	187 : {'ddG' : '-0.98 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.09 * 1.88)), 'PDB'	:	'1BNI'}, #-1.1428
+	188 : {'ddG' : '-1.00 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.09 * 1.71)), 'PDB'	:	'1BNI'}, #-1.8381
+	189 : {'ddG' : '-4.08 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (2.49 * 1.89)), 'PDB'	:	'1BNI'}, #-4.1259
+	
+	# PMID:1870131. Loss of precision on data entry.
+	190		: {'ddG'	:  '0.39 kcal/mol', 'PDB' : '1BNI'},
+	
+	# PMID:1317795. Loss of precision on conversion from kJ/mol to kcal/mol.
+	384		: {'ddG_H2O': "%s kcal/mol" % str(  1.59/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	385		: {'ddG_H2O': "%s kcal/mol" % str( -0.04/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	386		: {'ddG_H2O': "%s kcal/mol" % str(-11.00/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	387		: {'ddG_H2O': "%s kcal/mol" % str(  2.01/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	388		: {'ddG_H2O': "%s kcal/mol" % str( -2.43/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	
+	# PMID:1317795. Loss of precision on conversion from kJ/mol to kcal/mol.
+	390		: {'ddG_H2O': "%s kcal/mol" % str( -9.2/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	391		: {'ddG_H2O': "%s kcal/mol" % str(  0.8/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	392		: {'ddG_H2O': "%s kcal/mol" % str(  0.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	393		: {'ddG_H2O': "%s kcal/mol" % str(  5.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	394		: {'ddG_H2O': "%s kcal/mol" % str( -4.2/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13323	: {'ddG': "%s kcal/mol" % str(-10.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13324	: {'ddG': "%s kcal/mol" % str( -1.9/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13325	: {'ddG': "%s kcal/mol" % str(-0.84/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13326	: {'ddG': "%s kcal/mol" % str(  2.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13327	: {'ddG': "%s kcal/mol" % str( -2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	
+	# PMID:8377205. Loss of precision on data entry.
+	510 : {'ddG'	:  '0.96 kcal/mol', 'PDB' : '1BNI'},
+	511 : {'ddG'	:  '0.53 kcal/mol', 'PDB' : '1BNI'},
+	512 : {'ddG'	: '-1.19 kcal/mol', 'PDB' : '1BNI'},
+	513 : {'ddG'	:  '0.21 kcal/mol', 'PDB' : '1BNI'},
+	514 : {'ddG'	: '-0.01 kcal/mol', 'PDB' : '1BNI'},
+	515 : {'ddG'	: '-0.25 kcal/mol', 'PDB' : '1BNI'},
+	516 : {'ddG'	:  '0.08 kcal/mol', 'PDB' : '1BNI'},
+	517 : {'ddG'	: '-0.29 kcal/mol', 'PDB' : '1BNI'},
+	518 : {'ddG'	: '-0.48 kcal/mol', 'PDB' : '1BNI'},
+	519 : {'ddG'	:  '0.51 kcal/mol', 'PDB' : '1BNI'},
+	520 : {'ddG'	:  '0.25 kcal/mol', 'PDB' : '1BNI'},
+	521 : {'ddG'	:  '0.29 kcal/mol', 'PDB' : '1BNI'},
+	522 : {'ddG'	: '-0.12 kcal/mol', 'PDB' : '1BNI'},
+	523 : {'ddG'	: '-0.28 kcal/mol', 'PDB' : '1BNI'},
+	524 : {'ddG'	: '-0.27 kcal/mol', 'PDB' : '1BNI'},
+	525 : {'ddG'	: '-0.21 kcal/mol', 'PDB' : '1BNI'},
+	526 : {'ddG'	:  '0.93 kcal/mol', 'PDB' : '1BNI'},
 
-	# More from this reference needs to be updated
-	# PMID: 1569557. Precision lost during data entry.
-	96 : {'ddG'	: '-2.07', 'PDB' : '1BNI'},
-	40 : {'ddG'	: '-1.35', 'PDB' : '1BNI'},
-	41 : {'ddG'	: '-1.85', 'PDB' : '1BNI'},
-	42 : {'ddG'	: '-1.24', 'PDB' : '1BNI'},
-	43 : {'ddG'	: '-2.15', 'PDB' : '1BNI'},
-	44 : {'ddG'	: '-0.89', 'PDB' : '1BNI'},
-	45 : {'ddG'	: '-2.48', 'PDB' : '1BNI'},
-	46 : {'ddG'	: '-3.39', 'PDB' : '1BNI'},
-	47 : {'ddG'	: '-0.31', 'PDB' : '1BNI'},
-	48 : {'ddG'	: '-3.34', 'PDB' : '1BNI'},
-	49 : {'ddG'	: '-4.32', 'PDB' : '1BNI'},
-	50 : {'ddG'	: '-1.68', 'PDB' : '1BNI'},
-	51 : {'ddG'	:  '0.54', 'PDB' : '1BNI'},
-	52 : {'ddG'	: '-2.03', 'PDB' : '1BNI'},
-	53 : {'ddG'	: '-2.25', 'PDB' : '1BNI'},
-	54 : {'ddG'	: '-0.02', 'PDB' : '1BNI'},
-	55 : {'ddG'	: '-1.12', 'PDB' : '1BNI'},
-	56 : {'ddG'	: '-3.52', 'PDB' : '1BNI'},
-	57 : {'ddG'	: '-1.46', 'PDB' : '1BNI'},
-	58 : {'ddG'	: '-1.94', 'PDB' : '1BNI'},
-	59 : {'ddG'	: '-0.44', 'PDB' : '1BNI'},
-	60 : {'ddG'	: '-1.76', 'PDB' : '1BNI'},
-	# Missing
-	65 : {'ddG'	: '-1.15', 'PDB' : '1BNI'},
-	# Missing
-	67 : {'ddG'	: '-1.75', 'PDB' : '1BNI'},
-	68 : {'ddG'	: '-2.44', 'PDB' : '1BNI'},
-	# Missing
-	71 : {'ddG'	: '-2.97', 'PDB' : '1BNI'},
-	72 : {'ddG'	: '-2.42', 'PDB' : '1BNI'},
-	73 : {'ddG'	: '-0.27', 'PDB' : '1BNI'},
-	74 : {'ddG'	: '-1.15', 'PDB' : '1BNI'},
-	# Missing
-	77 : {'ddG'	:  '0.47', 'PDB' : '1BNI'},
-	# Missing
-	79 : {'ddG'	: '-0.82', 'PDB' : '1BNI'},
-	80 : {'ddG'	: '-1.89', 'PDB' : '1BNI'},
-	81 : {'ddG'	: '-1.65', 'PDB' : '1BNI'},
-	82 : {'ddG'	: '-1.35', 'PDB' : '1BNI'},
-	83 : {'ddG'	: '-2.02', 'PDB' : '1BNI'},
-	84 : {'ddG'	: '-1.34', 'PDB' : '1BNI'},
-	# Missing
-	88 : {'ddG'	: '-1.93', 'PDB' : '1BNI'},
-	# Missing
-	90 : {'ddG'	: '-0.88', 'PDB' : '1BNI'},
-	91 : {'ddG'	: '-3.17', 'PDB' : '1BNI'},
-	92 : {'ddG'	: '-2.67', 'PDB' : '1BNI'},
-	# Missing
-	94 : {'ddG'	: '-2.24', 'PDB' : '1BNI'},
-	95 : {'ddG'	: '-0.76', 'PDB' : '1BNI'},
-	# Missing
+	# PMID:8378307. Loss of precision on data entry.
+	544 : {'ddG'	:  '-0.68 kcal/mol', 'PDB' : '1VQB'},
+	545 : {'ddG'	:  '-0.67 kcal/mol', 'PDB' : '1VQB'},
+	546 : {'ddG'	:   '1.09 kcal/mol', 'PDB' : '1VQB'},
+	547 : {'ddG'	:   '1.97 kcal/mol', 'PDB' : '1VQB'},
+	548 : {'ddG'	:   '1.04 kcal/mol', 'PDB' : '1VQB'},
+	549 : {'ddG'	:  '-3.49 kcal/mol', 'PDB' : '1VQB'},
+	550 : {'ddG'	:  '-0.18 kcal/mol', 'PDB' : '1VQB'},
+	551 : {'ddG'	:  '-2.25 kcal/mol', 'PDB' : '1VQB'},
+	552 : {'ddG'	:  '-1.45 kcal/mol', 'PDB' : '1VQB'},
+	553 : {'ddG'	:  '-3.21 kcal/mol', 'PDB' : '1VQB'},
+	554 : {'ddG'	:  '-0.68 kcal/mol', 'PDB' : '1VQB'},
+	555 : {'ddG'	:  '-2.72 kcal/mol', 'PDB' : '1VQB'},
+	556 : {'ddG'	:  '-1.10 kcal/mol', 'PDB' : '1VQB'},
+	557 : {'ddG'	:  '-0.62 kcal/mol', 'PDB' : '1VQB'},
+	558 : {'ddG'	:  '-0.05 kcal/mol', 'PDB' : '1VQB'},
+	559 : {'ddG'	:  '-5.30 kcal/mol', 'PDB' : '1VQB'},
+	560 : {'ddG'	:  '-2.02 kcal/mol', 'PDB' : '1VQB'},
+	561 : {'ddG'	:  '-0.67 kcal/mol', 'PDB' : '1VQB'},
+	562 : {'ddG'	:  '-2.21 kcal/mol', 'PDB' : '1VQB'},
+	563 : {'ddG'	:  '-2.62 kcal/mol', 'PDB' : '1VQB'},
+	564 : {'ddG'	:   '0.50 kcal/mol', 'PDB' : '1VQB'},
+	565 : {'ddG'	:  '-1.47 kcal/mol', 'PDB' : '1VQB'},
+	566 : {'ddG'	:  '-4.30 kcal/mol', 'PDB' : '1VQB'},
+	567 : {'ddG'	:   '0.76 kcal/mol', 'PDB' : '1VQB'},
+	568 : {'ddG'	:   '1.63 kcal/mol', 'PDB' : '1VQB'},
+	569 : {'ddG'	:   '1.23 kcal/mol', 'PDB' : '1VQB'},
+	570 : {'ddG'	:  '-1.50 kcal/mol', 'PDB' : '1VQB'},
+	571 : {'ddG'	:  '-0.66 kcal/mol', 'PDB' : '1VQB'},
+	572 : {'ddG'	:   '0.47 kcal/mol', 'PDB' : '1VQB'},
 	
-	# More from this reference needs to be updated
-	# PMID: 1404369. Precision lost during data entry.
-	171 : {'ddG'	: '-0.14', 'PDB' : '1BNI'}, # A 32 R ARG
-	172 : {'ddG'	: '-0.19', 'PDB' : '1BNI'}, # A 32 K LYS
-	173 : {'ddG'	: '-0.31', 'PDB' : '1BNI'}, # A 32 M MET
-	174 : {'ddG'	: '-0.35', 'PDB' : '1BNI'}, # A 32 L LEU
-	175 : {'ddG'	: '-0.41', 'PDB' : '1BNI'}, # A 32 S SER
-	176 : {'ddG'	: '-0.48', 'PDB' : '1BNI'}, # A 32 Q GLN
-	177 : {'ddG'	: '-0.55', 'PDB' : '1BNI'}, # A 32 E GLU
-	178 : {'ddG'	: '-0.66', 'PDB' : '1BNI'}, # A 32 N ASN
-	179 : {'ddG'	: '-0.69', 'PDB' : '1BNI'}, # A 32 F PHE
-	180 : {'ddG'	: '-0.71', 'PDB' : '1BNI'}, # A 32 D ASP
-	181 : {'ddG'	: '-0.78', 'PDB' : '1BNI'}, # A 32 H HIS
-	182 : {'ddG'	: '-0.79', 'PDB' : '1BNI'}, # A 32 T THR
-	183 : {'ddG'	: '-0.81', 'PDB' : '1BNI'}, # A 32 I ILE
-	184 : {'ddG'	: '-0.82', 'PDB' : '1BNI'}, # A 32 Y TYR
-	185 : {'ddG'	: '-0.88', 'PDB' : '1BNI'}, # A 32 V VAL
-	186 : {'ddG'	: '-0.91', 'PDB' : '1BNI'}, # A 32 G GLY
-	187 : {'ddG'	: '-0.98', 'PDB' : '1BNI'}, # A 32 W TRP
-	188 : {'ddG'	: '-1.00', 'PDB' : '1BNI'}, # A 32 C CYS
-	189 : {'ddG'	: '-4.08', 'PDB' : '1BNI'}, # A 32 P PRO
+	# PMID:7764048. Loss of precision on conversion from kJ/mol to kcal/mol.
+	723 : {'ddG_H2O'	: "%s kcal/mol" % str((40.0 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	724 : {'ddG_H2O'	: "%s kcal/mol" % str((39.4 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	725 : {'ddG_H2O'	: "%s kcal/mol" % str((39.2 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	726 : {'ddG_H2O'	: "%s kcal/mol" % str((37.5 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	728 : {'ddG_H2O'	: "%s kcal/mol" % str((37.9 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	729 : {'ddG_H2O'	: "%s kcal/mol" % str((35.1 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	730 : {'ddG_H2O'	: "%s kcal/mol" % str((35.7 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	731 : {'ddG_H2O'	: "%s kcal/mol" % str((34.2 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	
+	# PMID:2000379. Removing 'precision' of -3.94 here since I do not see where the extra decimal point of precision in ProTherm comes from.
+	868 : {'ddG' : '-3.9 kcal/mol', 'PDB' : '1VQB'}, 
+	
+	# PMID:9020793. Loss of precision on conversion from kJ/mol to kcal/mol.
+	961  : {'ddG_H2O'	:   "%s kcal/mol" % str(-8.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	962  : {'ddG_H2O'	:   "%s kcal/mol" % str( 0.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	963  : {'ddG_H2O'	:   "%s kcal/mol" % str(-1.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	964  : {'ddG_H2O'	:   "%s kcal/mol" % str(-1.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	965  : {'ddG_H2O'	:   "%s kcal/mol" % str(-2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	966  : {'ddG_H2O'	:   "%s kcal/mol" % str( 1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	967  : {'ddG_H2O'	:   "%s kcal/mol" % str(-6.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	968  : {'ddG_H2O'	:   "%s kcal/mol" % str(-2.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	969  : {'ddG_H2O'	:   "%s kcal/mol" % str(-3.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	# 970 has the wrong sign and is fixed above
+	971  : {'ddG_H2O'	:   "%s kcal/mol" % str(-7.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	972  : {'ddG_H2O'	:   "%s kcal/mol" % str( 2.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	2286 : {'ddG_H2O'	:   "%s kcal/mol" % str(-8.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	2287 : {'ddG_H2O'	:   "%s kcal/mol" % str(-2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	2288 : {'ddG_H2O'	:   "%s kcal/mol" % str(-1.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	2289 : {'ddG_H2O'	:   "%s kcal/mol" % str(-8.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	2290 : {'ddG_H2O'	:   "%s kcal/mol" % str(-4.4/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	2291 : {'ddG_H2O'	:   "%s kcal/mol" % str(-4.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	 
+	# PMID:2217161. Loss of precision on conversion from kJ/mol to kcal/mol.
+	2513  : {'ddG'	:   "%s kcal/mol" % str((2.8 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	2514  : {'ddG'	:   "%s kcal/mol" % str((4.3 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	2515  : {'ddG'	:   "%s kcal/mol" % str((1.6 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	2516  : {'ddG'	:   "%s kcal/mol" % str((6.2 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	2517  : {'ddG'	:   "%s kcal/mol" % str((2.3 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	2518  : {'ddG'	:   "%s kcal/mol" % str((3.4 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	2519  : {'ddG'	:   "%s kcal/mol" % str((5.1 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
 	
 	
-	# More from these references need to be updated
-	19236 : {'ddG_H2O'	: str(-6.0/4.184), 'PDB' : '5AZU'},
-	21991 : {'ddG_H2O'	: str(-10.0/4.184), 'PDB' : '5AZU'},
+	# PMID:3409879. Loss of precision on conversion from kJ/mol to kcal/mol.
+	2745  : {'ddG_H2O'	:   "%s kcal/mol" % str((15.0 - 20.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	2746  : {'ddG_H2O'	:   "%s kcal/mol" % str((15.0 - 20.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	2747  : {'ddG_H2O'	:   "%s kcal/mol" % str((22.0 - 20.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	
+	# PMID:1765074. Loss of precision on conversion from kJ/mol to kcal/mol.
+	2749  : {'ddG_H2O'	: "%s kcal/mol" % str((12.5 - 16.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '3PGK'},
+	
+	# PMID:9020874. Loss of precision on conversion from kJ/mol to kcal/mol.
+	2776  : {'ddG_H2O'	: "%s kcal/mol" % str((13.4 - 23.8)/NUMBER_KJ_IN_KCAL), 'PDB' : '1AXB'},
+	2777  : {'ddG_H2O'	: "%s kcal/mol" % str((18.0 - 21.7)/NUMBER_KJ_IN_KCAL), 'PDB' : '1AXB'},
+	
+	# PMID:9215576. Loss of precision on conversion from kJ/mol to kcal/mol.
+	3112 : {'ddG_H2O'	: "%s kcal/mol" % str( 4.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'},
+	3113 : {'ddG_H2O'	: "%s kcal/mol" % str(-7.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'},
+	14154 : {'ddG'		: "%s kcal/mol" % str( 3.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'},
+	14155 : {'ddG'		: "%s kcal/mol" % str(-7.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'},
+	14156 : {'ddG'		: "%s kcal/mol" % str(-11.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'},
+
+	# PMID:9588945. Loss of precision on conversion from kJ/mol to kcal/mol.
+	3469 : {'ddG'		: "%s kcal/mol" % str(-1.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1G6N'},
+	3470 : {'ddG'		: "%s kcal/mol" % str( 0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1G6N'},
+	
+	# PMID:9533624. Loss of precision on conversion from kJ/mol to kcal/mol.
+	3519 : {'ddG_H2O'	: "%s kcal/mol" % str(-3.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
+	3520 : {'ddG_H2O'	: "%s kcal/mol" % str(-6.4/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
+	3521 : {'ddG_H2O'	: "%s kcal/mol" % str(-9.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
+	3522 : {'ddG_H2O'	: "%s kcal/mol" % str( 0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
+	14241 : {'ddG'		: "%s kcal/mol" % str(-2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
+	14242 : {'ddG'		: "%s kcal/mol" % str(-5.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
+	14243 : {'ddG'		: "%s kcal/mol" % str(-7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
+	14244 : {'ddG'		: "%s kcal/mol" % str( 1.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
+	
+	# PMID:10079068. Loss of precision on conversion from kJ/mol to kcal/mol.
+	5424 : {'ddG'		: "%s kcal/mol" % str(  1.4/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	5425 : {'ddG'		: "%s kcal/mol" % str(  7.2/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	5426 : {'ddG'		: "%s kcal/mol" % str(  8.0/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	5427 : {'ddG'		: "%s kcal/mol" % str(  2.1/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	5428 : {'ddG'		: "%s kcal/mol" % str( 19.3/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	#5429 has the wrong sign as well
+	5430 : {'ddG'		: "%s kcal/mol" % str( 10.3/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	5431 : {'ddG'		: "%s kcal/mol" % str(  0.6/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	5432 : {'ddG'		: "%s kcal/mol" % str(  6.0/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	5433 : {'ddG'		: "%s kcal/mol" % str(  1.1/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	5434 : {'ddG'		: "%s kcal/mol" % str(  8.9/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	
+	# PMID:10388847. Loss of precision on conversion from kJ/mol to kcal/mol.
+	5541 : {'ddG_H2O'		: "%s kcal/mol" % str((22.9 - 27.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1P2P'},
+	5542 : {'ddG_H2O'		: "%s kcal/mol" % str((17.7 - 27.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1P2P'},
+	5543 : {'ddG_H2O'		: "%s kcal/mol" % str((13.8 - 27.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1P2P'},
+	
+	# PMID:7549876. Loss of precision on conversion from kcal/mol to kJ/mol.
+	7253 : {'ddG_H2O'	: "-4.3 kcal/mol", 'PDB' : '3MBP'},
+	7254 : {'ddG_H2O'	: "-1.9 kcal/mol", 'PDB' : '3MBP'},
+	
+	# PMID:8043610. Loss of precision on conversion from kcal/mol to kJ/mol.
+	7257 : {'ddG_H2O'	: "-6.9 kcal/mol",  'PDB' : '1B0O'},
+	
+	# PMID:8795042. Loss of precision on conversion on conversion from kJ/mol to kcal/mol.
+	11772 : {'ddG'	: "%s kcal/mol" % str(-5.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	11773 : {'ddG'	: "%s kcal/mol" % str(-6.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	11774 : {'ddG'	: "%s kcal/mol" % str(-2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	11775 : {'ddG'	: "%s kcal/mol" % str(-5.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	11776 : {'ddG'	: "%s kcal/mol" % str(-9.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	11777 : {'ddG'	: "%s kcal/mol" % str(-5.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	11778 : {'ddG'	: "%s kcal/mol" % str(-5.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	11779 : {'ddG'	: "%s kcal/mol" % str(-7.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	11780 : {'ddG'	: "%s kcal/mol" % str(-4.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	11781 : {'ddG'	: "%s kcal/mol" % str(-4.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	
+	# PMID:8539253. Loss of precision on conversion on conversion from kJ/mol to kcal/mol.
+	11860 : {'ddG'	: "%s kcal/mol" % str((61.1 - 71.7)/NUMBER_KJ_IN_KCAL), 'PDB' : '1ROP'},
+	11861 : {'ddG'	: "%s kcal/mol" % str((46.1 - 71.7)/NUMBER_KJ_IN_KCAL), 'PDB' : '1ROP'},
+	
+	# PMID:9336842. Loss of precision on conversion from kJ/mol to kcal/mol.
+	11863 : {'ddG'	: "%s kcal/mol" % str( 2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1BTA'},
+	
+	# PMID:2372535. Loss of precision on conversion on conversion from kJ/mol to kcal/mol.
+	11887 : {'ddG'	: "%s kcal/mol" % str((-1.5 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
+	11888 : {'ddG'	: "%s kcal/mol" % str(( 0.9 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
+	11889 : {'ddG'	: "%s kcal/mol" % str(( 6.0 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
+	11890 : {'ddG'	: "%s kcal/mol" % str((-0.47 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
+	11891 : {'ddG'	: "%s kcal/mol" % str(( 6.0 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
+	11892 : {'ddG'	: "%s kcal/mol" % str(( 5.1 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
+	#11893 Seems to have been entered incorrectly so is corrected above
+	
+	# PMID:9228039. Loss of precision on data entry.
+	13199 : {'ddG'	:   '1.88 kcal/mol', 'PDB' : '2RN2'},
+	13200 : {'ddG'	:   '1.67 kcal/mol', 'PDB' : '2RN2'},
+	13201 : {'ddG'	:   '1.31 kcal/mol', 'PDB' : '2RN2'},
+	13202 : {'ddG'	:   '0.76 kcal/mol', 'PDB' : '2RN2'},
+	13203 : {'ddG'	:   '0.49 kcal/mol', 'PDB' : '2RN2'},
+	#13204 also has the wrong sign
+	13205 : {'ddG'	:  '-0.82 kcal/mol', 'PDB' : '2RN2'},
+	13206 : {'ddG'	:  '-1.19 kcal/mol', 'PDB' : '2RN2'},
+	13207 : {'ddG'	:  '-1.52 kcal/mol', 'PDB' : '2RN2'},
+	13208 : {'ddG'	:  '-1.64 kcal/mol', 'PDB' : '2RN2'},
+	13209 : {'ddG'	:  '-1.76 kcal/mol', 'PDB' : '2RN2'},
+	13210 : {'ddG'	:  '-1.79 kcal/mol', 'PDB' : '2RN2'},
+	13211 : {'ddG'	:  '-1.85 kcal/mol', 'PDB' : '2RN2'},
+	13212 : {'ddG'	:  '-2.31 kcal/mol', 'PDB' : '2RN2'},
+	13213 : {'ddG'	:  '-2.71 kcal/mol', 'PDB' : '2RN2'},
+	13214 : {'ddG'	:  '-3.59 kcal/mol', 'PDB' : '2RN2'},
+	13215 : {'ddG'	:  '-5.93 kcal/mol', 'PDB' : '2RN2'},
+	
+	# PMID:8955106. Loss of precision on data entry.
+	13216 : {'ddG'	:  '1.96 kcal/mol', 'PDB' : '2RN2'},
+	13217 : {'ddG'	:  '4.05 kcal/mol', 'PDB' : '2RN2'},
+	13218 : {'ddG'	:  '0.96 kcal/mol', 'PDB' : '2RN2'},
+	13219 : {'ddG'	:  '2.67 kcal/mol', 'PDB' : '2RN2'},
+	13220 : {'ddG'	:  '2.37 kcal/mol', 'PDB' : '2RN2'},
+	13221 : {'ddG'	:  '0.28 kcal/mol', 'PDB' : '2RN2'},
+	13222 : {'ddG'	: '-0.28 kcal/mol', 'PDB' : '2RN2'},
+	13223 : {'ddG'	: '-0.22 kcal/mol', 'PDB' : '2RN2'},
+	13224 : {'ddG'	:  '1.57 kcal/mol', 'PDB' : '2RN2'},
+	13225 : {'ddG'	:  '1.08 kcal/mol', 'PDB' : '2RN2'},
+	13226 : {'ddG'	:  '0.11 kcal/mol', 'PDB' : '2RN2'},
+	13227 : {'ddG'	:  '1.84 kcal/mol', 'PDB' : '2RN2'},
+	13228 : {'ddG'	:  '1.96 kcal/mol', 'PDB' : '2RN2'},
+	13229 : {'ddG'	: '-0.74 kcal/mol', 'PDB' : '2RN2'},
+	13230 : {'ddG'	:  '2.42 kcal/mol', 'PDB' : '2RN2'},
+	13231 : {'ddG'	:  '1.12 kcal/mol', 'PDB' : '2RN2'},
+	13232 : {'ddG'	:  '0.70 kcal/mol', 'PDB' : '2RN2'},
+	13233 : {'ddG'	:  '0.44 kcal/mol', 'PDB' : '2RN2'},
+	13234 : {'ddG'	: '-0.06 kcal/mol', 'PDB' : '2RN2'},
+	13235 : {'ddG'	: '-0.06 kcal/mol', 'PDB' : '2RN2'},
+	13236 : {'ddG'	:  '0.23 kcal/mol', 'PDB' : '2RN2'},
+	13237 : {'ddG'	: '-0.35 kcal/mol', 'PDB' : '2RN2'},
+	13238 : {'ddG'	: '-0.09 kcal/mol', 'PDB' : '2RN2'},
+	13239 : {'ddG'	:  '0.53 kcal/mol', 'PDB' : '2RN2'},
+	13240 : {'ddG'	: '-0.09 kcal/mol', 'PDB' : '2RN2'},
+	13241 : {'ddG'	:  '0.85 kcal/mol', 'PDB' : '2RN2'},
+	
+	# PMID:8251481. Loss of precision on data entry.
+	13271 : {'ddG'	:  '-0.55 kcal/mol', 'PDB' : '1BVC'},
+	13272 : {'ddG'	:  '-0.56 kcal/mol', 'PDB' : '1BVC'},
+	13273 : {'ddG'	:   '0.04 kcal/mol', 'PDB' : '1BVC'},
+	13274 : {'ddG'	:  '-1.33 kcal/mol', 'PDB' : '1BVC'},
+	13275 : {'ddG'	:  '-0.64 kcal/mol', 'PDB' : '1BVC'},
+	13276 : {'ddG'	:  '-1.14 kcal/mol', 'PDB' : '1BVC'},
+	13277 : {'ddG'	:  '-1.84 kcal/mol', 'PDB' : '1BVC'},
+	13278 : {'ddG'	:   '0.63 kcal/mol', 'PDB' : '1BVC'},
+	13279 : {'ddG'	:   '0.93 kcal/mol', 'PDB' : '1BVC'},
+	13280 : {'ddG'	:  '-0.12 kcal/mol', 'PDB' : '1BVC'},
+	13281 : {'ddG'	:  '-1.10 kcal/mol', 'PDB' : '1BVC'},
+	13282 : {'ddG'	:  '-1.12 kcal/mol', 'PDB' : '1BVC'},
+	13283 : {'ddG'	:   '0.12 kcal/mol', 'PDB' : '1BVC'},
+	13284 : {'ddG'	:  '-1.72 kcal/mol', 'PDB' : '1BVC'},
+	13285 : {'ddG'	:  '-2.37 kcal/mol', 'PDB' : '1BVC'},
+	13286 : {'ddG'	:  '-0.02 kcal/mol', 'PDB' : '1BVC'},
+	13287 : {'ddG'	:   '0.00 kcal/mol', 'PDB' : '1BVC'},
+	13288 : {'ddG'	:  '-0.10 kcal/mol', 'PDB' : '1BVC'},
+	13289 : {'ddG'	:  '-1.18 kcal/mol', 'PDB' : '1BVC'},
+	13290 : {'ddG'	:  '-1.54 kcal/mol', 'PDB' : '1BVC'},
+	13291 : {'ddG'	:  '-0.79 kcal/mol', 'PDB' : '1BVC'},
+	13292 : {'ddG'	:  '-2.25 kcal/mol', 'PDB' : '1BVC'},
+	13293 : {'ddG'	:  '-0.80 kcal/mol', 'PDB' : '1BVC'},
+	
+	# PMID:1854726. Loss of precision on data entry of some records.
+	13308 : {'ddG'	:   '0.04 kcal/mol', 'PDB' : '2LZM'},
+	
+	# PMID:8358293. Loss of precision on data entry of some records.
+	13328 : {'ddG'	: '1.05 kcal/mol', 'PDB' : '1BVC'},
+	13329 : {'ddG'	: '0.75 kcal/mol', 'PDB' : '1BVC'},
+	13330 : {'ddG'	: '0.59 kcal/mol', 'PDB' : '1BVC'},
+	13331 : {'ddG'	: '0.16 kcal/mol', 'PDB' : '1BVC'},
+	13332 : {'ddG'	: '-0.67 kcal/mol', 'PDB' : '1BVC'},
+	13333 : {'ddG'	: '-0.26 kcal/mol', 'PDB' : '1BVC'},
+	13334 : {'ddG'	: '-0.26 kcal/mol', 'PDB' : '1BVC'},
+	13335 : {'ddG'	: '-0.44 kcal/mol', 'PDB' : '1BVC'},
+	13336 : {'ddG'	: '-0.41 kcal/mol', 'PDB' : '1BVC'},
+	13337 : {'ddG'	: '-1.12 kcal/mol', 'PDB' : '1BVC'},
+	13338 : {'ddG'	: '-1.78 kcal/mol', 'PDB' : '1BVC'},
+	13339 : {'ddG'	: '-1.45 kcal/mol', 'PDB' : '1BVC'},
+	13340 : {'ddG'	: '-1.41 kcal/mol', 'PDB' : '1BVC'},
+	13341 : {'ddG'	: '-1.60 kcal/mol', 'PDB' : '1BVC'},
+	13342 : {'ddG'	: '-1.92 kcal/mol', 'PDB' : '1BVC'},
+	
+	# PMID:8125123. Loss of precision on conversion from kJ/mol to kcal/mol.
+	13351 : {'ddG'	: "%s kcal/mol" % str(3.7/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13352 : {'ddG'	: "%s kcal/mol" % str(8.1/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13353 : {'ddG'	: "%s kcal/mol" % str(3.6/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13354 : {'ddG'	: "%s kcal/mol" % str(5.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13355 : {'ddG'	: "%s kcal/mol" % str(4.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13356 : {'ddG'	: "%s kcal/mol" % str(4.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13357 : {'ddG'	: "%s kcal/mol" % str(4.7/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13358 : {'ddG'	: "%s kcal/mol" % str(5.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13359 : {'ddG'	: "%s kcal/mol" % str(6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13360 : {'ddG'	: "%s kcal/mol" % str(6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13361 : {'ddG'	: "%s kcal/mol" % str(-0.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13362 : {'ddG'	: "%s kcal/mol" % str(2.2/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13363 : {'ddG'	: "%s kcal/mol" % str(3.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13364 : {'ddG'	: "%s kcal/mol" % str(2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13365 : {'ddG'	: "%s kcal/mol" % str(1.1/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13366 : {'ddG'	: "%s kcal/mol" % str(0.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13367 : {'ddG'	: "%s kcal/mol" % str(1.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13368 : {'ddG'	: "%s kcal/mol" % str(2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13369 : {'ddG'	: "%s kcal/mol" % str(4.8/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	13370 : {'ddG'	: "%s kcal/mol" % str(3.7/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	
+	# PMID:7473760. Loss of precision on conversion from kJ/mol to kcal/mol.
+	13422 : {'ddG'	: "%s kcal/mol" % str(-1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13423 : {'ddG'	: "%s kcal/mol" % str(-5.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13424 : {'ddG'	: "%s kcal/mol" % str(-4.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13425 : {'ddG'	: "%s kcal/mol" % str(-2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13426 : {'ddG'	: "%s kcal/mol" % str(-3.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	
+	# PMID:9010773. Loss of precision on conversion from kJ/mol to kcal/mol.
+	13427 : {'ddG'	: "%s kcal/mol" % str(-15.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	
+	# PMID:9020766. Loss of precision on conversion from kJ/mol to kcal/mol.
+	13428 : {'ddG'	: "%s kcal/mol" % str(-6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13429 : {'ddG'	: "%s kcal/mol" % str(-1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13430 : {'ddG'	: "%s kcal/mol" % str(-3.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13431 : {'ddG'	: "%s kcal/mol" % str(-4.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13432 : {'ddG'	: "%s kcal/mol" % str(-1.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13433 : {'ddG'	: "%s kcal/mol" % str( 2.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13434 : {'ddG'	: "%s kcal/mol" % str(-6.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13435 : {'ddG'	: "%s kcal/mol" % str(-5.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	13436 : {'ddG'	: "%s kcal/mol" % str(-3.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	
+	# PMID:8433369. Table 6 has more precise DDG values at pH 3 than Table 2.
+	13817 : {'ddG'	: '-5.00 kcal/mol', 'PDB' : '2LZM'},
+	13818 : {'ddG'	: '-2.27 kcal/mol', 'PDB' : '2LZM'},
+	13819 : {'ddG'	: '-1.40 kcal/mol', 'PDB' : '2LZM'},
+	13820 : {'ddG'	: '-0.75 kcal/mol', 'PDB' : '2LZM'},
+	13821 : {'ddG'	: '-0.36 kcal/mol', 'PDB' : '2LZM'},
+	13822 : {'ddG'	: '-3.53 kcal/mol', 'PDB' : '2LZM'},
+	13823 : {'ddG'	: '-1.78 kcal/mol', 'PDB' : '2LZM'},
+	13824 : {'ddG'	: '-0.49 kcal/mol', 'PDB' : '2LZM'},
+	13825 : {'ddG'	:  '0.20 kcal/mol', 'PDB' : '2LZM'},
+	13826 : {'ddG'	: '-0.81 kcal/mol', 'PDB' : '2LZM'},
+	13827 : {'ddG'	: '-8.30 kcal/mol', 'PDB' : '2LZM'},
+	
+	# PMID:9677301. Loss of precision on conversion from kJ/mol to kcal/mol.
+	14189 : {'ddG'	: "%s kcal/mol" % str(-1.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14190 : {'ddG'	: "%s kcal/mol" % str(-5.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14191 : {'ddG'	: "%s kcal/mol" % str(-3.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	#14192 was entered incorrectly so is corrected above
+	14193 : {'ddG'	: "%s kcal/mol" % str(-4.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14194 : {'ddG'	: "%s kcal/mol" % str(-6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14195 : {'ddG'	: "%s kcal/mol" % str(-1.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14196 : {'ddG'	: "%s kcal/mol" % str(-4.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14197 : {'ddG'	: "%s kcal/mol" % str(-3.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14198 : {'ddG'	: "%s kcal/mol" % str(-2.4/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14199 : {'ddG'	: "%s kcal/mol" % str( 0.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14200 : {'ddG'	: "%s kcal/mol" % str(-7.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14201 : {'ddG'	: "%s kcal/mol" % str(-6.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14202 : {'ddG'	: "%s kcal/mol" % str(-4.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	
+	# PMID:9649316. Loss of precision on conversion from kJ/mol to kcal/mol.
+	14203 : {'ddG'	: "%s kcal/mol" % str(-2.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14204 : {'ddG'	: "%s kcal/mol" % str(-0.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14205 : {'ddG'	: "%s kcal/mol" % str( 0.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14206 : {'ddG'	: "%s kcal/mol" % str(-4.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14207 : {'ddG'	: "%s kcal/mol" % str(-1.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14208 : {'ddG'	: "%s kcal/mol" % str(-1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	
+	# PMID:9685334. Loss of precision on conversion from kJ/mol to kcal/mol.
+	14224 : {'ddG'	: "%s kcal/mol" % str(-4.97/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'},
+	14225 : {'ddG'	: "%s kcal/mol" % str( 1.72/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'},
+	14226 : {'ddG'	: "%s kcal/mol" % str(-3.43/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'},
+	14227 : {'ddG'	: "%s kcal/mol" % str(-0.54/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'},
+	14228 : {'ddG'	: "%s kcal/mol" % str(  0.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'},
+	
+	# PMID:9398521. Loss of precision on conversion from kJ/mol to kcal/mol.
+	14235 : {'ddG'	: "%s kcal/mol" % str(-10.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14236 : {'ddG'	: "%s kcal/mol" % str(-15.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14237 : {'ddG'	: "%s kcal/mol" % str( -7.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14238 : {'ddG'	: "%s kcal/mol" % str(-11.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14239 : {'ddG'	: "%s kcal/mol" % str( -3.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	14240 : {'ddG'	: "%s kcal/mol" % str(-16.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	
+	# I do not know why this entry was here as both the paper and ProTherm use kJ/mol.
+	# PMID:16042382. Loss of precision on conversion
+	#19227 : {'ddG_H2O'	: "%s kcal/mol" % str( -4.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19228 : {'ddG_H2O'	: "%s kcal/mol" % str(-14.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19229 : {'ddG_H2O'	: "%s kcal/mol" % str(-10.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19230 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19231 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19232 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19233 : {'ddG_H2O'	: "%s kcal/mol" % str(-14.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19234 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.5/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19235 : {'ddG_H2O'	: "%s kcal/mol" % str(-13.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19236 : {'ddG_H2O'	: "%s kcal/mol" % str( -6.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19237 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19238 : {'ddG_H2O'	: "%s kcal/mol" % str( -4.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19239 : {'ddG_H2O'	: "%s kcal/mol" % str(-11.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19240 : {'ddG_H2O'	: "%s kcal/mol" % str(-15.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19241 : {'ddG_H2O'	: "%s kcal/mol" % str(-21.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19242 : {'ddG_H2O'	: "%s kcal/mol" % str(-12.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
+	#19243 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
 }
-PMIDReferencesInWhichToFixDDGPrecision = [
-	1569557, "Protherm 19236", "ProTherm 21991"
 
-]
+PMIDReferencesInWhichToFixDDGPrecision = []
 
-for ID, data in RoundingErrors.iteritems():
-	assert(ID not in overridden.keys())
-	overridden[ID] = data
-	
+PMIDReferencesWhichICouldNotAccess = ['PMID:14529489']
+
+tempdict = {}
+for k in overridden.keys():
+	tempdict[k] = tempdict.get(k, 0) + 1
+for k in RoundingErrors.keys():
+	tempdict[k] = tempdict.get(k, 0) + 1
+for k in ddGTypos.keys():
+	tempdict[k] = tempdict.get(k, 0) + 1
+for k in ddGWrongSigns.keys():
+	tempdict[k] = tempdict.get(k, 0) + 1
+knownOverlaps = set([963, 964, 2287, 2418, 3469, 3470, 5982, 5983, 6367])
+for k, v in tempdict.iteritems():
+	#if v != 1:
+	#	print(k, v)
+	assert(v == 1 or k in knownOverlaps)	
 
 # Records with the wrong PMID
 badPublicationReferences = {}
+badPublicationReferences[15502] = 12079391
 for recordID in range(13376, 13381 + 1):
 	badPublicationReferences[recordID] = 8390295
 for recordID in range(15714, 15733 + 1):
 	badPublicationReferences[recordID] = 12473461
+for recordID in range(14301, 14305 + 1):
+	badPublicationReferences[recordID] = 11714927
+for recordID in range(14571, 14574 + 1):
+	badPublicationReferences[recordID] = 11714927
 
 badSecondaryStructure = dict.fromkeys(
-	[2747, 4611, 12310, 12701, 12702, 12979, 12980, 12982, 12983, 16895, 19886, 19887, 19888, 19889, 19893, 22231, 24335]
+	[2747, 4611, 11869, 12310, 12701, 12702, 12979, 12980, 12982, 12983, 16895, 19886, 19887, 19888, 19889, 19893, 22231, 24335]
 	+ range(15529, 15534 + 1)
 	+ range(24921, 24929 + 1)
 	+ range(24931, 24939 + 1)
@@ -944,10 +1581,32 @@ badSecondaryStructure = dict.fromkeys(
 	+ range(24985, 25000 + 1)
 	,True)
 
+badASA = dict.fromkeys(
+	[11869, 14408, 14409, 14413, 14414, 14434, 14438, 14450, 16895, 19886, 19887, 19888, 19889, 19893, 22231]
+	+ range(15529, 15534 + 1)
+	, True)
+		
 # In these cases, the protein is elongated at the 67th position. This is more than a mutation so I ignore it. 	
-skipTheseCases = [12156, 12159, 12161, 12188, 12191, 12193, 14468]
+skipTheseCases = [12156, 12159, 12161, 12188, 12191, 12193, 12218, 12220, 14468]
 
-# Note: The pair of records 12193 and 14468 are one example of duplicated data
+# In these cases of PMID:16503630, the PDB ID in the publication is wrong - this is not human ubiquitin.
+skipTheseCases.extend([19883, 19884, 19885, 19886, 19887, 19888, 19889])
+
+# In this case, the mutation is an insertion mutation. This is more than a mutation so I ignore it. 	
+skipTheseCases.extend([17241])
+
+# todo: These cases need to be checked
+skipTheseCases.extend([17756, 18137, 4596])
+
+# In this case, the wild type is Ile but while the paper writes 'V22A', ProTherm writes 'I 22 A (PDB: I 23 A; PIR: I 1785 A)'. Do they mutate to Val and then to Ala in the paper? 
+skipTheseCases.extend([18114])
+
+#skipTheseCases.extend([1163]) # This case is duplicated by 13570
+DuplicatedRecords = [
+	(1163, 13570),
+	(8911, 14482),
+	(12193, 14468),
+]
 
 #These cases fail parsing the mutation line - need to write a new regex
 #skipTheseCases.extend([19893,19894,19895])
@@ -968,7 +1627,7 @@ skipTheseCases = set(skipTheseCases)
 CysteineMutationCases = [13663, 13664, 13677, 13678]
 
 # Mutations with different parsing requirements and their regexes
-multimapCases1 = [16597, 16598, 16599, 16600, 19893, 19894, 22383, 22384]
+multimapCases1 = [16597, 16598, 16599, 16600, 19897, 19898, 19893, 19894, 22383, 22384]
 mmapCases1regex = re.compile("PDB:(.+[,]{0,1})+\)")
 
 multimapCases2Ranges = ((17681, 17687), (17692, 17698), (18104, 18105), (18108, 18136), (18138, 18175))
@@ -980,13 +1639,13 @@ for m2r in multimapCases2Ranges:
 mmapCases2regex = re.compile("^.*PDB:(.*);PIR.*$")	
 
 		
-multimapCases3Ranges = ((3352, 3383), (14215, 14223), (6366, 6368), (8470, 8504), (12235, 12237),
+multimapCases3Ranges = ((3352, 3383), (14215, 14223), (8470, 8504), (12235, 12237),
 					(12308, 12310), (15402, 15408), (16251, 16253), (16255, 16257), 
 					(16259, 16261), (16263, 16265))
 multimapCases3 = []
 for m3r in multimapCases3Ranges:
 	multimapCases3.extend(range(m3r[0], m3r[1] + 1))
-multimapCases3.extend([10384, 16991, 17678, 17679, 17680, 17689, 17690, 17691])
+multimapCases3.extend([6366, 6368, 10384, 16991, 17678, 17679, 17680, 17689, 17690, 17691])
 mmapCases3regex = re.compile("PDB:(\w.*?\w)[;)]")
 
 # 18125 - The PIR mutation has the wrong mutant (it should be A, not I)
@@ -1000,16 +1659,16 @@ missingRefMap = {
 	"PROTEIN SCI 6, 2196-2202 (1997)" 			: ("PMID", 9336842),
 	"J MOL BIOL 224, 819-835 (1992)"			: ("PMID", 1569559),
 	"STRUCTURE 14, 1401-1410 (2006)"			: ("PMID", 16962971),
-	"J AM CHEM SOC 115, 8523-8526 (1993) "		: ("PMID", 0), # No PMID for this article. "Phospholipase A2 Engineering.  10.  The Aspartate...Histidine Catalytic Diad Also Plays an Important Structural Role."  Y. Li and M.-D. Tsai, J. Am. Chem. Soc. 115, 8523-8526 (1993).
+	"J AM CHEM SOC 115, 8523-8526 (1993) "		: ("PMID", 99999999999), # No PMID for this article. "Phospholipase A2 Engineering.  10.  The Aspartate...Histidine Catalytic Diad Also Plays an Important Structural Role."  Y. Li and M.-D. Tsai, J. Am. Chem. Soc. 115, 8523-8526 (1993).
 	"J MOL BIOL 351, 402-416 (2005)"			: ("PMID", 16002092),
 	"PROTEIN SCI 16, 227-238 (2007)"			: ("PMID", 17189482),
 } 
 
 def getDDGUnitsUsedInDB(ddGDB):
-	results = ddGDB.locked_execute('SELECT SourceID, DGUnitUsedInProTherm FROM ProThermUnits')
+	results = ddGDB.locked_execute('SELECT ID, DGUnitUsedInProTherm FROM Source')
 	unitsUsed = {}
 	for r in results:
-		unitsUsed[r["SourceID"]] = r["DGUnitUsedInProTherm"]
+		unitsUsed[r["ID"]] = r["DGUnitUsedInProTherm"]
 	return unitsUsed
 	
 def getIDsInDB(ddGDB = None, source = "ProTherm-2008-09-08-23581"):
@@ -1049,7 +1708,7 @@ class ProThermReader(object):
 			lastrecord = int(mtchs.group(2))
 		if lastrecord in [23581, 25616]:
 			# These fields of ProTherm records cannot be empty for our purposes
-			self.requiredFields = ["NO.", "PDB_wild", "LENGTH", "ddG", "MUTATION", "MUTATED_CHAIN"]
+			self.requiredFields = ["NO.", "PDB_wild", "LENGTH", "MUTATION", "MUTATED_CHAIN"]
 			self.quiet = quiet
 			# For bad data
 			self.iCodeRecords = iCodeRecords
@@ -1058,6 +1717,8 @@ class ProThermReader(object):
 			self.singleChainPDBs = singleChainPDBs
 			self.identicalChainPDBs = identicalChainPDBs
 			self.overridden = overridden
+			self.patchrecordsets = [overridden, RoundingErrors, ddGTypos]
+			self.ddGWrongSigns = ddGWrongSigns
 			self.skipTheseCases = skipTheseCases
 			self.CysteineMutationCases = CysteineMutationCases
 			self.multimapCases1 = multimapCases1
@@ -1072,6 +1733,7 @@ class ProThermReader(object):
 			self.updated_date = ProThermReader.updated_dates[lastrecord]
 			self.missingddGUnits = {}
 			self.secondary_structure_values = secondary_structure_values
+			self.mutationsAllowedToBeStoredDespiteMissingCoordinates = mutationsAllowedToBeStoredDespiteMissingCoordinates
 			# Experimental data
 			self.missingExpData = {}
 			self.maxDBfieldlengths = {}
@@ -1095,6 +1757,8 @@ class ProThermReader(object):
 		self.open()
 		self.readFieldnames()
 		self.singleErrors = dict.fromkeys(self.fieldnames, 0)
+		self.singleErrors["either_ddG"] = 0
+		
 		if not skipIndexStore:
 			if not self.quiet:
 				colortext.write("[Storing indices for %s: " % self.infilepath, "green")
@@ -1145,55 +1809,144 @@ class ProThermReader(object):
 		else:
 			raise Exception("Trying to close a null file handle.")
 	
+	def createGenerator(self, require_one_of = [], specific_cases = None, args = None):
+		'''This function creates a generator for iterating over the set of records.
+		It was motivated by me duplicating similar code in various scripts which use the reader.
+		 
+		specific_cases is a list of specific cases to test.
+		args is expected to be a list/tuple of up to two values: the start index and the end index.
+		args is ignore if specific_cases is given.'''
+		
+		if not self.test():
+			raise Exception("The ProTherm reader self-test failed.")
+		
+		cases = specific_cases
+		if not cases:
+			if args:
+				if args[0].isdigit():
+					if len(args) > 1 and args[1].isdigit():
+						cases = [c for c in self.list_of_available_keys if int(args[0]) <= c <= int(args[1])]
+						if not self.quiet:
+							colortext.message("[Starting from record %s]" % args[0])
+					else:
+						cases = [c for c in self.list_of_available_keys if int(args[0]) <= c]
+						if not self.quiet:
+							colortext.message("[Starting from record %s]" % args[0])
+			else:
+				cases = self.list_of_available_keys
+		else:
+			assert(isinstance(cases, list))
+			cases = [c for c in cases if c in self.list_of_available_keys]
+			
+		if not self.quiet:
+			colortext.message("\nParsing ProTherm")
+			colortext.printf("|" + ("*" * (int(len(self.list_of_available_keys)/1000) - 2)) + "|")
+		thousands_read = 0
+		for ID in cases:
+			
+			#Progress meter
+			if not self.quiet:
+				if ID/1000 > thousands_read:
+					colortext.write("." * ((ID/1000) - thousands_read), "green")
+					colortext.flush()
+					thousands_read += (ID/1000) - thousands_read
+		
+			# Skip bad cases in ProTherm
+			if ID in self.skipTheseCases:
+				continue
+			
+			record = self.readRecord(ID)		
+			
+			# Skip records where none of the require_one_of keys has a corresponding value 
+			found_one_required_key = False
+			for recordkey in require_one_of:
+				if record[recordkey] != None:
+					found_one_required_key = True
+					break
+			if not found_one_required_key:
+				continue
+			
+			yield (ID, record)
+			
+		if not self.quiet:
+			colortext.write("." * ((len(self.list_of_available_keys)/1000) - thousands_read), "green")
+			colortext.flush()
+			print("")
+
+	def testRounding(self):
+		'''This function checks that the rounding table does not introduce large changes in DDG values due to input error.'''
+
+		colortext.write("Testing rounding table for errors: ", color = "silver")
+		allowed_drift = 0.0501 # The maximum amount in kcal/mol that the fixed DDG value is allowed to deviate from the original DDG value
+		founderror = False
+		for ID,patch_dict in sorted(RoundingErrors.iteritems()):
+			assert(patch_dict.get("ddG") != None or patch_dict.get("ddG_H2O") != None)
+			
+			record = self.readRecord(ID)
+			if patch_dict.get("ddG") != None:
+				original_ddG = self.getDDGInKcal(ID, record, useRosettaConvention = False)
+				record["ddG"] = patch_dict["ddG"]
+				patched_ddG = self.getDDGInKcal(ID, record, useRosettaConvention = False)
+				if abs(original_ddG - patched_ddG) > allowed_drift:
+					colortext.write("\nRecord %d: The original rounded DDG value %s kcal/mol differs from the fixed value %s kcal/mol by %s kcal/mol (DDG in ProTherm convention)" % (ID, original_ddG, patched_ddG, abs(original_ddG - patched_ddG)), color="red")
+					founderror = True
+			if patch_dict.get("ddG_H2O") != None:
+				original_ddG = self.getDDGH2OInKcal(ID, record, useRosettaConvention = False)
+				record["ddG_H2O"] = patch_dict["ddG_H2O"]
+				patched_ddG = self.getDDGH2OInKcal(ID, record, useRosettaConvention = False)
+				if abs(original_ddG - patched_ddG) > allowed_drift:
+					colortext.error("\nRecord %d: The original rounded DDG_H2O value %s kcal/mol differs from the fixed value %s kcal/mol by %s kcal/mol (DDG in ProTherm convention)" % (ID, original_ddG, patched_ddG, abs(original_ddG - patched_ddG)), color="red")
+					founderror = True
+		if not founderror:
+			colortext.message("passed")
+		else:
+			print("")
+			
 	def test(self):
+		self.testRounding()
+		MutationO = ddgobjects.Mutation
 		success = True
 		expected_results = {
 		# PLAIN
 			# L 121 A, A 129 M, F 153 L
-			1163  : [('L',  '121', 'A'), ('A',  '129', 'M'), ('F',  '153', 'L')],
+			1163  : [MutationO('L',  '121', 'A'), MutationO('A',  '129', 'M'), MutationO('F',  '153', 'L')],
 			# S 31 G, E 33 A, E 34 A
-			1909  : [('S',   '31', 'G'), ('E',   '33', 'A'), ('E',   '34', 'A')],
+			1909  : [MutationO('S',   '31', 'G'), MutationO('E',   '33', 'A'), MutationO('E',   '34', 'A')],
 			#Q 15 I, T 16 R, K 19 R, G 65 S, K 66 A, K 108 R
-			2227  : [('Q',   '15', 'I'), ('T',   '16', 'R'), ('K',   '19', 'R'), ('G',   '65', 'S'), ('K',   '66', 'A'), ('K',  '108', 'R')],
+			2227  : [MutationO('Q',   '15', 'I'), MutationO('T',   '16', 'R'), MutationO('K',   '19', 'R'), MutationO('G',   '65', 'S'), MutationO('K',   '66', 'A'), MutationO('K',  '108', 'R')],
 			# I 6 R, T 53 E, T 44 A
-			12848 : [('I',    '6', 'R'), ('T',   '53', 'E'), ('T',   '44', 'A')],
+			12848 : [MutationO('I',    '6', 'R'), MutationO('T',   '53', 'E'), MutationO('T',   '44', 'A')],
 			# E 128 A, V 131 A, N 132 A
-			17608 : [('E',  '128', 'A'), ('V',  '131', 'A'), ('N',  '132', 'A')],
+			17608 : [MutationO('E',  '128', 'A'), MutationO('V',  '131', 'A'), MutationO('N',  '132', 'A')],
 		# PLAIN BUT BADLY FORMATTED
-			11146 : [('G',   '23', 'A'), ('G',   '25', 'A')],
-			21156 : [('E',    '3', 'R'), ('F',   '15', 'A'), ('D',   '25', 'K')],
+			11146 : [MutationO('G',   '23', 'A'), MutationO('G',   '25', 'A')],
+			21156 : [MutationO('E',    '3', 'R'), MutationO('F',   '15', 'A'), MutationO('D',   '25', 'K')],
 		# MUTATION (PDB: MUTATION; PIR MUTATION), repeat
 			#S 15 R (PDB: S 14 R; PIR: S 262 R), H 19 E (PDB: H 18 E; PIR: H 266 E), N 22 R ( PDB: N 21 R; PIR: N 269 R)
-			14215 : [('S',   '14', 'R'), ('H',   '18', 'E'), ('N',   '21', 'R')],
+			14215 : [MutationO('S',   '14', 'R'), MutationO('H',   '18', 'E'), MutationO('N',   '21', 'R')],
 		# MUTATION_LIST (PDB: MUTATION_LIST; PIR MUTATION_LIST)
 			# N 51 H, D 55 H (PDB: N 47 H, D 51 H; PIR: N 135 H, D 139 H)
-			17681 : [('N',   '47', 'H'), ('D',   '51', 'H')],
+			17681 : [MutationO('N',   '47', 'H'), MutationO('D',   '51', 'H')],
 		# MUTATION_LIST (PDB: MUTATION_LIST)
 			# A 2 K, L 33 I (PDB: A 1 K, L 32 I)
-			22383 : [('A',    '1', 'K'), ('I',   '23', 'V')],
-			16597 : [('G',   '92', 'P')],
-			19893 : [('Q',  '11A', 'E'), ('H',  '53A', 'E'), ('S',  '76A', 'K'), ('M',  '78A', 'K'), ('D',  '81A', 'K')],
+			22383 : [MutationO('A',    '1', 'K'), MutationO('I',   '23', 'V')],
+			16597 : [MutationO('G',   '92', 'P')],
+			19893 : [MutationO('Q',  '11A', 'E'), MutationO('H',  '53A', 'E'), MutationO('S',  '76A', 'K'), MutationO('M',  '78A', 'K'), MutationO('D',  '81A', 'K')],
 		}
 		
 		errors = []
-		colortext.write("Testing %d mutation formats: " % len(expected_results), "green")	
+		colortext.write("Testing %d mutation formats: " % len(expected_results), "silver")	
 		for ID, expected in sorted(expected_results.iteritems()):
 			numerrormsgs = len(errors)
-			for i in range(len(expected)):
-				expected[i] = {
-					"WildTypeAA"	: expected[i][0],
-					"ResidueID"		: expected[i][1],
-					"MutantAA"		: expected[i][2]
-				}
-			record = self._getRecord(ID, None)
-			mutations, secondary_structure_positions = self.getMutations(ID, record)
+			mutations = self.getMutations(ID)
 			if expected and (expected != mutations):
 				errors.append("Record %d: Expected %s, got %s." % (ID, expected, mutations))
 			if (not badSecondaryStructure.get(ID)):
-				if len(mutations) != len(secondary_structure_positions):
+				mutationsWithMissingPosition = [mutation for mutation in mutations if mutation.SecondaryStructurePosition == None]
+				if mutationsWithMissingPosition:
 					errors.append("%s: \n" % record["MUTATION"])
-					errors.append("Record %d: Read %d mutations but %d secondary structure positions." % (ID, len(mutations), len(secondary_structure_positions)))
-					errors.append(secondary_structure_positions)
+					errors.append("Record %d: Read %d mutations but %d have no secondary structure positions." % (ID, len(mutations), len(mutationsWithMissingPosition)))
+					errors.append(str(mutations))
 			if numerrormsgs < len(errors):
 				colortext.write(".", "red")
 			else:
@@ -1209,26 +1962,26 @@ class ProThermReader(object):
 			
 		expected_results = {
 			897   : -0.08, # -0.08
-			5980  : 1.1 / 4.184, # 1.1 kJ/mol
-			12144 : -3.9 / 4.184, #-3.9 kJ/mol
+			5980  : 1.1 / NUMBER_KJ_IN_KCAL, # 1.1 kJ/mol
+			12144 : -3.9 / NUMBER_KJ_IN_KCAL, #-3.9 kJ/mol
 			13535 : -0.14, #-0.14
-			14451 : -20.7 / 4.184, # -20.7 kJ/mol
+			14451 : -20.7 / NUMBER_KJ_IN_KCAL, # -20.7 kJ/mol
 			14751 : 3.35, # 3.35
 			17849 : 12.7, # 12.7 kcal/mol
 			17858 : 0.06, # 0.06 kcal/mol
 			20129 : 0.08, # 0.08 
-			21100 : 9.5 / 4.184, # 9.5 kJ/mol,
-			22261 : -0.4 / 4.184, # -0.4 kJ/mol
+			21100 : 9.5 / NUMBER_KJ_IN_KCAL, # 9.5 kJ/mol,
+			22261 : -0.4 / NUMBER_KJ_IN_KCAL, # -0.4 kJ/mol
 			23706 : -2.8, # -2.8
 			25089 : -3.3, # -3.3
 		}
 		errors = []
-		colortext.write("Testing %d ddG conversions: " % len(expected_results), "green")	
+		colortext.write("Testing %d ddG conversions: " % len(expected_results), "silver")	
 		for ID, expectedDDG in sorted(expected_results.iteritems()):
 			numerrormsgs = len(errors)
 			record = self._getRecord(ID, None)
 			referenceID = self.getReference(ID, record)
-			record["dbReferencePK"] = "PMID:%s" % referenceID
+			#record["dbReferencePK"] = "PMID:%s" % referenceID
 			ddG = self.getDDGInKcal(ID, record)
 			if expectedDDG != ddG:
 				print("Record %d: Expected %s, got %s." % (ID, str(expectedDDG), str(ddG)))
@@ -1382,15 +2135,14 @@ class ProThermReader(object):
 			record = self.readRecord(ID)
 			self.fixRecord(ID, record)
 			mts = None
-			mtlocs = None
 			try:
-				mts, mtlocs = self.getMutations(ID, record)
+				mts = self.getMutations(ID)
 			except:
 				pass
 			if mts and len(mts) == 1:
 				#if str(mts[0]["ResidueID"]) == "32" and  m["WildTypeAA"] == 'A':
 				#	print(ID, mts, record["ddG"], record["PDB_wild"])
-				if str(mts[0]["ResidueID"]) == "45" and mts[0]["WildTypeAA"] == 'A' and mts[0]["MutantAA"] == 'G':
+				if str(mts[0].ResidueID) == "45" and mts[0].WildTypeAA == 'A' and mts[0].MutantAA == 'G':
 					print(ID, mts, record["ddG"], record["PDB_wild"])
 			
 			if (pdbID == None) or (pdbID != None and record["PDB_wild"] == pdbID):
@@ -1401,7 +2153,7 @@ class ProThermReader(object):
 						foundResidueID = False
 						if residueIDs:
 							for m in mts:
-								if m["ResidueID"] in residueIDs and m["WildTypeAA"] == 'A':
+								if m.ResidueID in residueIDs and m.WildTypeAA == 'A':
 									foundResidueID = True 
 									print(ID, mts)
 						if not(residueIDs) or foundResidueID: 
@@ -1547,7 +2299,7 @@ class ProThermReader(object):
 			if Cm.endswith(" M"):
 				Cm = Cm[:-2]
 			if ID != 4919:
-				# We usually expect a float value so we hack the odd cases
+				# hack: We usually expect a float value so we hack the odd cases
 				floatvalue = float(Cm)
 			record["Cm"] = Cm
 	
@@ -1613,7 +2365,7 @@ class ProThermReader(object):
 			if reversibility == 'unknown' or reversibility == 'unknownnouwn':
 				reversibility = 'Unknown'
 			elif reversibility == 'yes, 90%':
-				# Hack for special case
+				# hack: for special case
 				reversibility = 'Yes'
 				level = "90%"
 			elif reversibility.startswith('yes'):
@@ -1659,13 +2411,16 @@ class ProThermReader(object):
 		singleChainPDBs = self.singleChainPDBs
 		identicalChainPDBs = self.identicalChainPDBs
 		patch = self.patch
-		if overridden.get(ID):
-			if record.get('PDB_wild'):
-				if record["PDB_wild"] != overridden[ID]["PDB"]:
-					raise colortext.Exception("Error in overridden table: Record %d. Read '%s' for PDB_wild, expected '%s'." % (ID, record["PDB_wild"], overridden[ID]["PDB"]))
-			for k, v in overridden[ID].iteritems():
-				if k != "PDB":
-					record[k] = v
+		
+		for patchset in self.patchrecordsets:
+			if patchset.get(ID):
+				if record.get('PDB_wild'):
+					if record["PDB_wild"] != patchset[ID]["PDB"]:
+						raise colortext.Exception("Error in patchset table: Record %d. Read '%s' for PDB_wild, expected '%s'." % (ID, record["PDB_wild"], patchset[ID]["PDB"]))
+				for k, v in patchset[ID].iteritems():
+					if k != "PDB":
+						record[k] = v
+		
 		if record["PDB_wild"]:
 			pdbID = record["PDB_wild"].upper()
 			if not(overridden.get(ID)) or not(overridden[ID].get("MUTATED_CHAIN")):
@@ -1676,6 +2431,16 @@ class ProThermReader(object):
 				elif identicalChainPDBs.get(pdbID):
 					for k,v in identicalChainPDBs[pdbID].iteritems():
 						record[k] = v
+		
+		ddGWrongSigns = self.ddGWrongSigns
+		if ddGWrongSigns.get(ID):
+			tokens = record[ddGWrongSigns[ID]].split(" ")
+			ddGvalue = tokens[0]
+			newddGvalue = str(-float(ddGvalue)) # This should always pass
+			#print(ddGvalue, newddGvalue)
+			record[ddGWrongSigns[ID]] =  "%s %s" % (newddGvalue, join(tokens[1:], " "))
+			
+		
 		
 		# ** Experimental conditions **
 		
@@ -1691,6 +2456,7 @@ class ProThermReader(object):
 		for m in msrs:
 			m = m.strip()
 			if not MeasureMapping.get(m):
+				colortext.error("No measure mapping for %d" % ID)
 				passed = False
 				raise colortext.Exception("Cannot find match for measure '%s' in record %d." % (m, ID))
 			else:
@@ -1712,6 +2478,7 @@ class ProThermReader(object):
 			for m in mthds:
 				m = m.strip()
 				if not MethodMapping.get(m):
+					colortext.error("No method mapping for %d" % ID)
 					passed = False
 					raise colortext.Exception("Cannot find match for method '%s' in record %d." % (m, ID))
 				else:
@@ -1742,19 +2509,22 @@ class ProThermReader(object):
 			if not record[field]:
 				passed = False
 				missingFields.append(field)
+		if not(record["ddG"] or record["ddG_H2O"]):
+			missingFields.append("either_ddG")
 		
+				
 		if not passed:
 			# Recover when one field is missing
 			if len(missingFields) == 1:
 				# Recover when there is a ddG value and the mutation is specified
 				# The patch dict lets us either skip entries with missing information or else correct them
 				foundpatch = False
-				if record["MUTATION"] and record["MUTATION"] != "wild" and ("ddG" not in missingFields):
+				if record["MUTATION"] and record["MUTATION"] != "wild" and ("either_ddG" not in missingFields):
 					for patchfield, patchfield_info in patchfields.iteritems():
 						if not record[patchfield]:
 							foundpatch = patch.get(ID) and (patchfield in patch[ID].keys())
 							if not patch.get(ID):
-								colortext.error("Error processing record ID %d; no %s" %  (ID, patchfield))
+								#colortext.error("Error processing record ID %d; no %s" %  (ID, patchfield))
 								self.singleErrors[patchfield] += 1
 								self.patchthis[ID] = "%s %s" % (patchfield, join(["%s" % record.get(pfi) for pfi in patchfield_info],"-"))
 							elif patch[ID][patchfield]:
@@ -1764,21 +2534,28 @@ class ProThermReader(object):
 					if not foundpatch:
 						#colortext.error("Error processing structure: ID %d, no %s " % (ID, missingFields[0]))
 						self.singleErrors[missingFields[0]] += 1
+				if not passed:
+					pass
+					#colortext.error("Could not fix record %d: Fields %s are missing" % (ID, str(missingFields)))
+				
+			else:
+				pass
+				#colortext.error("Fields %s are missing for %d" % (str(missingFields), ID))
+				
 		return passed
 		
 	def getMutations(self, ID, record = None):
-		'''Either returns a list of triples (WildTypeAA, ResidueID, MutantAA) and a corresponding list of secondary structure locations or else None.'''
+		'''Returns a list of ddgobjects.Mutation objects.'''
 		record = self._getRecord(ID, record)
 			
 		mutations = []
-		if ID == 24283:
-			record["MUTATION"] = record["MUTATION"].replace("Y236 F", "Y 236 F") # Hack for this special case
 			
 		mutationline = record["MUTATION"].split()
 		#print(len(mutationline))
 		cline = join(mutationline, "")
 		if ID in self.CysteineMutationCases: # Hack for input which includes information on the bonds generated from mutation to cysteine
 			if not mutationline[1].isdigit():
+				# todo: This will fail with insertion codes. I just want to see when they are added to make sure parsing works.
 				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID)) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
 			mutations = [{"WildTypeAA" : mutationline[0], "ResidueID" : mutationline[1], "MutantAA" : mutationline[2]}]  
 		elif ID in self.multimapCases1:
@@ -1790,7 +2567,8 @@ class ProThermReader(object):
 					assert(mtch)
 					residueID = mtch[1:-1]
 					if not residueID.isdigit():
-						if (not residueID[:-1].isdigit()) or (not residueID[-1].isalpha()):
+						if not residueID[-1].isalpha():
+						#if (not residueID[:-1].isdigit()) or (not residueID[-1].isalpha()):
 							raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
 					mutations.append({"WildTypeAA" : mtch[0], "ResidueID" : mtch[1:-1], "MutantAA" : mtch[-1]}) 
 			else:
@@ -1802,6 +2580,7 @@ class ProThermReader(object):
 				for mtch in mtchslst:
 					assert(mtch)
 					if not mtch[1:-1].isdigit():
+						# todo: This will fail with insertion codes. I just want to see when they are added to make sure parsing works.
 						raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID)) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
 					mutations.append({"WildTypeAA" : mtch[0], "ResidueID" : mtch[1:-1], "MutantAA" : mtch[-1]})
 			else:
@@ -1812,6 +2591,7 @@ class ProThermReader(object):
 				for mtch in mtchslst:
 					assert(mtch)
 					if not mtch[1:-1].isdigit():
+						# todo: This will fail with insertion codes. I just want to see when they are added to make sure parsing works.
 						raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID)) # This will raise an exception if there is an insertion code - this is fine. I want to examine these cases manually when they occur.
 					mutations.append({"WildTypeAA" : mtch[0], "ResidueID" : mtch[1:-1], "MutantAA" : mtch[-1]}) 
 			else:
@@ -1823,7 +2603,7 @@ class ProThermReader(object):
 		elif len(mutationline) == 1:
 			mline = mutationline[0]
 			if mline == "wild" or mline == "wild*" or mline == "wild**":
-				return [], []
+				return None
 			else:
 				raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
 		elif len(mutationline) % 3 == 0 or len(mutationline) == 5: # 2nd case is a hack for 11146
@@ -1835,43 +2615,64 @@ class ProThermReader(object):
 						raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
 					mutations.append({"WildTypeAA" : m.group(1), "ResidueID" : m.group(2), "MutantAA" : m.group(3)})
 				else:
-					# todo: I realized after the fact that the regexes below do not deal properly with insertion codes in
-					# the mutation e.g. "MUTATION        Y 27D D, S 29 D" in record 5438. However, none of these records
-					# have ddG values for ProTherm on 2008-09-08 (23581 entries) so we can ignore this issue unless the
-					# database is updated.
-					# In this case, maybe singlemutationregex = re.compile("^(\w)(\d+\w?)(\w)$") would work
 					raise Exception("An exception occurred parsing the mutation %s in record %d." % (cline, ID))
 				 
 		else:
 			raise Exception("We need to add a case to handle this mutation string: '%s'." % cline)
 		
+		mutobjects = []
+		for mutation in mutations:
+			mutobjects.append(ddgobjects.Mutation(mutation["WildTypeAA"], mutation["ResidueID"], mutation["MutantAA"]))
+			
 		mutation_locations = []
 		if (not badSecondaryStructure.get(ID)) and record["SEC.STR."]:
 			mutation_locations = record["SEC.STR."].split(",")
 			numlocations = len(mutation_locations)
-			if not numlocations == len(mutations):
-				#todo raise Exception
-				colortext.error("The mutations '%s' do not have corresponding locations '%s' in record %d." % (mutations, mutation_locations, ID))
+			if not numlocations == len(mutobjects):
+				raise Exception("The mutations '%s' do not have corresponding locations '%s' in record %d." % (str(mutobjects), mutation_locations, ID))
 			for i in range(numlocations):
 				n_location = self.secondary_structure_values.get(mutation_locations[i].strip())
 				if not n_location:
 					raise Exception("Bad secondary structure information '%s' for the mutation in record %d." % (record["SEC.STR."], ID))
-				mutation_locations[i] = n_location
+				mutobjects[i].SecondaryStructurePosition = n_location 
 		
-		return mutations, mutation_locations
+		ASAs = []
+		if ID == 1927:
+			# Hack for this case
+			ASAs = [None, 205.4]
+		elif (not badASA.get(ID)) and record["ASA"]:
+			ASAs = record["ASA"].split(",")
+			numASAs = len(ASAs)
+			if not numASAs == len(mutobjects):
+				raise Exception("The mutations '%s' do not have corresponding ASAs '%s' in record %d." % (str(mutobjects), ASAs, ID))
+			for i in range(numASAs):
+				try:
+					n_ASA = float(ASAs[i].strip())
+				except :
+					raise Exception("Bad ASA information '%s' for the mutation in record %d." % (record["ASA"], ID))
+				mutobjects[i].AccessibleSurfaceArea = n_ASA 
+		
+		return mutobjects
+	
+	def getDDGH2OInKcal(self, ID, record = None, useRosettaConvention = False, getDDGH2OInstead = False):
+		return self.getDDGInKcal(ID, record, useRosettaConvention, getDDGH2OInstead = True)
 	
 	def getDDGInKcal(self, ID, record = None, useRosettaConvention = False, getDDGH2OInstead = False):
 		record = self._getRecord(ID, record)
-		dbReferencePK = record.get("dbReferencePK", "publication undetermined")
+		
+		referenceID = self.getReference(ID, record)
+		if not referenceID:
+			raise Exception("Error processing reference: ID %d, %s" %  (ID, record["REFERENCE"]))
+		dbReferencePK = "PMID:%s" % referenceID
 		
 		ddGKey = "ddG"
 		if getDDGH2OInstead:
 			ddGKey = "ddG_H2O"
 		
 		ddGline = record[ddGKey]
-		if getDDGH2OInstead and not ddGline:
+		#if getDDGH2OInstead and not ddGline:
 			# todo: I should handle this better
-			return None
+		#	return None
 		if ddGline.find("kJ/mol") == -1 and ddGline.find("kcal/mol") == -1:
 			try:
 				x = float(ddGline)
@@ -1879,9 +2680,7 @@ class ProThermReader(object):
 				colortext.error("Error processing %s: ID %d, %s" % (ddGKey, ID, record["ddG"]))
 			if self.ddGUnitsUsed.get(dbReferencePK):
 				unitsUsed = self.ddGUnitsUsed[dbReferencePK]
-				# todo: These cases should be checked
-				if unitsUsed[-1] == '?':
-					unitsUsed = unitsUsed[:-1].strip()
+				assert(unitsUsed[-1] != '?') # todo: assertion after removing legacy code - this assertion can be removed on the next commit 
 				ddGline = "%s %s" % (ddGline, unitsUsed)
 					
 		idx = ddGline.find("kJ/mol")
@@ -1910,12 +2709,12 @@ class ProThermReader(object):
 		if not(mutationline == "wild" or mutationline == "wild*" or mutationline == "wild**"):
 			if self.ExistingDBIDs.get(ID):
 				colortext.printf("No %s unit specified for existing record: ID %d, %s, publication ID='%s'" % (ddGKey, ID, ddGline, dbReferencePK), "pink")
+				raise Exception("Excepting parsing %s." % ddGKey)
 			else:
-				pass
 				colortext.printf("No %s unit specified for new record: ID %d, %s, publication ID='%s'" % (ddGKey, ID, ddGline, dbReferencePK), "cyan")
-			mutations, mutation_locations = self.getMutations(ID, record)
+				raise Exception("Excepting parsing %s." % ddGKey)
+			mutations = self.getMutations(ID, record)
 			mutations = join([join(map(str, m),"") for m in mutations], ",")
-			#sys.exit(0)
 			self.missingddGUnits[dbReferencePK] = self.missingddGUnits.get(dbReferencePK) or []
 			self.missingddGUnits[dbReferencePK].append((ID, "*" + mutations + "=" + ddGline + "*"))
 		return None
@@ -1937,7 +2736,7 @@ class ProThermReader(object):
 			refPMID = referenceData[idx+5:].strip()
 			if refPMID:
 				if refPMID[-1] == ".":
-					refPMID = refPMID[0:-1] # Hack for record 25600
+					refPMID = refPMID[0:-1] # todo: Hack for record 25600
 				if refPMID.isdigit():
 					referenceID = int(refPMID)
 				else:
@@ -1972,8 +2771,9 @@ class ProThermReader(object):
 
 		ExperimentalConditions = {}
 		for h in expfields:
-			if not record[h]:
+			if not record.get(h):
 				self.missingExpData[h] = self.missingExpData.get(h, 0) + 1
+				record[h] = None
 			fielddata = record[h]
 			if record[h]:
 				self.maxDBfieldlengths[h] = max(self.maxDBfieldlengths.get(h, 0), len(fielddata))
@@ -1992,6 +2792,7 @@ class ProThermReader(object):
 					fielddata = float(fielddata)
 				except:
 					if h == "T":
+						# Values are stored in degrees Celsius
 						K = self.kelvin_regex.match(fielddata)
 						C = self.celsius_regex.match(fielddata)
 						if K:
