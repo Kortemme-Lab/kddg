@@ -169,6 +169,8 @@ class ddG(object):
 			raise Exception("An exception occurred committing %s to the database." % filepath)
 
 	def createDummyExperiment(self, pdbID, mutationset, chains, sourceID, ddG, ExperimentSetName = "DummySource"):
+		#todo
+		raise Exception("Out of date function.")
 		Experiment = ddgdbapi.ExperimentSet(pdbID, ExperimentSetName)
 		for m in mutationset.mutations:
 			Experiment.addMutation(m[0], m[1], m[2], m[3])

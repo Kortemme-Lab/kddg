@@ -378,4 +378,254 @@ def getDataForRosettaCon(self):
 	print("printMutationMatrix")
 	self.printMutationMatrix(mutationMatrix)
 	self.printMutationMatrix(mutationMatrix, divisor = float(nummatrixrecords)/100.0)
+	
+class ExperimentSet(DBObject):
+	
+	def __init__(self, ddGdb, pdbid, source, interface = None):
+		#todo: delete
+		raise Exception("Out of date.")
+		self.ddGdb = ddGdb
+		FieldNames_ = ddGdb.FlatFieldNames
+		self.dict = {
+			FieldNames_.Structure	: pdbid,
+			FieldNames_.Source		: source,
+			FieldNames_.ScoreVariance: None,
+			"Interface"				: interface,
+			"Mutants"				: {},
+			"Mutations"				: [],
+			"ExperimentChains"		: [],
+			"ExperimentScores"		: [],
+			"StdDeviation"			: None,
+			"WithinStdDeviation"	: None
+		}
+	
+	def addMutant(self, mutant):
+		self.dict["Mutants"][mutant] = True
+
+	def addMutation(self, chainID, residueID, wildtypeAA, mutantAA, ID = None, SecondaryStructureLocation=None):
+		errors = []
+		residueID = ("%s" % residueID).strip()
+		if not chainID in AllowedChainLetters:
+			errors.append("The chain '%s' is invalid." % chainID)
+		if not wildtypeAA in AllowedAminoAcids:
+			errors.append("The wildtype amino acid '%s' is invalid." % wildtypeAA)
+		if not mutantAA in AllowedAminoAcids:
+			errors.append("The mutant amino acid '%s' is invalid." % mutantAA)
+		if not residueID.isdigit():
+			if not residueID[0:-1].isdigit():
+				errors.append("The residue '%s' is invalid." % residueID)
+			elif residueID[-1] not in AllowedInsertionCodes:
+				errors.append("The insertion code '%s' of residue '%s' is invalid." % (residue[-1], residueID))
+		if errors:
+			ID = ID or ""
+			if ID:
+				ID = ", ID %s" % ID
+			errors = join(['\t%s\n' % e for e in errors], "")
+			raise Exception("An exception occurred processing a mutation in the dataset %s%s.\n%s" % (self.dict[FieldNames_.Source], ID, errors))
+		self.dict["Mutations"].append({
+			FieldNames_.Chain 		: chainID,
+			FieldNames_.ResidueID	: residueID,
+			FieldNames_.WildTypeAA	: wildtypeAA,
+			FieldNames_.MutantAA	: mutantAA
+			})
+	
+	def addChain(self, chainID, ID = ""):
+		if not chainID in AllowedChainLetters:
+			raise Exception("An exception occurred processing a chain in the dataset %s%s.\n\tThe chain '%s' is invalid." % (self.dict[FieldNames_.Source], ID, errors, chainID))
+		self.dict["ExperimentChains"].append(chainID)
+	
+	def getChains(self):
+		return self.dict["ExperimentChains"]
+	
+	def setMutantIfUnset(self, mutant):
+		if not self.dict[FieldNames_.Mutant]:
+			self.dict[FieldNames_.Mutant] = mutant
+	
+	def addExperimentalScore(self, sourceID, ddG, pdbID, numMeasurements = 1):
+		if pdbID != self.dict[FieldNames_.Structure]:
+			raise colortext.Exception("Adding experimental score related to PDB structure %s to an experiment whose PDB structure should be %s." % (pdbID, self.dict[FieldNames_.Structure]))
+		self.dict["ExperimentScores"].append({
+			FieldNames_.SourceID				: sourceID,
+			FieldNames_.ddG						: ddG,
+			FieldNames_.NumberOfMeasurements	: numMeasurements
+			})
+	
+	def mergeScores(self, maxStdDeviation = 1.0):
+		d = self.dict
+		
+		n = len(d["ExperimentScores"])
+		if n > 1:
+			n = float(n)
+			sum = 0
+			for experimentalResult in d["ExperimentScores"]:
+				if experimentalResult[FieldNames_.NumberOfMeasurements] != 1:
+					raise Exception("Cannot merge scores when individual scores are from more than one measurement. Need to add logic to do proper weighting.")
+				sum += experimentalResult[FieldNames_.ddG]
+			mean = sum / n
+			squaredsum = 0
+			for experimentalResult in d["ExperimentScores"]:
+				diff = (experimentalResult[FieldNames_.ddG] - mean)
+				squaredsum += diff * diff
+			variance = squaredsum / n
+			d[FieldNames_.ScoreVariance] = variance
+			stddev = sqrt(variance)
+			d["StdDeviation"] = stddev 
+			d["WithinStdDeviation"] = stddev <= maxStdDeviation
+		else:
+			d[FieldNames_.ScoreVariance] = 0
+			d["WithinStdDeviation"] = True	
+	
+	def isEligible(self):
+		d = self.dict
+		if d["WithinStdDeviation"] == None:
+			raise Exception("Standard deviation not yet computed.")
+		else:
+			return d["WithinStdDeviation"]
+	
+	def __repr__(self):
+		raise Exception('''This is unlikely to work as I have not tested it in a while. In particular, ddG is not a string anymore.''')
+		d = self.dict
+		str = []
+		str.append("%s: %s" % (FieldNames_.Structure, d[FieldNames_.Structure]))
+		str.append("%ss: %s" % (FieldNames_.Mutant, join(d["Mutants"].keys(), ', ')))
+		str.append("%s: %s" % (FieldNames_.Source, d[FieldNames_.Source]))
+		str.append("Chains: %s" % (join([chain for chain in d["ExperimentChains"]], ", ")))
+		str.append("Mutations:")
+		for mutation in d["Mutations"]:
+			str.append("\t%s%s: %s -> %s" % (mutation[FieldNames_.Chain], mutation[FieldNames_.ResidueID], mutation[FieldNames_.WildTypeAA], mutation[FieldNames_.MutantAA]))
+		str.append("Experimental Scores:")
+		for score in d["ExperimentScores"]:
+			n = score[FieldNames_.NumberOfMeasurements]
+			if n > 1:
+				str.append("\t%s\t%0.2f (%d measurements)" % (score[FieldNames_.SourceID], score[FieldNames_.ddG], score[FieldNames_.NumberOfMeasurements]))
+			else:
+				str.append("\t%s\t%0.2f" % (score[FieldNames_.SourceID], score[FieldNames_.ddG]))
+		return join(str, "\n")
+			
+	def commit(self, testonly = False, pdbPath = None, mutationAllowedToBeStoredDespiteMissingCoordinates = False):
+		'''Commits the set of experiments associated with the mutation to the database. Returns the unique ID of the associated Experiment record.'''
+		d = self.dict
+		failed = False
+		
+		for score in d["ExperimentScores"]:
+			scoresPresent = True
+			results = self.ddGdb.locked_execute("SELECT Source, SourceID FROM Experiment INNER JOIN ExperimentScore ON Experiment.ID=ExperimentID WHERE Source=%s AND SourceID=%s", parameters = (d[FieldNames_.Source], score[FieldNames_.SourceID]))
+			if results:
+				return
+		
+		if len(d["ExperimentScores"]) == 0:
+			raise Exception("This experiment has no associated scores.")
+		
+		if not d[FieldNames_.ScoreVariance]:
+			self.mergeScores()
+		
+		if d["Mutants"]:
+			for mutant in d["Mutants"].keys():
+				MutantStructure = PDBStructure(self.ddGdb, mutant)
+				results = self.ddGdb.execute("SELECT PDB_ID FROM Structure WHERE PDB_ID = %s", parameters = (MutantStructure.dict[self.ddGdb.FlatFieldNames.PDB_ID])) 
+				if not results:
+					MutantStructure.commit()
+		
+		# Sanity check that the chain information is correct (ProTherm has issues)
+		pdbID = d[FieldNames_.Structure] 
+		associatedRecords = sorted([score[FieldNames_.SourceID] for score in d["ExperimentScores"]])
+		associatedRecordsStr = "%s (records: %s)" % (d[FieldNames_.Source], join(map(str, sorted([score[FieldNames_.SourceID] for score in d["ExperimentScores"]])),", "))
+		chainsInPDB = PDBChains.get(d[FieldNames_.Structure])
+		if not chainsInPDB:
+			raise Exception("The chains for %s were not read in properly." % associatedRecordsStr)
+		for c in self.dict["ExperimentChains"]:
+			if not c in chainsInPDB:
+				if len(chainsInPDB) == 1 and len(self.dict["ExperimentChains"]) == 1:
+					colortext.warning("%s: Chain '%s' of %s does not exist in the PDB %s. Chain %s exists. Use that chain instead." % (pdbID, c, associatedRecordsStr, pdbID, chainsInPDB[0]))
+					self.ddGdb.addChainWarning(pdbID, associatedRecords, c)
+					failed = True
+				else:
+					self.ddGdb.addChainError(pdbID, c)
+					raise colortext.Exception("Error committing experiment:\n%s: Chain '%s' of %s does not exist in the PDB %s. Chains %s exist." % (pdbID, c, associatedRecordsStr, pdbID, join(chainsInPDB, ", ")))
+				
+		# Sanity check that the wildtypes of all mutations are correct
+		if pdbPath:
+			WildTypeStructure = PDBStructure(self.ddGdb, pdbID, filepath = os.path.join(pdbPath, "%s.pdb" % pdbID))
+		else:
+			WildTypeStructure = PDBStructure(self.ddGdb, pdbID)
+		contents = WildTypeStructure.getPDBContents()
+		pdb = PDB(contents.split("\n"))
+		
+		badResidues = ["CSE", "MSE"]
+		foundRes = pdb.CheckForPresenceOf(badResidues)
+		if foundRes:
+			colortext.warning("The PDB %s contains residues which could affect computation (%s)." % (pdbID, join(foundRes, ", ")))
+			failed = True
+			for res in foundRes:
+				colortext.warning("The PDB %s contains %s. Check." % (pdbID, res))
+		for mutation in d["Mutations"]:
+			foundMatch = False
+			for resid, wtaa in sorted(pdb.ProperResidueIDToAAMap().iteritems()):
+				c = resid[0]
+				resnum = resid[1:].strip()
+				if mutation[FieldNames_.Chain] == c and mutation[FieldNames_.ResidueID] == resnum and mutation[FieldNames_.WildTypeAA] == wtaa:
+					foundMatch = True
+			if not foundMatch and not(mutationAllowedToBeStoredDespiteMissingCoordinates):
+				#raise colortext.Exception("%s: Could not find a match for mutation %s %s:%s -> %s in %s." % (pdbID, mutation[FieldNames_.Chain], mutation[FieldNames_.ResidueID], mutation[FieldNames_.WildTypeAA], mutation[FieldNames_.MutantAA], associatedRecordsStr ))
+				colortext.error("%s: Could not find a match for mutation %s %s:%s -> %s in %s." % (pdbID, mutation[FieldNames_.Chain], mutation[FieldNames_.ResidueID], mutation[FieldNames_.WildTypeAA], mutation[FieldNames_.MutantAA], associatedRecordsStr ))
+				failed = True
+				
+
+				#raise Exception(colortext.make_error("%s: Could not find a match for mutation %s %s:%s -> %s in %s." % (pdbID, mutation[FieldNames_.Chain], mutation[FieldNames_.ResidueID], mutation[FieldNames_.WildTypeAA], mutation[FieldNames_.MutantAA], associatedRecordsStr )))
+				
+		# To disable adding new experiments:	return here
+		if failed:
+			return False
+		
+		SQL = 'INSERT INTO Experiment (Structure, Source) VALUES (%s, %s);'
+		vals = (d[FieldNames_.Structure], d[FieldNames_.Source]) 
+		#print(SQL % vals)
+		if not testonly:
+			self.ddGdb.locked_execute(SQL, parameters = vals)
+			self.databaseID = self.ddGdb.getLastRowID()
+			ExperimentID = self.databaseID
+			#print(ExperimentID)
+		else:
+			ExperimentID = None 
+			
+		for chain in d["ExperimentChains"]:
+			SQL = 'INSERT INTO ExperimentChain (ExperimentID, Chain) VALUES (%s, %s);'
+			vals = (ExperimentID, chain) 
+			#print(SQL % vals)
+			if not testonly:
+				self.ddGdb.locked_execute(SQL, parameters = vals)
+		
+		interface = d["Interface"]
+		if interface:
+			SQL = 'INSERT INTO ExperimentInterface (ExperimentID, Interface) VALUES (%s, %s);'
+			vals = (ExperimentID, interface) 
+			#print(SQL % vals)
+			if not testonly:
+				self.ddGdb.locked_execute(SQL, parameters = vals)
+		
+		for mutant in d["Mutants"].keys():
+			SQL = 'INSERT INTO ExperimentMutant (ExperimentID, Mutant) VALUES (%s, %s);'
+			vals = (ExperimentID, mutant) 
+			#print(SQL % vals)
+			if not testonly:
+				self.ddGdb.locked_execute(SQL, parameters = vals)
+		
+		for mutation in d["Mutations"]:
+			SQL = 'INSERT INTO ExperimentMutation (ExperimentID, Chain, ResidueID, WildTypeAA, MutantAA) VALUES (%s, %s, %s, %s, %s);'
+			vals = (ExperimentID, mutation[FieldNames_.Chain], mutation[FieldNames_.ResidueID], mutation[FieldNames_.WildTypeAA], mutation[FieldNames_.MutantAA]) 
+			#print(SQL % vals)
+			if not testonly:
+				self.ddGdb.locked_execute(SQL, parameters = vals)
+			
+		for score in d["ExperimentScores"]:
+			SQL = 'INSERT INTO ExperimentScore (ExperimentID, SourceID, ddG, NumberOfMeasurements) VALUES (%s, %s, %s, %s);'
+			vals = (ExperimentID, score[FieldNames_.SourceID], score[FieldNames_.ddG], score[FieldNames_.NumberOfMeasurements]) 
+			#print(SQL % vals)
+			if not testonly:
+				self.ddGdb.locked_execute(SQL, parameters = vals)
+		
+		if not testonly:
+			return self.databaseID
+		else:
+			return None
 		
