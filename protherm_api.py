@@ -275,59 +275,6 @@ MethodMapping = {
 # if an insertion code is parsed.
 iCodeRecords = [5438, 5439, 5440, 5441, 8060, 13083, 13084]
 
-# NOTE: THESE ARE PATCHES FOR MISSING DATA IN ProTherm
-# This is used to print out information to the admin on what needs patching
-patchfields = {
-	"MUTATED_CHAIN" : ("PDB_wild", "MUTATION"), #"%(PDB_wild)s-%(MUTATION)s",
-	"LENGTH" 		: ("PDB_wild"),
-	"PDB_wild" 		: ("SWISSPROT_ID"),
-}
-	
-patch = {
-	#2396 : {'PDB_wild' : None}, # -> 2405. P08505 No related PDB entry. 
-	#2397 : {'PDB_wild' : None}, #P08505
-	#2398 : {'PDB_wild' : None}, #P08505
-	#2400 : {'PDB_wild' : None}, #P08505
-	#2401 : {'PDB_wild' : None}, #P08505
-	#2403 : {'PDB_wild' : None}, #P08505
-	#2404 : {'PDB_wild' : None}, #P08505
-	#2405 : {'PDB_wild' : None}, #P08505
-	#4216 : {'PDB_wild' : None}, #P00912 No related PDB entry.
-	#14229 : {'PDB_wild' : None}, # -> 14233. P08821 No related PDB entry.
-	#14230 : {'PDB_wild' : None}, #P08821
-	#14231 : {'PDB_wild' : None}, #P08821
-	#14232 : {'PDB_wild' : None}, #P08821
-	#14233 : {'PDB_wild' : None}, #P08821
-	14978 : {'LENGTH' : 238}, #1CHK
-	14979 : {'LENGTH' : 238}, #1CHK
-	14980 : {'LENGTH' : 238}, #1CHK
-	14981 : {'LENGTH' : 238}, #1CHK
-	14987 : {'LENGTH' : 238}, #1CHK
-	14988 : {'LENGTH' : 238}, #1CHK
-	14989 : {'LENGTH' : 238}, #1CHK
-	14990 : {'LENGTH' : 238}, #1CHK
-	14996 : {'LENGTH' : 238}, #1CHK
-	14997 : {'LENGTH' : 238}, #1CHK
-	14998 : {'LENGTH' : 238}, #1CHK
-	14999 : {'LENGTH' : 238}, #1CHK
-	16597 : {'LENGTH' : 435}, #1KFW
-	16598 : {'LENGTH' : 435}, #1KFW
-	16599 : {'LENGTH' : 435}, #1KFW
-	16600 : {'LENGTH' : 435}, #1KFW
-	21040 : {'MUTATED_CHAIN' : None},# -> 21332. 1CSP Cannot determine what the mutation is
-	21041 : {'MUTATED_CHAIN' : None},# 1CSP
-	21097 : {'MUTATED_CHAIN' : None},# 1CSP
-	21098 : {'MUTATED_CHAIN' : None},# 1CSP
-	21157 : {'MUTATED_CHAIN' : None},# 1CSP
-	21158 : {'MUTATED_CHAIN' : None},# 1CSP
-	21215 : {'MUTATED_CHAIN' : None},# 1CSP
-	21216 : {'MUTATED_CHAIN' : None},# 1CSP
-	21273 : {'MUTATED_CHAIN' : None},# 1CSP
-	21274 : {'MUTATED_CHAIN' : None},# 1CSP
-	21331 : {'MUTATED_CHAIN' : None},# 1CSP
-	21332 : {'MUTATED_CHAIN' : None},# 1CSP
-}
-
 # These PDB files have exactly one chain but ProTherm lists the wrong chain e.g. '-' rather than 'A'
 singleChainPDBs = {
 	'1A23' : {'MUTATED_CHAIN' : 'A'},
@@ -745,539 +692,367 @@ PseudoHumanLysozymeCases.extend(range(16094, 16095 + 1)) # 3SS thermodynamic par
 PseudoHumanLysozymeCases.extend(range(16096, 16097 + 1)) # 3SS thermodynamic parameters from Table III
 
 # In these cases, the data in ProTherm is incorrect according to the publication
-OverriddenEntries = {
-	# ** These cases have ambiguous chain entries **
-	# 1WQ5. Two identical chains A, B. Only B has the information for residue 57.
-	963   : {'MUTATED_CHAIN' : 'B', 'MUTATION' : 'P 1057 A', 'PDB' : '1WQ5'},
-	964   : {'MUTATED_CHAIN' : 'B', 'MUTATION' : 'P 1057 A', 'PDB' : '1WQ5'},
-	2287  : {'MUTATED_CHAIN' : 'B', 'MUTATION' : 'P 1057 A', 'PDB' : '1WQ5'},
-	
-	# 1TUP. Three identical chains A, B, and C (and two DNA chains E and F) but '-' specified in ProTherm.
-	3047  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
-	3048  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
-	3049  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
-	3050  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
-	3051  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'},
-	
-	# 1G6N. Two identical chains A and B but '-' specified in ProTherm.
-	3469  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1G6N'}, # 
-	3470  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1G6N'},
-	
-	# 1AAR. Two identical chains A and B but '-' specified in ProTherm.
-	2418  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	5979  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	5980  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	5981  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	5982  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	5983  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	5984  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	5985  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	5986  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	5987  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'},
-	
-	# 1FC1. Two identical chains A and B but '-' specified in ProTherm.
-	3629  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3630  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3631  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3632  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3633  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3634  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3635  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3636  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3637  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3638  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3639  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3640  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3641  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3642  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3643  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	3644  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'},
-	
-	# 1LRP. Three identical chains A, B, and C but '-' specified in ProTherm
-	3604  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	3605  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	3606  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	3607  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	3608  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	3609  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	3610  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	3611  : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13412 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13413 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13414 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13415 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13416 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13417 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13418 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13419 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13420 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13985 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13986 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	13421 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	14253 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	14254 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	14255 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'},
-	
-	# 2AFG. Four identical chains A, B, C, and D but '-' specified in ProTherm
-	8302  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	8303  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	8304  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	8305  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	8306  : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	14474 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	14475 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	14476 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	24298 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'}, # As above but ProTherm has no entry at all
-	24299 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	24300 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	24301 : {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'},
-	
-	# 1N0J. Two identical chains A and B but '-' specified in ProTherm
-	14153 : {'MUTATED_CHAIN' : 'A', 'PDB' : '1N0J'},
-	
-	# 1OTR. Two distinct chains. There's no mutation here so there's no harm in specifying B as the chain.
-	17394 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'},#
-	17395 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'},# 
-	17396 : {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'},# 
-	
-	# PMID:15449934. Two distinct chains. All mutations in this publication are on the I chain (Eglin c).
-	18378 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
-	18379 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
-	18380 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
-	18381 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
-	18382 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
-	18383 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
-	18384 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
-	18385 : {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'},
-	
-	# ** These cases have bad PDB IDs for the wild-type structure **
-	# PMID:12487987. This publication concerns MYL Arc repressor, not 1ARR. Only positions 31, 36, and 40 differ. 
-	17567 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17568 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17569 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17570 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17571 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17572 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17573 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17574 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17575 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17576 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17577 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17578 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17579 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17580 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17581 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17582 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
-	17583 : {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'},
+OverriddenEntries = []
 
-	# These cases seem to have bad PDB IDs
-	# PMID: 12911302. Records 16576-16578.
-	# UniProt AC P83876 relates to 1PQN, 1QGV, and 1SYX. 
-	# 1PQN is the reduced form, 127-residue hDim1_{1-128}, deposited from this publication.
-	# 1QGV is the full-length, 142-residue hDim1 protein.
-	# R86A/K88A seems to be a mutation on the reduced form, 1PQN, rather than the full form, 1QGV
-	# Also, given "we report the solution structure for the reduced dominant negative form of Dim1 and compare it to the crystal structure of the oxidized full length Dim1 protein"
-	16577  : {'PDB_wild'	: '1PQN', 'LENGTH' : 127, 'PDB' : '1QGV'},
-	16578  : {'PDB_wild'	: '1PQN', 'LENGTH' : 127, 'PDB' : '1QGV'},
+# Missing PDB lengths.
+for i in range(19104, 19151 + 1):
+	OverriddenEntries.append((i, {'LENGTH' : 71, 'PDB' : '1UZC'}))
+for i in range(14973, 14999 + 1) + range(23725, 23758 + 1) + range(23764, 23791 + 1):
+	OverriddenEntries.append((i, {'LENGTH' : 238, 'PDB' : '1CHK'}))
+for i in range(16592, 16600 + 1):
+	OverriddenEntries.append((i, {'LENGTH' : 435, 'PDB' : '1KFW'})) 
+for i in range(16662, 16667 + 1):
+	OverriddenEntries.append((i, {'LENGTH' : 558, 'PDB' : '1W99'})) 
+for i in range(16905, 16908 + 1) + range(22884, 22894 + 1):
+	OverriddenEntries.append((i, {'LENGTH' : 178,	'PDB' : '1BNL'})) 
+# ** These cases have missing length for the wild-type structure, Onconase, Rana pipiens (P22069). It has been solved by X-Ray as 1ONC **
+# PMID: 10913282.
+for i in range(8561, 8600 + 1):
+	OverriddenEntries.append((i, {'LENGTH' : 104,	'PDB' : '1ONC'}))
+# PMID: 16533040.
+for i in range(19905, 19913 + 1):
+	OverriddenEntries.append((i, {'LENGTH' : 104,	'PDB' : '1ONC'})) 
+OverriddenEntries.append((19914, {'LENGTH' : 104,	'ASA' : None, 'PDB' : '1ONC'})) # Bad ASA record 
+
+# ** These cases have ambiguous chain entries **
+# 1WQ5. Two identical chains A, B. Only B has the information for residue 57.
+# In these cases, the structural information needed for the mutations (residues A57, A62) is missing in the PDB file
+# Some of the information is present in chain B (A57's corresponding residue) but I decided against remapping the residues. 
+for i in [942, 963, 964, 2287, 13451]:
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'B', 'MUTATION' : 'P 1057 A', 'PDB' : '1WQ5'}))
+
+# 1TUP. Three identical chains A, B, and C (and two DNA chains E and F) but '-' specified in ProTherm.
+for i in range(3047, 3051 + 1):
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A', 'PDB' : '1TUP'})) 
+
+# 1G6N. Two identical chains A and B but '-' specified in ProTherm.
+for i in range(3469, 3470 + 1):
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A', 'PDB' : '1G6N'})) 
+
+# 1AAR. Two identical chains A and B but '-' specified in ProTherm.
+for i in range(5979, 5987 + 1):
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'})) 
+OverriddenEntries.append((2418, {'MUTATED_CHAIN' : 'A', 'PDB' : '1AAR'})) 
 	
-	# ** These cases have missing PDB IDs for the wild-type structure, IL6_MOUSE (P08505). It has been solved by NMR as 2L3Y where the residue IDs are off by 5 from the paper **
-	# PMID:9166791.
-	2395  : {'PDB_wild'	: '2L3Y',	'PDB' : ''},
-	2396  : {'PDB_wild'	: '2L3Y',	'MUTATION' : 'H 36 A', 'PDB' : ''},
-	2397  : {'PDB_wild'	: '2L3Y',	'MUTATION' : 'W 39 A', 'PDB' : ''},
-	2398  : {'PDB_wild'	: '2L3Y',	'MUTATION' : 'H 36 A, W 39 A', 'PDB' : ''},
-	2399  : {'PDB_wild'	: '2L3Y',	'PDB' : ''},
-	2400  : {'PDB_wild'	: '2L3Y',	'MUTATION' : 'W 39 A', 'PDB' : ''},
-	2401  : {'PDB_wild'	: '2L3Y',	'MUTATION' : 'H 36 A, W 39 A', 'PDB' : ''},
-	2402  : {'PDB_wild'	: '2L3Y',	'PDB' : ''},
-	2403  : {'PDB_wild'	: '2L3Y',	'MUTATION' : 'H 36 A', 'PDB' : ''},
-	2404  : {'PDB_wild'	: '2L3Y',	'MUTATION' : 'W 39 A', 'PDB' : ''},
-	2405  : {'PDB_wild'	: '2L3Y',	'MUTATION' : 'H 36 A, W 39 A', 'PDB' : ''},
+# 1FC1. Two identical chains A and B but '-' specified in ProTherm.
+for i in range(3629, 3644 + 1):
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A', 'PDB' : '1FC1'})) 
+	
+# 1LRP. Three identical chains A, B, and C but '-' specified in ProTherm. Todo: more to specify here.
+for i in range(209, 212 + 1) + range(214, 215 + 1) + range(791, 793 + 1) + range(795, 801 + 1) + range(2170, 2190 + 1) + range(3604, 3611 + 1) + range(13412, 13420 + 1):
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'})) 
+for i in [13421, 13985, 13986, 14253, 14254, 14255]:
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A', 'PDB' : '1LRP'})) 
 
-	# ** These cases have missing PDB IDs and length for the wild-type structure, Sso7d (synthetic). A PDB file 1BNZ has the same sequence and has been solved by X-Ray. **
-	# PMID:11124040.
-	10298  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10299  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10300  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10301  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10302  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10303  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10304  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10305  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10306  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10307  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10308  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10309  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10310  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10311  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10312  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10313  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10314  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10315  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10316  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10317  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10318  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10319  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10320  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10321  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	10322  : {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
+# 2AFG. Four identical chains A, B, C, and D but '-' specified in ProTherm
+for i in range(8302, 8306 + 1) + range(14474, 14476 + 1) + range(24298, 24301 + 1): 
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A', 'PDB' : '2AFG'})) 
 
-	# PMID:12069590. Records 15409-15451
-	# These cases have missing lengths, PDB IDs, and chain for the wild-type structure, Rd-apocytochrome b562 (synthetic) ("Rd"=redesigned).
-	# This protein seems to match PDB file 1YYJ, the NMR solution structure of a redesigned apocytochrome b562:Rd-apocyt b562, which shares two authors with the publication.
-	# However, the mutations in Table 1 the reference suggest positions 16 and 41 are alanine whereas the PDB lists valine and glutamine respectively.
-	# However, the *text* of the reference states that valine is at position 16 and talks about the quintuple mutant (M7W/K98I/N99R/H102N/R106G) of Apocytochrome b562.
-	# Apocytochrome b562 has been solved by NMR as 1APC and 1YYJ has the same sequence as the quintuple mutant. All mutations in the publication match the wildtype residues bar A16 and A41 as mentioned above.
-	# However, 1APC has has an R at position 98, not a K as in the wildtype of the quintuple mutant.
-	# Apocytochrome b562 been solved by NMR as 1APC and 1YYJ has the same sequence as the quintuple mutant. All mutations in the publication match the wildtype residues bar A16 and A41 as mentioned above.
-	# I am using 1YYJ for all records except mutations from A16 and A41.
-	#15409  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15410  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15411  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15412  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15413  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
+# 1N0J. Two identical chains A and B but '-' specified in ProTherm
+for i in range(14153, 14153 + 1):
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A', 'PDB' : '1N0J'})) 
+	
+# 1OTR. Two distinct chains. There's no mutation here so there's no harm in specifying B as the chain.
+for i in range(17394, 17396 + 1):
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'B', 'PDB' : '1OTR'}))
+	 
+# PMID:15449934. Two distinct chains. All mutations in this publication are on the I chain (Eglin c).
+for i in range(18378, 18385 + 1):
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'I', 'PDB' : '1ACB'}))
+	
+# ** These cases have bad PDB IDs for the wild-type structure **
+# PMID:12487987. This publication concerns MYL Arc repressor, not 1ARR. Only positions 31, 36, and 40 differ. 
+for i in range(17567, 17583 + 1):
+	OverriddenEntries.append((i, {'PDB_wild'	: '1MYL',	'PDB' : '1ARR'})) 
+
+# These cases seem to have bad PDB IDs
+# PMID: 12911302. Records 16576-16578.
+# UniProt AC P83876 relates to 1PQN, 1QGV, and 1SYX. 
+# 1PQN is the reduced form, 127-residue hDim1_{1-128}, deposited from this publication.
+# 1QGV is the full-length, 142-residue hDim1 protein.
+# R86A/K88A seems to be a mutation on the reduced form, 1PQN, rather than the full form, 1QGV
+# Also, given "we report the solution structure for the reduced dominant negative form of Dim1 and compare it to the crystal structure of the oxidized full length Dim1 protein"
+for i in range(16577, 16578 + 1):
+	OverriddenEntries.append((i, {'PDB_wild'	: '1PQN', 'LENGTH' : 127, 'PDB' : '1QGV'})) 
+
+# ** These cases have missing PDB IDs for the wild-type structure, IL6_MOUSE (P08505). It has been solved by NMR as 2L3Y where the residue IDs are off by 5 from the paper **
+# PMID:9166791.
+OverriddenEntries.extend([
+	(2395  , {'PDB_wild'	: '2L3Y',	'PDB' : ''}),
+	(2396  , {'PDB_wild'	: '2L3Y',	'MUTATION' : 'H 36 A', 'PDB' : ''}),
+	(2397  , {'PDB_wild'	: '2L3Y',	'MUTATION' : 'W 39 A', 'PDB' : ''}),
+	(2398  , {'PDB_wild'	: '2L3Y',	'MUTATION' : 'H 36 A, W 39 A', 'PDB' : ''}),
+	(2399  , {'PDB_wild'	: '2L3Y',	'PDB' : ''}),
+	(2400  , {'PDB_wild'	: '2L3Y',	'MUTATION' : 'W 39 A', 'PDB' : ''}),
+	(2401  , {'PDB_wild'	: '2L3Y',	'MUTATION' : 'H 36 A, W 39 A', 'PDB' : ''}),
+	(2402  , {'PDB_wild'	: '2L3Y',	'PDB' : ''}),
+	(2403  , {'PDB_wild'	: '2L3Y',	'MUTATION' : 'H 36 A', 'PDB' : ''}),
+	(2404  , {'PDB_wild'	: '2L3Y',	'MUTATION' : 'W 39 A', 'PDB' : ''}),
+	(2405  , {'PDB_wild'	: '2L3Y',	'MUTATION' : 'H 36 A, W 39 A', 'PDB' : ''}),
+])
+
+# ** These cases have missing PDB IDs and length for the wild-type structure, Sso7d (synthetic). A PDB file 1BNZ has the same sequence and has been solved by X-Ray. **
+# PMID:11124040.
+for i in range(10298, 10322 + 1):
+	OverriddenEntries.append((i, {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''}))
+
+# PMID: 12144791. Records 15461 - 15500
+# These cases have missing lengths, PDB IDs, and chains for the wild-type structures, HPr from Escherichia coli and Bacillus subtilis.
+# "[in computer simulations] we used the pdb files 2HPR for bsHPr [Bacillus subtilis] and either 1POH or 1OPD for ecHPr [Escherichia coli]"
+# 2HPR has G49 and length 87, 1POH and 1OPD have K49 and length 85. 1POH and 1OPD are not homologous - 1POH is the wildtype and has Q3 and S46 whereas 1OPD is a mutant with Q3E and S46D
+# 2HPR is not the wildtype - it contains two mutations, M51V and S83C. 2HID with length 87 seems better, only having M51V. One chain of 3OQN has the wildtype sequence but is a six-chain (four unique chains) structure.
+# M51V in 2HID "does not affect the function of HPr in vivo" [PMID:9336834]
+# However, I chose to omit the records with bsHPr since 2HID is not the wildtype.
+for i in range(15461, 15479 + 1):
+	OverriddenEntries.append((i, {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''})) 
+#for i in range(15480, 15486 + 1):
+#	OverriddenEntries.append((i, {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''})) 
+for i in range(15487, 15496 + 1):
+	OverriddenEntries.append((i, {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''})) 
+#for i in range(15497, 15500 + 1):
+#	OverriddenEntries.append((i, {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''})) 
+	
+# PMID: 14756573. Records 16836-16851
+# As with PMID:12144791 above, I chose to omit the records with bsHPr since I could not find a solved wildtype structure.
+#for i in range(16836, 16851 + 1):
+#	OverriddenEntries.append((i, {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''})) 
+	
+# PMID:12069590. Records 15409-15451
+# These cases have missing lengths, PDB IDs, and chain for the wild-type structure, Rd-apocytochrome b562 (synthetic) ("Rd"=redesigned).
+# This protein seems to match PDB file 1YYJ, the NMR solution structure of a redesigned apocytochrome b562:Rd-apocyt b562, which shares two authors with the publication.
+# However, the mutations in Table 1 the reference suggest positions 16 and 41 are alanine whereas the PDB lists valine and glutamine respectively.
+# However, the *text* of the reference states that valine is at position 16 and talks about the quintuple mutant (M7W/K98I/N99R/H102N/R106G) of Apocytochrome b562.
+# Apocytochrome b562 has been solved by NMR as 1APC and 1YYJ has the same sequence as the quintuple mutant. All mutations in the publication match the wildtype residues bar A16 and A41 as mentioned above.
+# However, 1APC has has an R at position 98, not a K as in the wildtype of the quintuple mutant.
+# Apocytochrome b562 been solved by NMR as 1APC and 1YYJ has the same sequence as the quintuple mutant. All mutations in the publication match the wildtype residues bar A16 and A41 as mentioned above.
+# I am using 1YYJ for all records except mutations from A16 and A41.
+#for i in range(15409, 15413 + 1):
+#	OverriddenEntries.append((i, {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''})) 
 	# A16 # 15414  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15415  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15416  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15417  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15418  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15419  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15420  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15421  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15422  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15423  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15424  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15425  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15426  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15427  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15428  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
+#for i in range(15415, 15428 + 1):
+#	OverriddenEntries.append((i, {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''})) 
 	# A41 # 15429  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15430  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15431  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15432  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15433  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15434  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15435  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15436  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15437  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15438  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15439  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15440  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15441  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15442  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15443  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15444  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15445  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15446  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15447  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15448  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15449  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15450  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#15451  : {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
+#for i in range(15430, 15451 + 1):
+#	OverriddenEntries.append((i, {'PDB_wild'	: '1YYJ', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''})) 
 	
-	# PMID: 15533036. Records 18311-18324. See above, PMID:12069590, reference 11 in the paper.
-	# "Protein expression and purification were carried out as described previously (11)" so 1YYJ may be correct again.
-	# 4GD7 is the quintuple mutant (W7D/L10G/L14G/V16G/I17G) described in PMID:12369818 which seems to be solved in 1YZC.
-	# The quintuple mutant (W7D/L10G/L14G/V16G/I17G) 1YZA of 1YYJ (itself a mutant of 1APC) may be the correct PDB ID here;
-	# the PDB entry for 1YZA links to a publication discussing 4GD7. 
-	#18311  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18312  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18313  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18314  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18315  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18316  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18317  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18318  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18319  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18320  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18321  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18322  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18323  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	#18324  : {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''},
-	
-	# PMID: 12144791. Records 15461 - 15500
-	# These cases have missing lengths, PDB IDs, and chains for the wild-type structures, HPr from Escherichia coli and Bacillus subtilis.
-	# "[in computer simulations] we used the pdb files 2HPR for bsHPr [Bacillus subtilis] and either 1POH or 1OPD for ecHPr [Escherichia coli]"
-	# 2HPR has G49 and length 87, 1POH and 1OPD have K49 and length 85. 1POH and 1OPD are not homologous - 1POH is the wildtype and has Q3 and S46 whereas 1OPD is a mutant with Q3E and S46D
-	# 2HPR is not the wildtype - it contains two mutations, M51V and S83C. 2HID with length 87 seems better, only having M51V. One chain of 3OQN has the wildtype sequence but is a six-chain (four unique chains) structure.
-	# M51V in 2HID "does not affect the function of HPr in vivo" [PMID:9336834]
-	# However, I chose to omit the records with bsHPr since 2HID is not the wildtype.
-	15461  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15462  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15463  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15464  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15465  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15466  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15467  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15468  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15469  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15470  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15471  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15472  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15473  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15474  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15475  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15476  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15477  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15478  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15479  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	#15480  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	#15481  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	#15482  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	#15483  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	#15484  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	#15485  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	#15486  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	15487  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15488  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15489  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15490  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15491  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15492  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15493  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15494  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15495  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	15496  : {'PDB_wild'	: '1POH', 'LENGTH' : 85, 'PDB' : ''},
-	#15497  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	#15498  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	#15499  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	#15500  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	
-	# PMID: 14756573. Records 16836-16851
-	# As with PMID:12144791 above, I chose to omit the records with bsHPr since I could not find a solved wildtype structure.
-	#16836-16851  : {'PDB_wild'	: '2HID', 'LENGTH' : 87, 'PDB' : ''},
-	
+# PMID: 15533036. Records 18311-18324. See above, PMID:12069590, reference 11 in the paper.
+# "Protein expression and purification were carried out as described previously (11)" so 1YYJ may be correct again.
+# 4GD7 is the quintuple mutant (W7D/L10G/L14G/V16G/I17G) described in PMID:12369818 which seems to be solved in 1YZC.
+# The quintuple mutant (W7D/L10G/L14G/V16G/I17G) 1YZA of 1YYJ (itself a mutant of 1APC) may be the correct PDB ID here;
+# the PDB entry for 1YZA links to a publication discussing 4GD7. 
+#for i in range(18311, 18324 + 1):
+#	OverriddenEntries.append((i, {'PDB_wild'	: '1YZA', 'LENGTH' : 106, 'MUTATED_CHAIN' : 'A', 'PDB' : ''})) 
 
-	# PMID:12135359. Records 15516-15518
-	# Thioredoxin (Human-Escherichia coli chimera), This was solved using NMR by the authors as 1M7T although the PDB ID was missing ('XXXX') in the publication.
-	15516  : {'PDB_wild'	: '1M7T', 'LENGTH' : 107, 'PDB' : ''},
-	15517  : {'PDB_wild'	: '1M7T', 'LENGTH' : 107, 'PDB' : ''},
-	15518  : {'PDB_wild'	: '1M7T', 'LENGTH' : 107, 'PDB' : ''},
+# PMID:12135359. Records 15516-15518
+# Thioredoxin (Human-Escherichia coli chimera), This was solved using NMR by the authors as 1M7T although the PDB ID was missing ('XXXX') in the publication.
+for i in range(15516, 15518 + 1):
+	OverriddenEntries.append((i, {'PDB_wild'	: '1M7T', 'LENGTH' : 107, 'PDB' : ''})) 
 
-	# PMID: 15769475.
-	# These cases have missing lengths, PDB IDs, and chain for the wild-type structure, E3BD*.
-	# E3BD* is a pseudo-wildtype of E3BD with the F166W mutation. The text gives the PDB ID of E3BD* as 1W4E.
-	# The PDB sequence matches the paper (and is from the same publication). Position 107 is valine in the PDB file and alanine in the publication sequence but in the main text is referred to as valine.
-	18430  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18431  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18432  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18433  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18434  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18435  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18436  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18437  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18438  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18439  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18440  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18441  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18442  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18443  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18444  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18445  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18446  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18447  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18448  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18449  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18450  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18451  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18452  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18453  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18454  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18455  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18456  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18457  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18458  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18459  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18460  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18461  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18462  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18463  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18464  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18465  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18466  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18467  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18468  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18469  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18470  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18471  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18472  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18473  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18474  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18475  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18476  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18477  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18478  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18479  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18480  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18481  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18482  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18483  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18484  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18485  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18486  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18487  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18488  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18489  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18490  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18491  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	18492  : {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''},
-	
-	# PMID: 15709759
-	# These cases have missing lengths, PDB IDs, and chain for the wild-type structure, APRin.
-	# The paper (2005) gives 1JIW (2001, X-ray) as the PDB ID for the APR-APRin complex. In 2008, the structure for APRin on its own was solved by NMR and published as 2RN4.
-	# I specify 1JIW here as it is solved by X-ray but we should mark 2RN4 as a "homolog" in the database.
-	18674  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18675  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18676  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18677  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18678  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18679  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18680  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18681  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18682  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18683  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18684  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18685  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	18686  : {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''},
-	
-	# ** These cases have missing length and PDB IDs for the wild-type structures, Bacillus stearothermophilus (BstHPr) and Bacillus subtilis (BsHPr). PDB IDs are given for the former in the reference. 
-	# PMID:15713472.
-	18731  : {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB' : ''},
-	18732  : {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB_mutant' : '1Y51', 'PDB' : ''},
-	#18733 - missing wildtype for Bacillus subtilis (BsHPr). 3OQN may be appropriate. See above.
-	18734  : {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB' : ''},
-	18735  : {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB_mutant' : '1Y51', 'PDB' : ''},
-	18736  : {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB_mutant' : '1Y51', 'PDB' : ''},
-	#18737 - mBacillus subtilis (BsHPr)
-	
-	# ** These cases have missing length for the wild-type structure
-	# PMID:14529489.
-	16662  : {'LENGTH' : 558,	'PDB' : '1W99'},
-	16663  : {'LENGTH' : 558,	'PDB' : '1W99'},
-	16664  : {'LENGTH' : 558,	'PDB' : '1W99'},
-	16665  : {'LENGTH' : 558,	'PDB' : '1W99'},
-	16666  : {'LENGTH' : 558,	'PDB' : '1W99'},
-	16667  : {'LENGTH' : 558,	'PDB' : '1W99'},
-		
-	# ** These cases have bad mutations **
-	6367  : {'MUTATION' : 'Y 68 F', 'PDB' : '1TTG'}, # Removing bad PDB residue ID corrections (meant for 1TEN)
-	2554  : {'MUTATION' : 'A 18 G', 'PDB' : '2WSY'},
-	11869 : {'MUTATION' : 'P 76 L, K 72 M', 'PDB' : '1YCC'}, # Table 3 describes 3R22 as a double mutant (also noted in the footnote of Table 4)
+# PMID: 15769475.
+# These cases have missing lengths, PDB IDs, and chain for the wild-type structure, E3BD*.
+# E3BD* is a pseudo-wildtype of E3BD with the F166W mutation. The text gives the PDB ID of E3BD* as 1W4E.
+# The PDB sequence matches the paper (and is from the same publication). Position 107 is valine in the PDB file and alanine in the publication sequence but in the main text is referred to as valine.
+for i in range(18430, 18492 + 1):
+	OverriddenEntries.append((i, {'PDB_wild'	: '1W4E', 'LENGTH' : 47, 'PDB' : ''})) 
 
-	# PMID:10956017
-	14434 : {'MUTATION' : 'I 30 V', 'SEC.STR.' : 'Coil', 'PDB' : '1OTR'}, # Typo. I 30 V, I 36 L is the next mutation in the table. 
-	14438 : {'MUTATION' : 'I 30 F', 'SEC.STR.' : 'Coil', 'PDB' : '1OTR'}, # Typo. I 30 F, I 36 L is the next mutation in the table. 
-	
-	# PMID:16503630
-	19894 : {'MUTATION' : 'Q 19 E, Q 23 K, K 32 E, E 39 K, Q 60 K, S 65 K, E 69 K (PDB: Q28A E, Q 32A K, K 39A E, E 50A K, Q 71A K, S 76A K, E 80A K)', 'PDB' : '1AYE'}, # Typo: K 41A E given instead of K 39A E    
-	19897 : {'MUTATION' : 'Q 7 K, L 19 K, D 49 K, T 89 K (PDB: Q 808 K, L 820 K, D 850 K, T 890 K)', 'PDB' : '1TEN'}, # Missing PDB mapping.
-	19898 : {'MUTATION' : 'Q 7 K, L 19 K, D 49 K, T 89 K (PDB: Q 808 K, L 820 K, D 850 K, T 890 K)', 'PDB' : '1TEN'}, # Missing PDB mapping.
-	
-	# PMID:19695265
-	24290 : {'MUTATION' : 'V 31 I', 'PDB' : '2AFG'}, # Typo. Val31 is described as mutated to Ile in both Table 2 and throughout the text.
-	24296 : {'MUTATION' : 'K 12 V, C 83 T, C 117 V', 'PDB' : '2AFG'}, # Typo. L 12 V was entered instead of K 12 V - see Table 2.
-	
-	# PMID:8142362. Entries 4489-4492 use the proper PDB numbering. Entries 14261-14264 do not.
-	14261 : {'MUTATION' : 'R 53 E',				'PDB' : '1C5G'},
-	14262 : {'MUTATION' : 'E 373 R',			'PDB' : '1C5G'},
-	14263 : {'MUTATION' : 'E 373 P',			'PDB' : '1C5G'},
-	14264 : {'MUTATION' : 'R 53 E, E 373 R',	'PDB' : '1C5G'},
-	
-	# ** These cases do not have normalized experimental conditions for parsing by my script. **
-	11864 : {'dCp' 			 : None,'PDB' : '2FHA'},
-	11865 : {'dCp' 			 : None,'PDB' : '2FHA'},
-	11866 : {'dCp' 			 : None,'PDB' : '2FHA'},
-	11867 : {'dCp' 			 : None,'PDB' : '2FHA'},
-	24388 : {'dCp' 			 : None,'PDB' : ''},
-	
-	16900 : {'m'			 : '6.86 kJ/mol/M', 'PDB' : '1C9O'},
-	
-	16093  : {'T'			 : '298 K', 	'PDB' : '2AFG'}, # Adding a space so the regex passes
+# PMID: 15709759
+# These cases have missing lengths, PDB IDs, and chain for the wild-type structure, APRin.
+# The paper (2005) gives 1JIW (2001, X-ray) as the PDB ID for the APR-APRin complex. In 2008, the structure for APRin on its own was solved by NMR and published as 2RN4.
+# I specify 1JIW here as it is solved by X-ray but we should mark 2RN4 as a "homolog" in the database.
+for i in range(18674, 18686 + 1):
+	OverriddenEntries.append((i, {'PDB_wild'	: '1JIW', 'LENGTH' : 106, 'PDB' : ''})) 
 
-	889    : {'Tm'			 : '53.4 C',	'PDB' : '1ARR'},
-	890    : {'Tm'			 : '67.3 C',	'PDB' : '1ARR'},
-	5303   : {'Tm'			 : '<= 10.0 C',	'PDB' : '1YCC'},
-	23589  : {'Tm'			 : '> 80 C', 	'PDB' : ''},
-	25269  : {'Tm'			 : '52-54 C',	'PDB' : ''},
+# ** These cases have missing length and PDB IDs for the wild-type structures, Bacillus stearothermophilus (BstHPr) and Bacillus subtilis (BsHPr). PDB IDs are given for the former in the reference. 
+# PMID:15713472.
+OverriddenEntries.append((18731  , {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB' : ''}))
+OverriddenEntries.append((18732  , {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB_mutant' : '1Y51', 'PDB' : ''}))
+#18733 - missing wildtype for Bacillus subtilis (BsHPr). 3OQN may be appropriate. See above.
+OverriddenEntries.append((18734  , {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB' : ''}))
+OverriddenEntries.append((18735  , {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB_mutant' : '1Y51', 'PDB' : ''}))
+OverriddenEntries.append((18736  , {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB_mutant' : '1Y51', 'PDB' : ''}))
+#18737 - mBacillus subtilis (BsHPr)
+
+# ** These cases have bad mutations **
+OverriddenEntries.extend([
+	(6367  , {'MUTATION' : 'Y 68 F', 'PDB' : '1TTG'}), # Removing bad PDB residue ID corrections (meant for 1TEN)
+	(2554  , {'MUTATION' : 'A 18 G', 'PDB' : '2WSY'}),
+	(11869 , {'MUTATION' : 'P 76 L, K 72 M', 'PDB' : '1YCC'}), # Table 3 describes 3R22 as a double mutant (also noted in the footnote of Table 4)
+])
+
+# PMID:10956017
+OverriddenEntries.extend([
+	(14434 , {'MUTATION' : 'I 30 V', 'SEC.STR.' : 'Coil', 'PDB' : '1OTR'}), # Typo. I 30 V, I 36 L is the next mutation in the table. 
+	(14438 , {'MUTATION' : 'I 30 F', 'SEC.STR.' : 'Coil', 'PDB' : '1OTR'}), # Typo. I 30 F, I 36 L is the next mutation in the table. 
+])
 	
-	17877  : {'dTm'			 : None,	'PDB' : ''},
-	23676  : {'dTm'			 : None,	'PDB' : ''},
+# PMID:16503630
+OverriddenEntries.extend([
+	(19894 , {'MUTATION' : 'Q 19 E, Q 23 K, K 32 E, E 39 K, Q 60 K, S 65 K, E 69 K (PDB: Q28A E, Q 32A K, K 39A E, E 50A K, Q 71A K, S 76A K, E 80A K)', 'PDB' : '1AYE'}), # Typo: K 41A E given instead of K 39A E    
+	(19897 , {'MUTATION' : 'Q 7 K, L 19 K, D 49 K, T 89 K (PDB: Q 808 K, L 820 K, D 850 K, T 890 K)', 'PDB' : '1TEN'}), # Missing PDB mapping.
+	(19898 , {'MUTATION' : 'Q 7 K, L 19 K, D 49 K, T 89 K (PDB: Q 808 K, L 820 K, D 850 K, T 890 K)', 'PDB' : '1TEN'}), # Missing PDB mapping.
+])
 	
-	14592  : {'ASA'			 : '114.3', 'PDB' : '1AM7'},
+# PMID:19695265
+OverriddenEntries.extend([
+	(24290 , {'MUTATION' : 'V 31 I', 'PDB' : '2AFG'}), # Typo. Val31 is described as mutated to Ile in both Table 2 and throughout the text.
+	(24296 , {'MUTATION' : 'K 12 V, C 83 T, C 117 V', 'PDB' : '2AFG'}), # Typo. L 12 V was entered instead of K 12 V - see Table 2.
+])
 	
-	# PMID: 15515183. Bad PDB ID and DDG calculation. The DDGs in the paper are given relative to alanine at position 33, not the wildtype lysine.
-	# 1UBQ also seems a better PDB ID for ubiquitin as it is an X-ray solution with just the ubiquitin chain.
+# PMID:8142362. Entries 4489-4492 use the proper PDB numbering. Entries 14261-14264 do not.
+OverriddenEntries.extend([
+	(14261 , {'MUTATION' : 'R 53 E',				'PDB' : '1C5G'}),
+	(14262 , {'MUTATION' : 'E 373 R',			'PDB' : '1C5G'}),
+	(14263 , {'MUTATION' : 'E 373 P',			'PDB' : '1C5G'}),
+	(14264 , {'MUTATION' : 'R 53 E, E 373 R',	'PDB' : '1C5G'}),
+])
+	
+# ** These cases do not have normalized experimental conditions for parsing by my script. **
+OverriddenEntries.extend([
+	(11864 , {'dCp' 			 : None,'PDB' : '2FHA'}),
+	(11865 , {'dCp' 			 : None,'PDB' : '2FHA'}),
+	(11866 , {'dCp' 			 : None,'PDB' : '2FHA'}),
+	(11867 , {'dCp' 			 : None,'PDB' : '2FHA'}),
+	(24388 , {'dCp' 			 : None,'PDB' : ''}),
+])
+	
+OverriddenEntries.extend([
+	(16900  , {'m'			 : '6.86 kJ/mol/M', 'PDB' : '1C9O'}),
+	
+	(16093  , {'T'			 : '298 K', 	'PDB' : '2AFG'}), # Adding a space so the regex passes
+
+	(889    , {'Tm'			 : '53.4 C',	'PDB' : '1ARR'}),
+	(890    , {'Tm'			 : '67.3 C',	'PDB' : '1ARR'}),
+	(5303   , {'Tm'			 : '<= 10.0 C',	'PDB' : '1YCC'}),
+	(23589  , {'Tm'			 : '> 80 C', 	'PDB' : ''}),
+	(25269  , {'Tm'			 : '52-54 C',	'PDB' : ''}),
+	
+	(17877  , {'dTm'			 : None,	'PDB' : ''}),
+	(23676  , {'dTm'			 : None,	'PDB' : ''}),
+	
+	(14592  , {'ASA'			 : '114.3', 'PDB' : '1AM7'}),
+])
+	
+# PMID: 15515183. Bad PDB ID and DDG calculation. The DDGs in the paper are given relative to alanine at position 33, not the wildtype lysine.
+# 1UBQ also seems a better PDB ID for ubiquitin as it is an X-ray solution with just the ubiquitin chain.
+OverriddenEntries.extend([
 	## pH 2.25
-	19422 : {'ddG'	: "%s kJ/mol" % str( -8.1  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'},
-	19423 : {'ddG'	: "%s kJ/mol" % str( -8.8  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'},
-	19424 : {'ddG'	: "%s kJ/mol" % str( -8.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'},
-	19425 : {'ddG'	: "%s kJ/mol" % str(-14.2  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'},
-	19426 : {'ddG'	: "%s kJ/mol" % str( -3.5  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'},
-	19427 : {'ddG'	: "%s kJ/mol" % str( -9.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'},
-	19428 : {'ddG'	: "%s kJ/mol" % str( -5.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'},
-	19429 : {'ddG'	: "%s kJ/mol" % str( -7.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'},
-	19430 : {'ddG'	: "%s kJ/mol" % str(-11.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'},
-	19431 : {'ddG'	: "%s kJ/mol" % str( -9.5  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'},
-	19432 : {'ddG'	: "%s kJ/mol" % str(-10.8  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'},
-	19433 : {'ddG'	: "%s kJ/mol" % str( -9.9  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'},
-	19434 : {'ddG'	: "%s kJ/mol" % str( -6.0  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'},
+	(19422 , {'ddG'	: "%s kJ/mol" % str( -8.1  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
+	(19423 , {'ddG'	: "%s kJ/mol" % str( -8.8  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
+	(19424 , {'ddG'	: "%s kJ/mol" % str( -8.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
+	(19425 , {'ddG'	: "%s kJ/mol" % str(-14.2  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
+	(19426 , {'ddG'	: "%s kJ/mol" % str( -3.5  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
+	(19427 , {'ddG'	: "%s kJ/mol" % str( -9.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'}),
+	(19428 , {'ddG'	: "%s kJ/mol" % str( -5.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
+	(19429 , {'ddG'	: "%s kJ/mol" % str( -7.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
+	(19430 , {'ddG'	: "%s kJ/mol" % str(-11.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
+	(19431 , {'ddG'	: "%s kJ/mol" % str( -9.5  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
+	(19432 , {'ddG'	: "%s kJ/mol" % str(-10.8  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
+	(19433 , {'ddG'	: "%s kJ/mol" % str( -9.9  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
+	(19434 , {'ddG'	: "%s kJ/mol" % str( -6.0  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
 	# pH 2.5
-	19448 : {'ddG'	: "%s kJ/mol" % str( -6.1  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'},
-	19449 : {'ddG'	: "%s kJ/mol" % str( -6.9  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'},
-	19450 : {'ddG'	: "%s kJ/mol" % str( -6.6  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'},
-	19451 : {'ddG'	: "%s kJ/mol" % str(-12.8  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'},
-	19452 : {'ddG'	: "%s kJ/mol" % str( -1.5  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'},
-	19453 : {'ddG'	: "%s kJ/mol" % str( -7.7  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'},
-	19454 : {'ddG'	: "%s kJ/mol" % str( -3.7  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'},
-	19455 : {'ddG'	: "%s kJ/mol" % str( -5.7  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'},
-	19456 : {'ddG'	: "%s kJ/mol" % str(-10.1  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'},
-	19457 : {'ddG'	: "%s kJ/mol" % str( -7.6  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'},
-	19458 : {'ddG'	: "%s kJ/mol" % str( -9.0  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'},
-	19459 : {'ddG'	: "%s kJ/mol" % str( -8.3  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'},
-	19460 : {'ddG'	: "%s kJ/mol" % str( -4.0  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'},
+	(19448 , {'ddG'	: "%s kJ/mol" % str( -6.1  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
+	(19449 , {'ddG'	: "%s kJ/mol" % str( -6.9  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
+	(19450 , {'ddG'	: "%s kJ/mol" % str( -6.6  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
+	(19451 , {'ddG'	: "%s kJ/mol" % str(-12.8  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
+	(19452 , {'ddG'	: "%s kJ/mol" % str( -1.5  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
+	(19453 , {'ddG'	: "%s kJ/mol" % str( -7.7  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'}),
+	(19454 , {'ddG'	: "%s kJ/mol" % str( -3.7  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
+	(19455 , {'ddG'	: "%s kJ/mol" % str( -5.7  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
+	(19456 , {'ddG'	: "%s kJ/mol" % str(-10.1  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
+	(19457 , {'ddG'	: "%s kJ/mol" % str( -7.6  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
+	(19458 , {'ddG'	: "%s kJ/mol" % str( -9.0  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
+	(19459 , {'ddG'	: "%s kJ/mol" % str( -8.3  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
+	(19460 , {'ddG'	: "%s kJ/mol" % str( -4.0  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
 	# pH 2.75
-	19474 : {'ddG'	: "%s kJ/mol" % str( -3.0  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'},
-	19475 : {'ddG'	: "%s kJ/mol" % str( -3.6  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'},
-	19476 : {'ddG'	: "%s kJ/mol" % str( -3.8  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'},
-	19477 : {'ddG'	: "%s kJ/mol" % str(-10.3  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'},
-	19478 : {'ddG'	: "%s kJ/mol" % str(  1.7  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'},
-	19479 : {'ddG'	: "%s kJ/mol" % str( -4.4  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'},
-	19480 : {'ddG'	: "%s kJ/mol" % str( -0.7  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'},
-	19481 : {'ddG'	: "%s kJ/mol" % str( -2.7  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'},
-	19482 : {'ddG'	: "%s kJ/mol" % str( -7.5  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'},
-	19483 : {'ddG'	: "%s kJ/mol" % str( -4.4  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'},
-	19484 : {'ddG'	: "%s kJ/mol" % str( -6.4  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'},
-	19485 : {'ddG'	: "%s kJ/mol" % str( -5.2  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'},
-	19486 : {'ddG'	: "%s kJ/mol" % str( -0.6  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'},
+	(19474 , {'ddG'	: "%s kJ/mol" % str( -3.0  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
+	(19475 , {'ddG'	: "%s kJ/mol" % str( -3.6  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
+	(19476 , {'ddG'	: "%s kJ/mol" % str( -3.8  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
+	(19477 , {'ddG'	: "%s kJ/mol" % str(-10.3  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
+	(19478 , {'ddG'	: "%s kJ/mol" % str(  1.7  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
+	(19479 , {'ddG'	: "%s kJ/mol" % str( -4.4  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'}),
+	(19480 , {'ddG'	: "%s kJ/mol" % str( -0.7  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
+	(19481 , {'ddG'	: "%s kJ/mol" % str( -2.7  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
+	(19482 , {'ddG'	: "%s kJ/mol" % str( -7.5  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
+	(19483 , {'ddG'	: "%s kJ/mol" % str( -4.4  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
+	(19484 , {'ddG'	: "%s kJ/mol" % str( -6.4  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
+	(19485 , {'ddG'	: "%s kJ/mol" % str( -5.2  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
+	(19486 , {'ddG'	: "%s kJ/mol" % str( -0.6  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
 	# pH 3.0
-	19500 : {'ddG'	: "%s kJ/mol" % str(  1.0  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'},
-	19501 : {'ddG'	: "%s kJ/mol" % str(  0.3  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'},
-	19502 : {'ddG'	: "%s kJ/mol" % str(  0.7  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'},
-	19503 : {'ddG'	: "%s kJ/mol" % str( -6.6  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'},
-	19504 : {'ddG'	: "%s kJ/mol" % str(  6.0  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'},
-	19505 : {'ddG'	: "%s kJ/mol" % str( -0.1  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'},
-	19506 : {'ddG'	: "%s kJ/mol" % str(  3.7  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'},
-	19507 : {'ddG'	: "%s kJ/mol" % str(  1.6  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'},
-	19508 : {'ddG'	: "%s kJ/mol" % str( -3.1  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'},
-	19509 : {'ddG'	: "%s kJ/mol" % str( -0.3  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'},
-	19510 : {'ddG'	: "%s kJ/mol" % str( -2.0  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'},
-	19511 : {'ddG'	: "%s kJ/mol" % str( -0.8  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'},
-	19512 : {'ddG'	: "%s kJ/mol" % str(  3.6  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'},
+	(19500 , {'ddG'	: "%s kJ/mol" % str(  1.0  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
+	(19501 , {'ddG'	: "%s kJ/mol" % str(  0.3  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
+	(19502 , {'ddG'	: "%s kJ/mol" % str(  0.7  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
+	(19503 , {'ddG'	: "%s kJ/mol" % str( -6.6  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
+	(19504 , {'ddG'	: "%s kJ/mol" % str(  6.0  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
+	(19505 , {'ddG'	: "%s kJ/mol" % str( -0.1  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'}),
+	(19506 , {'ddG'	: "%s kJ/mol" % str(  3.7  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
+	(19507 , {'ddG'	: "%s kJ/mol" % str(  1.6  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
+	(19508 , {'ddG'	: "%s kJ/mol" % str( -3.1  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
+	(19509 , {'ddG'	: "%s kJ/mol" % str( -0.3  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
+	(19510 , {'ddG'	: "%s kJ/mol" % str( -2.0  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
+	(19511 , {'ddG'	: "%s kJ/mol" % str( -0.8  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
+	(19512 , {'ddG'	: "%s kJ/mol" % str(  3.6  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
 	# pH 3.25
-	19526 : {'ddG'	: "%s kJ/mol" % str(  5.7  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'},
-	19527 : {'ddG'	: "%s kJ/mol" % str(  4.1  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'},
-	19528 : {'ddG'	: "%s kJ/mol" % str(  4.6  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'},
-	19529 : {'ddG'	: "%s kJ/mol" % str( -2.2  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'},
-	19530 : {'ddG'	: "%s kJ/mol" % str( 10.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'},
-	19531 : {'ddG'	: "%s kJ/mol" % str(  3.9  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'},
-	19532 : {'ddG'	: "%s kJ/mol" % str(  7.9  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'},
-	19533 : {'ddG'	: "%s kJ/mol" % str(  6.1  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'},
-	19534 : {'ddG'	: "%s kJ/mol" % str(  1.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'},
-	19535 : {'ddG'	: "%s kJ/mol" % str(  4.1  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'},
-	19536 : {'ddG'	: "%s kJ/mol" % str(  2.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'},
-	19537 : {'ddG'	: "%s kJ/mol" % str(  3.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'},
-	19538 : {'ddG'	: "%s kJ/mol" % str(  7.8  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'},
-}
+	(19526 , {'ddG'	: "%s kJ/mol" % str(  5.7  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
+	(19527 , {'ddG'	: "%s kJ/mol" % str(  4.1  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
+	(19528 , {'ddG'	: "%s kJ/mol" % str(  4.6  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
+	(19529 , {'ddG'	: "%s kJ/mol" % str( -2.2  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
+	(19530 , {'ddG'	: "%s kJ/mol" % str( 10.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
+	(19531 , {'ddG'	: "%s kJ/mol" % str(  3.9  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'}),
+	(19532 , {'ddG'	: "%s kJ/mol" % str(  7.9  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
+	(19533 , {'ddG'	: "%s kJ/mol" % str(  6.1  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
+	(19534 , {'ddG'	: "%s kJ/mol" % str(  1.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
+	(19535 , {'ddG'	: "%s kJ/mol" % str(  4.1  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
+	(19536 , {'ddG'	: "%s kJ/mol" % str(  2.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
+	(19537 , {'ddG'	: "%s kJ/mol" % str(  3.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
+	(19538 , {'ddG'	: "%s kJ/mol" % str(  7.8  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
+])
+
+# PMID: 15515183. Bad PDB ID and DDG calculation. The DDGs in the paper are given relative to alanine at position 33, not the wildtype lysine.
+for i in range(19409, 19421 + 1):
+	OverriddenEntries.append((i, {'PDB_wild' : '1UBQ', 'PDB' : '1OTR'})) 
+for i in range(19435, 19447 + 1):
+	OverriddenEntries.append((i, {'PDB_wild' : '1UBQ', 'PDB' : '1OTR'})) 
+for i in range(19461, 19473 + 1):
+	OverriddenEntries.append((i, {'PDB_wild' : '1UBQ', 'PDB' : '1OTR'}))
+for i in range(19487, 19499 + 1):
+	OverriddenEntries.append((i, {'PDB_wild' : '1UBQ', 'PDB' : '1OTR'})) 
+for i in range(19513, 19525 + 1):
+	OverriddenEntries.append((i, {'PDB_wild' : '1UBQ', 'PDB' : '1OTR'}))
+
+# PMID: 16922511. These cases have a missing PDB ID. 2A01 seems to be the correct PDB ID for lipid free Apolipoprotein A-I, homo sapiens.
+for i in range(20165, 20181 + 1):
+	if i != 20175 and i != 20181:
+		OverriddenEntries.append((i, {'LENGTH' : 243,	'PDB_wild' : '2A01', 'MUTATED_CHAIN' : 'A', 'PDB' : ''})) 
+
+# PMID: 19683006. These records are missing a chain ID. Chains A, B, C, or D are the p53 protein (tetramer complex). I chose chain A arbitrarily. 
+for i in range(24275, 24282 + 1) + range(24284, 24286 + 1):
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A',	'PDB' : '2AC0'}))
+OverriddenEntries.append((24283, {'MUTATED_CHAIN' : 'A', 'MUTATION' : 'M 133 L, C 141 V, Y 236 F, T 253 L', 'PDB' : '2AC0'})) # Standardizing record for parsing
+
+for i in [24251, 24261, 24271]:
+	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A',	'PDB' : '2AC0'})) 
+
+# PMID: 18077463. Records 24728-24733, 24736-24741 (DsbA, Staphylococcus aureus).
+# The publication cites the PDB file for the Escherichia coli DsbA-DsbB-ubiquinone complex as 2HI7 (2006). This has an alanine at position 33 rather than the expected cysteine. ProTherm instead cites 1A23 (1998) which has DsbA on its own and C33 as expected.
+# The publication cites 3BCI as the PDB file for Staphylococcus aureus DsbA and 3BD2 and 3BCK for its E96Q and T153V mutants respectively.
+for i in range(24728, 24733 + 1):
+	if i == 24730 or i == 24731:
+		#SaDsbA T153V
+		OverriddenEntries.append((i, {'PDB_wild' : '3BCI', 'LENGTH' : 186, 'PDB_mutant' : '3BCK', 'PDB' : ''}))
+	elif i == 24732 or i == 24733:
+		#SaDsbA E96Q
+		OverriddenEntries.append((i, {'PDB_wild' : '3BCI', 'LENGTH' : 186, 'PDB_mutant' : '3BD2', 'PDB' : ''}))
+	else:
+		OverriddenEntries.append((i, {'PDB_wild' : '3BCI', 'LENGTH' : 186, 'PDB' : ''}))
+for i in range(24736, 24741 + 1):
+	if i == 24738 or i == 24739:
+		#SaDsbA T153V
+		OverriddenEntries.append((i, {'PDB_wild' : '3BCI', 'LENGTH' : 186, 'PDB_mutant' : '3BCK', 'PDB' : ''}))
+	elif i == 24740 or i == 24741:
+		#SaDsbA E96Q
+		OverriddenEntries.append((i, {'PDB_wild' : '3BCI', 'LENGTH' : 186, 'PDB_mutant' : '3BD2', 'PDB' : ''}))
+	else:
+		OverriddenEntries.append((i, {'PDB_wild' : '3BCI', 'LENGTH' : 186, 'PDB' : ''}))
 
 BadOrMissingMutants = [
 	# ** These cases have bad PDB IDs for the mutant structure **
@@ -1488,142 +1263,71 @@ BadOrMissingMutants = [
 	(14509  , {'PDB_mutant'	 : '1GBX', 			'PDB' : '1LZ1'}),
 ]
 
-# PMID: 15935381. Missing length.
-for i in range(19104, 19151 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'LENGTH' : 71, 'PDB' : '1UZC'} 
-
-# PMID: 15515183. Bad PDB ID and DDG calculation. The DDGs in the paper are given relative to alanine at position 33, not the wildtype lysine.
-for i in range(19409, 19421 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'PDB_wild' : '1UBQ', 'PDB' : '1OTR'} 
-for i in range(19435, 19447 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'PDB_wild' : '1UBQ', 'PDB' : '1OTR'} 
-for i in range(19461, 19473 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'PDB_wild' : '1UBQ', 'PDB' : '1OTR'} 
-for i in range(19487, 19499 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'PDB_wild' : '1UBQ', 'PDB' : '1OTR'} 
-for i in range(19513, 19525 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'PDB_wild' : '1UBQ', 'PDB' : '1OTR'} 
-
-# ** These cases have missing length for the wild-type structure, Onconase, Rana pipiens (P22069). It has been solved by X-Ray as 1ONC **
-# PMID: 10913282.
-for i in range(8561, 8600 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'LENGTH' : 104,	'PDB' : '1ONC'} 
-# PMID: 16533040.
-for i in range(19905, 19914 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'LENGTH' : 104,	'PDB' : '1ONC'} 
-OverriddenEntries[19914]['ASA'] = None # Bad ASA record
-# PMID: 17544408
-for i in range(22884, 22894 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'LENGTH' : 178,	'PDB' : '1BNL'} 
-
-# PMID: 16922511. These cases have a missing PDB ID. 2A01 seems to be the correct PDB ID for lipid free Apolipoprotein A-I, homo sapiens.
-for i in range(20165, 20181 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	if i != 20175 and i != 20181:
-		OverriddenEntries[i] = {'LENGTH' : 243,	'PDB_wild' : '2A01', 'MUTATED_CHAIN' : 'A', 'PDB' : ''} 
-
-# PMID: 19683006. These records are missing a chain ID. Chains A, B, C, or D are the p53 protein (tetramer complex). I chose chain A arbitrarily. 
-for i in range(24275, 24286 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'MUTATED_CHAIN' : 'A',	'PDB' : '2AC0'}
-OverriddenEntries[24283]['MUTATION'] = 'M 133 L, C 141 V, Y 236 F, T 253 L' # Standardizing record for parsing
-for i in [24251, 24261, 24271]:
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'MUTATED_CHAIN' : 'A',	'PDB' : '2AC0'} 
-
-# PMID: 18077463. Records 24728-24733, 24736-24741 (DsbA, Staphylococcus aureus).
-# The publication cites the PDB file for the Escherichia coli DsbA-DsbB-ubiquinone complex as 2HI7 (2006). This has an alanine at position 33 rather than the expected cysteine. ProTherm instead cites 1A23 (1998) which has DsbA on its own and C33 as expected.
-# The publication cites 3BCI as the PDB file for Staphylococcus aureus DsbA and 3BD2 and 3BCK for its E96Q and T153V mutants respectively.
-for i in range(24728, 24733 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'PDB_wild' : '3BCI', 'LENGTH' : 186, 'PDB' : ''}
-for i in range(24736, 24741 + 1):
-	assert(not(OverriddenEntries.get(i)))
-	OverriddenEntries[i] = {'PDB_wild' : '3BCI', 'LENGTH' : 186, 'PDB' : ''}
-#SaDsbA E96Q
-for i in [24732, 24733, 24740, 24741]:
-	assert(OverriddenEntries.get(i))
-	OverriddenEntries[i]['PDB_mutant'] = '3BD2'
-OverriddenEntries[24741]['dG_H2O'] = '22.84 kJ/mol' # typo as all other dG_H2O values are negated 
-
-#SaDsbA T153V
-for i in [24730, 24731, 24738, 24739]:
-	assert(OverriddenEntries.get(i))
-	OverriddenEntries[i]['PDB_mutant'] = '3BCK'
-
-ddGTypos = {
-	970  : {'ddG'	:   "%s kcal/mol" % str(-0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}, # Wrong sign
+ddGTypos = [
+	(970  , {'ddG'	:   "%s kcal/mol" % str(-0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}), # Wrong sign
 	
-	2232 : {'ddG'		:  '-3.46 kcal/mol',	'PDB' : '1VQB'}, # Incorrectly entered as -3.86
+	(2232 , {'ddG'		:  '-3.46 kcal/mol',	'PDB' : '1VQB'}), # Incorrectly entered as -3.86
 
-	2508 : {'ddG'		:  '-0.06 kcal/mol',	'PDB' : '1HFY'}, # Incorrectly entered as -0.06. This is a one-off mistake for this publication so it is not included in the ddGWrongSigns dict.
+	(2508 , {'ddG'		:  '-0.06 kcal/mol',	'PDB' : '1HFY'}), # Incorrectly entered as -0.06. This is a one-off mistake for this publication so it is not included in the ddGWrongSigns dict.
 
-	2814 : {'ddG'		:   '0.2 kcal/mol',		'PDB' : '1BVC'}, # 2.9 - 2.7 (2.9 and 2.7 are the values of DG_NU - DG_IU for the mutant and wildtype respectively)
+	(2814 , {'ddG'		:   '0.2 kcal/mol',		'PDB' : '1BVC'}), # 2.9 - 2.7 (2.9 and 2.7 are the values of DG_NU - DG_IU for the mutant and wildtype respectively)
 	
 	# PMID:10079068. Wrong sign and rounding error.
-	5429 : {'ddG'		: "%s kcal/mol" % str( -0.7/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}, # This also has the wrong sign in ProTherm.
+	(5429 , {'ddG'		: "%s kcal/mol" % str( -0.7/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}), # This also has the wrong sign in ProTherm.
 	
 	# PMID:10600102. There is a mistake in the publication.
-	5982 : {'ddG'		:   '-6.2 kJ/mol',	'PDB' : '1AAR'},
-	5983 : {'ddG'		:   '-7.0 kJ/mol',	'PDB' : '1AAR'},
+	(5982 , {'ddG'		:   '-6.2 kJ/mol',	'PDB' : '1AAR'}),
+	(5983 , {'ddG'		:   '-7.0 kJ/mol',	'PDB' : '1AAR'}),
 	
 	# PMID:7663349. I do not know where ProTherm gets -1.4 kJ/mol (−0.3346 kcal/mol) from. It is close to the difference of the Cmid * m values i.e. 4.5*1.1 - 4.09*1.13.
-	#7272 : {'ddG'		:   '%s kJ/mol' % ((1.115 * 0.41) * NUMBER_KJ_IN_KCAL),	'PDB' : '1POH'},
+	#7272 , {'ddG'		:   '%s kJ/mol' % ((1.115 * 0.41) * NUMBER_KJ_IN_KCAL),	'PDB' : '1POH'}),
 	
-	8498  : {'ddG_H2O' 	: '-2.82 kcal/mol', 'PDB' : '1TEN'}, # Typo 
+	(8498  , {'ddG_H2O' 	: '-2.82 kcal/mol', 'PDB' : '1TEN'}), # Typo 
 	
 	# PMID:11513583. DG values entered as DDG. Note: I am adding DDG values here. These should be double-checked.
-	11745 : {'ddG_H2O' :  '3.1 kcal/mol', 'dG_H2O' : '12.1', 'PDB' : '2TRX'}, # D26I is a stabilizing mutation
-	11746 : {'ddG_H2O' : '-3.7 kcal/mol', 'dG_H2O' : '5.3',  'PDB' : '2TRX'}, # Destabilizing mutation
-	11747 : {'ddG_H2O' : '-3.1 kcal/mol', 'dG_H2O' : '5.9',  'PDB' : '2TRX'}, # Destabilizing mutation
-	11748 : {'ddG_H2O' : '-1.4 kcal/mol', 'dG_H2O' : '7.6',  'PDB' : '2TRX'}, # Destabilizing mutation
-	11749 : {'ddG_H2O' : '-1.1 kcal/mol', 'dG_H2O' : '7.9',  'PDB' : '2TRX'}, # Destabilizing mutation
+	(11745 , {'ddG_H2O' :  '3.1 kcal/mol', 'dG_H2O' : '12.1', 'PDB' : '2TRX'}), # D26I is a stabilizing mutation
+	(11746 , {'ddG_H2O' : '-3.7 kcal/mol', 'dG_H2O' : '5.3',  'PDB' : '2TRX'}), # Destabilizing mutation
+	(11747 , {'ddG_H2O' : '-3.1 kcal/mol', 'dG_H2O' : '5.9',  'PDB' : '2TRX'}), # Destabilizing mutation
+	(11748 , {'ddG_H2O' : '-1.4 kcal/mol', 'dG_H2O' : '7.6',  'PDB' : '2TRX'}), # Destabilizing mutation
+	(11749 , {'ddG_H2O' : '-1.1 kcal/mol', 'dG_H2O' : '7.9',  'PDB' : '2TRX'}), # Destabilizing mutation
 
-	11893 : {'ddG'		: "%s kcal/mol" % str(( 8.6 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'}, # Bad computation?
+	(11893 , {'ddG'		: "%s kcal/mol" % str(( 8.6 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'}), # Bad computation?
 	
 	# PMID:11964251 - ProTherm uses kJ/mol but does not specify them
-	13086 : {'ddG_H2O'	:   '-9.9 kJ/mol',	'PDB' : '5AZU'},
-	13087 : {'ddG_H2O'	:   '-10.9 kJ/mol',	'PDB' : '5AZU'},	
+	(13086 , {'ddG_H2O'	:   '-9.9 kJ/mol',	'PDB' : '5AZU'}),
+	(13087 , {'ddG_H2O'	:   '-10.9 kJ/mol',	'PDB' : '5AZU'}),	
 
 	# PMID:9228039
-	13204 : {'ddG'		:  '-0.46 kcal/mol', 'PDB' : '2RN2'}, # Wrong sign and rounding: "The mutant proteins A52Y, A52F, A52H, and A52K are unexpectedly unstable"
+	(13204 , {'ddG'		:  '-0.46 kcal/mol', 'PDB' : '2RN2'}), # Wrong sign and rounding: "The mutant proteins A52Y, A52F, A52H, and A52K are unexpectedly unstable"
 	
-	14192 : {'ddG' 		: "%s kcal/mol" % str(-2.7/NUMBER_KJ_IN_KCAL),	'PDB' : '1LZ1'}, # Bad computation
+	(14192 , {'ddG' 		: "%s kcal/mol" % str(-2.7/NUMBER_KJ_IN_KCAL),	'PDB' : '1LZ1'}), # Bad computation
 	
 	# PMID:12080133. DG values taken as DDG values
-	15280 : {'ddG_H2O' 		: "%s kJ/mol" % str(22.7 - 31.4),	'PDB' : '1TIT'},
-	15281 : {'ddG_H2O' 		: "%s kJ/mol" % str(13.4 - 31.4),	'PDB' : '1TIT'},
+	(15280 , {'ddG_H2O' 		: "%s kJ/mol" % str(22.7 - 31.4),	'PDB' : '1TIT'}),
+	(15281 , {'ddG_H2O' 		: "%s kJ/mol" % str(13.4 - 31.4),	'PDB' : '1TIT'}),
 	
 	# PMID:12215419. Also, ProTherm calls some values DDG and others DDG_H2O. Is this correct?
-	15688 : {'ddG_H2O' 	: "%s kJ/mol" % str(-7.2 + 3.5),	'PDB' : '1OTR'}, # Error in calculation.
-	15692 : {'dG' 		: "-16.4 kJ/mol", 'ddG'		: "%s kJ/mol" % str(-16.4 + 3.5),	'PDB' : '1OTR'}, # DG and DDG are swapped.
+	(15688 , {'ddG_H2O' 	: "%s kJ/mol" % str(-7.2 + 3.5),	'PDB' : '1OTR'}), # Error in calculation.
+	(15692 , {'dG' 		: "-16.4 kJ/mol", 'ddG'		: "%s kJ/mol" % str(-16.4 + 3.5),	'PDB' : '1OTR'}), # DG and DDG are swapped.
 	
-	17873 : {'ddG_H2O'	: "-0.5 kcal/mol",	'PDB' : '1RN1'},# I would need to check the reference
+	(17873 , {'ddG_H2O'	: "-0.5 kcal/mol",	'PDB' : '1RN1'}),# I would need to check the reference
 	
-	20134 : {'ddG'		: '-0.51 kcal/mol',			'PDB' : '1RTB'}, # minor typo (was -0.57)
+	(20134 , {'ddG'		: '-0.51 kcal/mol',			'PDB' : '1RTB'}), # minor typo (was -0.57)
 
 	# PMID:19647749. dG_H2O value entered as ddG_H2O.
-	24386 : {'ddG_H2O' : None, 'dG_H2O' : '-17.4 kJ/mol',  'PDB' : ''},
+	(24386 , {'ddG_H2O' : None, 'dG_H2O' : '-17.4 kJ/mol',  'PDB' : ''}),
+	
+	(24741, {'dG_H2O': '22.84 kJ/mol', 'PDB' : ''}), # typo as all other dG_H2O values are negated 
 	
 	# PMID:19565466.
-	25186 : {'ddG' : '-8.58 kJ/mol', 'PDB' : '1PIN'}, # Arithmetic error (ignored minus sign)
-	25198 : {'ddG' : '-4.00 kJ/mol', 'PDB' : '1PIN'}, # Arithmetic error
+	(25186 , {'ddG' : '-8.58 kJ/mol', 'PDB' : '1PIN'}), # Arithmetic error (ignored minus sign)
+	(25198 , {'ddG' : '-4.00 kJ/mol', 'PDB' : '1PIN'}), # Arithmetic error
 	
-	25658 : {'ddG_H2O'	: "-1.8 kcal/mol",	'PDB' : '1RGG'},# Arithmetic error
+	(25658 , {'ddG_H2O'	: "-1.8 kcal/mol",	'PDB' : '1RGG'}),# Arithmetic error
 	
 	# PMID:20198681
-	25663 : {'ddG_H2O'	: "0.1 kcal/mol",	'PDB' : '1RGG'},# Arithmetic error or a recalculation?
-	
-}	
+	(25663 , {'ddG_H2O'	: "0.1 kcal/mol",	'PDB' : '1RGG'}),# Arithmetic error or a recalculation?
+]	
 
 ddGWrongSigns = {
 	# PMID:8392867. The text explains that the stability is lowered by ~0.3 kcal/mol.
@@ -1761,67 +1465,67 @@ ddGWrongSigns = {
 	23164 : 'ddG_H2O',
 }
 
-RoundingErrors = {
+RoundingErrors = [
 	# PMID:1569557. Loss of precision on data entry.
 	# 39 : No loss of precision.
-	40 : {'ddG'	: '-1.35 kcal/mol', 'PDB' : '1BNI'},
-	41 : {'ddG'	: '-1.85 kcal/mol', 'PDB' : '1BNI'},
-	42 : {'ddG'	: '-1.24 kcal/mol', 'PDB' : '1BNI'},
-	43 : {'ddG'	: '-2.15 kcal/mol', 'PDB' : '1BNI'},
-	44 : {'ddG'	: '-0.89 kcal/mol', 'PDB' : '1BNI'},
-	45 : {'ddG'	: '-2.48 kcal/mol', 'PDB' : '1BNI'},
-	46 : {'ddG'	: '-3.39 kcal/mol', 'PDB' : '1BNI'},
-	47 : {'ddG'	: '-0.31 kcal/mol', 'PDB' : '1BNI'},
-	48 : {'ddG'	: '-3.34 kcal/mol', 'PDB' : '1BNI'},
-	49 : {'ddG'	: '-4.32 kcal/mol', 'PDB' : '1BNI'},
-	50 : {'ddG'	: '-1.68 kcal/mol', 'PDB' : '1BNI'},
-	51 : {'ddG'	:  '0.54 kcal/mol', 'PDB' : '1BNI'},
-	52 : {'ddG'	: '-2.03 kcal/mol', 'PDB' : '1BNI'},
-	53 : {'ddG'	: '-2.25 kcal/mol', 'PDB' : '1BNI'},
-	54 : {'ddG'	: '-0.02 kcal/mol', 'PDB' : '1BNI'},
-	55 : {'ddG'	: '-1.12 kcal/mol', 'PDB' : '1BNI'},
-	56 : {'ddG'	: '-3.52 kcal/mol', 'PDB' : '1BNI'},
-	57 : {'ddG'	: '-1.46 kcal/mol', 'PDB' : '1BNI'},
-	58 : {'ddG'	: '-1.94 kcal/mol', 'PDB' : '1BNI'},
-	59 : {'ddG'	: '-0.44 kcal/mol', 'PDB' : '1BNI'},
-	60 : {'ddG'	: '-1.76 kcal/mol', 'PDB' : '1BNI'},
-	61 : {'ddG'	: '-0.23 kcal/mol', 'PDB' : '1BNI'},
-	62 : {'ddG'	:  '0.14 kcal/mol', 'PDB' : '1BNI'},
-	63 : {'ddG'	: '-1.31 kcal/mol', 'PDB' : '1BNI'},
-	64 : {'ddG'	: '-1.30 kcal/mol', 'PDB' : '1BNI'},
-	65 : {'ddG'	: '-1.15 kcal/mol', 'PDB' : '1BNI'},
-	66 : {'ddG'	: '-2.51 kcal/mol', 'PDB' : '1BNI'},
-	67 : {'ddG'	: '-1.75 kcal/mol', 'PDB' : '1BNI'},
-	68 : {'ddG'	: '-2.44 kcal/mol', 'PDB' : '1BNI'},
-	69 : {'ddG'	: '-1.80 kcal/mol', 'PDB' : '1BNI'},
-	70 : {'ddG'	: '-4.71 kcal/mol', 'PDB' : '1BNI'},
-	71 : {'ddG'	: '-2.97 kcal/mol', 'PDB' : '1BNI'},
-	72 : {'ddG'	: '-2.42 kcal/mol', 'PDB' : '1BNI'},
-	73 : {'ddG'	: '-0.27 kcal/mol', 'PDB' : '1BNI'},
-	74 : {'ddG'	: '-1.15 kcal/mol', 'PDB' : '1BNI'},
-	75 : {'ddG'	: '-0.60 kcal/mol', 'PDB' : '1BNI'},
-	76 : {'ddG'	: '-2.71 kcal/mol', 'PDB' : '1BNI'},
-	77 : {'ddG'	:  '0.47 kcal/mol', 'PDB' : '1BNI'},
-	78 : {'ddG'	: '-0.43 kcal/mol', 'PDB' : '1BNI'},
-	79 : {'ddG'	: '-0.82 kcal/mol', 'PDB' : '1BNI'},
-	80 : {'ddG'	: '-1.89 kcal/mol', 'PDB' : '1BNI'},
-	81 : {'ddG'	: '-1.65 kcal/mol', 'PDB' : '1BNI'},
-	82 : {'ddG'	: '-1.35 kcal/mol', 'PDB' : '1BNI'},
-	83 : {'ddG'	: '-2.02 kcal/mol', 'PDB' : '1BNI'},
-	84 : {'ddG'	: '-1.34 kcal/mol', 'PDB' : '1BNI'},
-	85 : {'ddG'	: '-4.01 kcal/mol', 'PDB' : '1BNI'},
-	86 : {'ddG'	: '-0.30 kcal/mol', 'PDB' : '1BNI'},
-	87 : {'ddG'	: '-2.55 kcal/mol', 'PDB' : '1BNI'},
-	88 : {'ddG'	: '-1.93 kcal/mol', 'PDB' : '1BNI'},
-	89 : {'ddG'	: '-2.79 kcal/mol', 'PDB' : '1BNI'},
-	90 : {'ddG'	: '-0.88 kcal/mol', 'PDB' : '1BNI'},
-	91 : {'ddG'	: '-3.17 kcal/mol', 'PDB' : '1BNI'},
-	92 : {'ddG'	: '-2.67 kcal/mol', 'PDB' : '1BNI'},
-	93 : {'ddG'	:  '0.00 kcal/mol', 'PDB' : '1BNI'},
-	94 : {'ddG'	: '-2.24 kcal/mol', 'PDB' : '1BNI'},
-	95 : {'ddG'	: '-0.76 kcal/mol', 'PDB' : '1BNI'},
-	96 : {'ddG'	: '-2.07 kcal/mol', 'PDB' : '1BNI'},
-	97 : {'ddG'	: '-0.41 kcal/mol', 'PDB' : '1BNI'},
+	(40 , {'ddG'	: '-1.35 kcal/mol', 'PDB' : '1BNI'}),
+	(41 , {'ddG'	: '-1.85 kcal/mol', 'PDB' : '1BNI'}),
+	(42 , {'ddG'	: '-1.24 kcal/mol', 'PDB' : '1BNI'}),
+	(43 , {'ddG'	: '-2.15 kcal/mol', 'PDB' : '1BNI'}),
+	(44 , {'ddG'	: '-0.89 kcal/mol', 'PDB' : '1BNI'}),
+	(45 , {'ddG'	: '-2.48 kcal/mol', 'PDB' : '1BNI'}),
+	(46 , {'ddG'	: '-3.39 kcal/mol', 'PDB' : '1BNI'}),
+	(47 , {'ddG'	: '-0.31 kcal/mol', 'PDB' : '1BNI'}),
+	(48 , {'ddG'	: '-3.34 kcal/mol', 'PDB' : '1BNI'}),
+	(49 , {'ddG'	: '-4.32 kcal/mol', 'PDB' : '1BNI'}),
+	(50 , {'ddG'	: '-1.68 kcal/mol', 'PDB' : '1BNI'}),
+	(51 , {'ddG'	:  '0.54 kcal/mol', 'PDB' : '1BNI'}),
+	(52 , {'ddG'	: '-2.03 kcal/mol', 'PDB' : '1BNI'}),
+	(53 , {'ddG'	: '-2.25 kcal/mol', 'PDB' : '1BNI'}),
+	(54 , {'ddG'	: '-0.02 kcal/mol', 'PDB' : '1BNI'}),
+	(55 , {'ddG'	: '-1.12 kcal/mol', 'PDB' : '1BNI'}),
+	(56 , {'ddG'	: '-3.52 kcal/mol', 'PDB' : '1BNI'}),
+	(57 , {'ddG'	: '-1.46 kcal/mol', 'PDB' : '1BNI'}),
+	(58 , {'ddG'	: '-1.94 kcal/mol', 'PDB' : '1BNI'}),
+	(59 , {'ddG'	: '-0.44 kcal/mol', 'PDB' : '1BNI'}),
+	(60 , {'ddG'	: '-1.76 kcal/mol', 'PDB' : '1BNI'}),
+	(61 , {'ddG'	: '-0.23 kcal/mol', 'PDB' : '1BNI'}),
+	(62 , {'ddG'	:  '0.14 kcal/mol', 'PDB' : '1BNI'}),
+	(63 , {'ddG'	: '-1.31 kcal/mol', 'PDB' : '1BNI'}),
+	(64 , {'ddG'	: '-1.30 kcal/mol', 'PDB' : '1BNI'}),
+	(65 , {'ddG'	: '-1.15 kcal/mol', 'PDB' : '1BNI'}),
+	(66 , {'ddG'	: '-2.51 kcal/mol', 'PDB' : '1BNI'}),
+	(67 , {'ddG'	: '-1.75 kcal/mol', 'PDB' : '1BNI'}),
+	(68 , {'ddG'	: '-2.44 kcal/mol', 'PDB' : '1BNI'}),
+	(69 , {'ddG'	: '-1.80 kcal/mol', 'PDB' : '1BNI'}),
+	(70 , {'ddG'	: '-4.71 kcal/mol', 'PDB' : '1BNI'}),
+	(71 , {'ddG'	: '-2.97 kcal/mol', 'PDB' : '1BNI'}),
+	(72 , {'ddG'	: '-2.42 kcal/mol', 'PDB' : '1BNI'}),
+	(73 , {'ddG'	: '-0.27 kcal/mol', 'PDB' : '1BNI'}),
+	(74 , {'ddG'	: '-1.15 kcal/mol', 'PDB' : '1BNI'}),
+	(75 , {'ddG'	: '-0.60 kcal/mol', 'PDB' : '1BNI'}),
+	(76 , {'ddG'	: '-2.71 kcal/mol', 'PDB' : '1BNI'}),
+	(77 , {'ddG'	:  '0.47 kcal/mol', 'PDB' : '1BNI'}),
+	(78 , {'ddG'	: '-0.43 kcal/mol', 'PDB' : '1BNI'}),
+	(79 , {'ddG'	: '-0.82 kcal/mol', 'PDB' : '1BNI'}),
+	(80 , {'ddG'	: '-1.89 kcal/mol', 'PDB' : '1BNI'}),
+	(81 , {'ddG'	: '-1.65 kcal/mol', 'PDB' : '1BNI'}),
+	(82 , {'ddG'	: '-1.35 kcal/mol', 'PDB' : '1BNI'}),
+	(83 , {'ddG'	: '-2.02 kcal/mol', 'PDB' : '1BNI'}),
+	(84 , {'ddG'	: '-1.34 kcal/mol', 'PDB' : '1BNI'}),
+	(85 , {'ddG'	: '-4.01 kcal/mol', 'PDB' : '1BNI'}),
+	(86 , {'ddG'	: '-0.30 kcal/mol', 'PDB' : '1BNI'}),
+	(87 , {'ddG'	: '-2.55 kcal/mol', 'PDB' : '1BNI'}),
+	(88 , {'ddG'	: '-1.93 kcal/mol', 'PDB' : '1BNI'}),
+	(89 , {'ddG'	: '-2.79 kcal/mol', 'PDB' : '1BNI'}),
+	(90 , {'ddG'	: '-0.88 kcal/mol', 'PDB' : '1BNI'}),
+	(91 , {'ddG'	: '-3.17 kcal/mol', 'PDB' : '1BNI'}),
+	(92 , {'ddG'	: '-2.67 kcal/mol', 'PDB' : '1BNI'}),
+	(93 , {'ddG'	:  '0.00 kcal/mol', 'PDB' : '1BNI'}),
+	(94 , {'ddG'	: '-2.24 kcal/mol', 'PDB' : '1BNI'}),
+	(95 , {'ddG'	: '-0.76 kcal/mol', 'PDB' : '1BNI'}),
+	(96 , {'ddG'	: '-2.07 kcal/mol', 'PDB' : '1BNI'}),
+	(97 , {'ddG'	: '-0.41 kcal/mol', 'PDB' : '1BNI'}),
 	#2149 : No loss of precision.
 	#2150 : No loss of precision.
 	#2151 : No loss of precision.
@@ -1830,489 +1534,451 @@ RoundingErrors = {
 	#2154 : No loss of precision.
 	
 	# PMID:1404369. Loss of precision on data entry.
-	171 : {'ddG' : '-0.14 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.52 * 1.91)), 'PDB'	:	'1BNI'}, #-0.1988
-	172 : {'ddG' : '-0.19 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.50 * 1.94)), 'PDB'	:	'1BNI'}, #-0.102
-	173 : {'ddG' : '-0.31 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.44 * 1.97)), 'PDB'	:	'1BNI'}, #-0.0852
-	174 : {'ddG' : '-0.35 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.41 * 2.02)), 'PDB'	:	'1BNI'}, #0.0762
-	175 : {'ddG' : '-0.41 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.38 * 1.98)), 'PDB'	:	'1BNI'}, #-0.1596
-	176 : {'ddG' : '-0.48 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.35 * 1.95)), 'PDB'	:	'1BNI'}, #-0.3495
-	177 : {'ddG' : '-0.55 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.31 * 2.08)), 'PDB'	:	'1BNI'}, #0.1328
-	178 : {'ddG' : '-0.66 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.25 * 2.00)), 'PDB'	:	'1BNI'}, #-0.332
-	179 : {'ddG' : '-0.69 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.24 * 1.98)), 'PDB'	:	'1BNI'}, #-0.4368
-	180 : {'ddG' : '-0.71 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.23 * 1.99)), 'PDB'	:	'1BNI'}, #-0.4143
-	181 : {'ddG' : '-0.78 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.19 * 1.94)), 'PDB'	:	'1BNI'}, #-0.7034
-	182 : {'ddG' : '-0.79 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.19 * 1.99)), 'PDB'	:	'1BNI'}, #-0.4939
-	183 : {'ddG' : '-0.81 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.18 * 1.95)), 'PDB'	:	'1BNI'}, #-0.681
-	184 : {'ddG' : '-0.82 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.17 * 1.95)), 'PDB'	:	'1BNI'}, #-0.7005
-	185 : {'ddG' : '-0.88 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.14 * 2.05)), 'PDB'	:	'1BNI'}, #-0.345
-	186 : {'ddG' : '-0.91 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.13 * 1.98)), 'PDB'	:	'1BNI'}, #-0.6546
-	187 : {'ddG' : '-0.98 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.09 * 1.88)), 'PDB'	:	'1BNI'}, #-1.1428
-	188 : {'ddG' : '-1.00 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.09 * 1.71)), 'PDB'	:	'1BNI'}, #-1.8381
-	189 : {'ddG' : '-4.08 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (2.49 * 1.89)), 'PDB'	:	'1BNI'}, #-4.1259
+	(171 , {'ddG' : '-0.14 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.52 * 1.91)), 'PDB'	:	'1BNI'}), #-0.1988
+	(172 , {'ddG' : '-0.19 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.50 * 1.94)), 'PDB'	:	'1BNI'}), #-0.102
+	(173 , {'ddG' : '-0.31 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.44 * 1.97)), 'PDB'	:	'1BNI'}), #-0.0852
+	(174 , {'ddG' : '-0.35 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.41 * 2.02)), 'PDB'	:	'1BNI'}), #0.0762
+	(175 , {'ddG' : '-0.41 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.38 * 1.98)), 'PDB'	:	'1BNI'}), #-0.1596
+	(176 , {'ddG' : '-0.48 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.35 * 1.95)), 'PDB'	:	'1BNI'}), #-0.3495
+	(177 , {'ddG' : '-0.55 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.31 * 2.08)), 'PDB'	:	'1BNI'}), #0.1328
+	(178 , {'ddG' : '-0.66 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.25 * 2.00)), 'PDB'	:	'1BNI'}), #-0.332
+	(179 , {'ddG' : '-0.69 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.24 * 1.98)), 'PDB'	:	'1BNI'}), #-0.4368
+	(180 , {'ddG' : '-0.71 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.23 * 1.99)), 'PDB'	:	'1BNI'}), #-0.4143
+	(181 , {'ddG' : '-0.78 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.19 * 1.94)), 'PDB'	:	'1BNI'}), #-0.7034
+	(182 , {'ddG' : '-0.79 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.19 * 1.99)), 'PDB'	:	'1BNI'}), #-0.4939
+	(183 , {'ddG' : '-0.81 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.18 * 1.95)), 'PDB'	:	'1BNI'}), #-0.681
+	(184 , {'ddG' : '-0.82 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.17 * 1.95)), 'PDB'	:	'1BNI'}), #-0.7005
+	(185 , {'ddG' : '-0.88 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.14 * 2.05)), 'PDB'	:	'1BNI'}), #-0.345
+	(186 , {'ddG' : '-0.91 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.13 * 1.98)), 'PDB'	:	'1BNI'}), #-0.6546
+	(187 , {'ddG' : '-0.98 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.09 * 1.88)), 'PDB'	:	'1BNI'}), #-1.1428
+	(188 , {'ddG' : '-1.00 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (4.09 * 1.71)), 'PDB'	:	'1BNI'}), #-1.8381
+	(189 , {'ddG' : '-4.08 kcal/mol', 'ddG_H2O' : "%s kcal/mol" % str(-8.832 + (2.49 * 1.89)), 'PDB'	:	'1BNI'}), #-4.1259
 	
 	# PMID:1870131. Loss of precision on data entry.
-	190		: {'ddG'	:  '0.39 kcal/mol', 'PDB' : '1BNI'},
+	(190 , {'ddG'	:  '0.39 kcal/mol', 'PDB' : '1BNI'}),
 	
 	# PMID:1317795. Loss of precision on conversion from kJ/mol to kcal/mol.
-	384		: {'ddG_H2O': "%s kcal/mol" % str(  1.59/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	385		: {'ddG_H2O': "%s kcal/mol" % str( -0.04/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	386		: {'ddG_H2O': "%s kcal/mol" % str(-11.00/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	387		: {'ddG_H2O': "%s kcal/mol" % str(  2.01/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	388		: {'ddG_H2O': "%s kcal/mol" % str( -2.43/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	(384 , {'ddG_H2O': "%s kcal/mol" % str(  1.59/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(385 , {'ddG_H2O': "%s kcal/mol" % str( -0.04/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(386 , {'ddG_H2O': "%s kcal/mol" % str(-11.00/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(387 , {'ddG_H2O': "%s kcal/mol" % str(  2.01/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(388 , {'ddG_H2O': "%s kcal/mol" % str( -2.43/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
 	
 	# PMID:1317795. Loss of precision on conversion from kJ/mol to kcal/mol.
-	390		: {'ddG_H2O': "%s kcal/mol" % str( -9.2/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	391		: {'ddG_H2O': "%s kcal/mol" % str(  0.8/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	392		: {'ddG_H2O': "%s kcal/mol" % str(  0.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	393		: {'ddG_H2O': "%s kcal/mol" % str(  5.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	394		: {'ddG_H2O': "%s kcal/mol" % str( -4.2/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13323	: {'ddG': "%s kcal/mol" % str(-10.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13324	: {'ddG': "%s kcal/mol" % str( -1.9/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13325	: {'ddG': "%s kcal/mol" % str(-0.84/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13326	: {'ddG': "%s kcal/mol" % str(  2.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13327	: {'ddG': "%s kcal/mol" % str( -2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	(390	, {'ddG_H2O': "%s kcal/mol" % str( -9.2/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(391	, {'ddG_H2O': "%s kcal/mol" % str(  0.8/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(392	, {'ddG_H2O': "%s kcal/mol" % str(  0.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(393	, {'ddG_H2O': "%s kcal/mol" % str(  5.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(394	, {'ddG_H2O': "%s kcal/mol" % str( -4.2/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13323	, {'ddG': "%s kcal/mol" % str(-10.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13324	, {'ddG': "%s kcal/mol" % str( -1.9/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13325	, {'ddG': "%s kcal/mol" % str(-0.84/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13326	, {'ddG': "%s kcal/mol" % str(  2.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13327	, {'ddG': "%s kcal/mol" % str( -2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
 	
 	# PMID:8377205. Loss of precision on data entry.
-	510 : {'ddG'	:  '0.96 kcal/mol', 'PDB' : '1BNI'},
-	511 : {'ddG'	:  '0.53 kcal/mol', 'PDB' : '1BNI'},
-	512 : {'ddG'	: '-1.19 kcal/mol', 'PDB' : '1BNI'},
-	513 : {'ddG'	:  '0.21 kcal/mol', 'PDB' : '1BNI'},
-	514 : {'ddG'	: '-0.01 kcal/mol', 'PDB' : '1BNI'},
-	515 : {'ddG'	: '-0.25 kcal/mol', 'PDB' : '1BNI'},
-	516 : {'ddG'	:  '0.08 kcal/mol', 'PDB' : '1BNI'},
-	517 : {'ddG'	: '-0.29 kcal/mol', 'PDB' : '1BNI'},
-	518 : {'ddG'	: '-0.48 kcal/mol', 'PDB' : '1BNI'},
-	519 : {'ddG'	:  '0.51 kcal/mol', 'PDB' : '1BNI'},
-	520 : {'ddG'	:  '0.25 kcal/mol', 'PDB' : '1BNI'},
-	521 : {'ddG'	:  '0.29 kcal/mol', 'PDB' : '1BNI'},
-	522 : {'ddG'	: '-0.12 kcal/mol', 'PDB' : '1BNI'},
-	523 : {'ddG'	: '-0.28 kcal/mol', 'PDB' : '1BNI'},
-	524 : {'ddG'	: '-0.27 kcal/mol', 'PDB' : '1BNI'},
-	525 : {'ddG'	: '-0.21 kcal/mol', 'PDB' : '1BNI'},
-	526 : {'ddG'	:  '0.93 kcal/mol', 'PDB' : '1BNI'},
+	(510 , {'ddG'	:  '0.96 kcal/mol', 'PDB' : '1BNI'}),
+	(511 , {'ddG'	:  '0.53 kcal/mol', 'PDB' : '1BNI'}),
+	(512 , {'ddG'	: '-1.19 kcal/mol', 'PDB' : '1BNI'}),
+	(513 , {'ddG'	:  '0.21 kcal/mol', 'PDB' : '1BNI'}),
+	(514 , {'ddG'	: '-0.01 kcal/mol', 'PDB' : '1BNI'}),
+	(515 , {'ddG'	: '-0.25 kcal/mol', 'PDB' : '1BNI'}),
+	(516 , {'ddG'	:  '0.08 kcal/mol', 'PDB' : '1BNI'}),
+	(517 , {'ddG'	: '-0.29 kcal/mol', 'PDB' : '1BNI'}),
+	(518 , {'ddG'	: '-0.48 kcal/mol', 'PDB' : '1BNI'}),
+	(519 , {'ddG'	:  '0.51 kcal/mol', 'PDB' : '1BNI'}),
+	(520 , {'ddG'	:  '0.25 kcal/mol', 'PDB' : '1BNI'}),
+	(521 , {'ddG'	:  '0.29 kcal/mol', 'PDB' : '1BNI'}),
+	(522 , {'ddG'	: '-0.12 kcal/mol', 'PDB' : '1BNI'}),
+	(523 , {'ddG'	: '-0.28 kcal/mol', 'PDB' : '1BNI'}),
+	(524 , {'ddG'	: '-0.27 kcal/mol', 'PDB' : '1BNI'}),
+	(525 , {'ddG'	: '-0.21 kcal/mol', 'PDB' : '1BNI'}),
+	(526 , {'ddG'	:  '0.93 kcal/mol', 'PDB' : '1BNI'}),
 
 	# PMID:8378307. Loss of precision on data entry.
-	544 : {'ddG'	:  '-0.68 kcal/mol', 'PDB' : '1VQB'},
-	545 : {'ddG'	:  '-0.67 kcal/mol', 'PDB' : '1VQB'},
-	546 : {'ddG'	:   '1.09 kcal/mol', 'PDB' : '1VQB'},
-	547 : {'ddG'	:   '1.97 kcal/mol', 'PDB' : '1VQB'},
-	548 : {'ddG'	:   '1.04 kcal/mol', 'PDB' : '1VQB'},
-	549 : {'ddG'	:  '-3.49 kcal/mol', 'PDB' : '1VQB'},
-	550 : {'ddG'	:  '-0.18 kcal/mol', 'PDB' : '1VQB'},
-	551 : {'ddG'	:  '-2.25 kcal/mol', 'PDB' : '1VQB'},
-	552 : {'ddG'	:  '-1.45 kcal/mol', 'PDB' : '1VQB'},
-	553 : {'ddG'	:  '-3.21 kcal/mol', 'PDB' : '1VQB'},
-	554 : {'ddG'	:  '-0.68 kcal/mol', 'PDB' : '1VQB'},
-	555 : {'ddG'	:  '-2.72 kcal/mol', 'PDB' : '1VQB'},
-	556 : {'ddG'	:  '-1.10 kcal/mol', 'PDB' : '1VQB'},
-	557 : {'ddG'	:  '-0.62 kcal/mol', 'PDB' : '1VQB'},
-	558 : {'ddG'	:  '-0.05 kcal/mol', 'PDB' : '1VQB'},
-	559 : {'ddG'	:  '-5.30 kcal/mol', 'PDB' : '1VQB'},
-	560 : {'ddG'	:  '-2.02 kcal/mol', 'PDB' : '1VQB'},
-	561 : {'ddG'	:  '-0.67 kcal/mol', 'PDB' : '1VQB'},
-	562 : {'ddG'	:  '-2.21 kcal/mol', 'PDB' : '1VQB'},
-	563 : {'ddG'	:  '-2.62 kcal/mol', 'PDB' : '1VQB'},
-	564 : {'ddG'	:   '0.50 kcal/mol', 'PDB' : '1VQB'},
-	565 : {'ddG'	:  '-1.47 kcal/mol', 'PDB' : '1VQB'},
-	566 : {'ddG'	:  '-4.30 kcal/mol', 'PDB' : '1VQB'},
-	567 : {'ddG'	:   '0.76 kcal/mol', 'PDB' : '1VQB'},
-	568 : {'ddG'	:   '1.63 kcal/mol', 'PDB' : '1VQB'},
-	569 : {'ddG'	:   '1.23 kcal/mol', 'PDB' : '1VQB'},
-	570 : {'ddG'	:  '-1.50 kcal/mol', 'PDB' : '1VQB'},
-	571 : {'ddG'	:  '-0.66 kcal/mol', 'PDB' : '1VQB'},
-	572 : {'ddG'	:   '0.47 kcal/mol', 'PDB' : '1VQB'},
+	(544 , {'ddG'	:  '-0.68 kcal/mol', 'PDB' : '1VQB'}),
+	(545 , {'ddG'	:  '-0.67 kcal/mol', 'PDB' : '1VQB'}),
+	(546 , {'ddG'	:   '1.09 kcal/mol', 'PDB' : '1VQB'}),
+	(547 , {'ddG'	:   '1.97 kcal/mol', 'PDB' : '1VQB'}),
+	(548 , {'ddG'	:   '1.04 kcal/mol', 'PDB' : '1VQB'}),
+	(549 , {'ddG'	:  '-3.49 kcal/mol', 'PDB' : '1VQB'}),
+	(550 , {'ddG'	:  '-0.18 kcal/mol', 'PDB' : '1VQB'}),
+	(551 , {'ddG'	:  '-2.25 kcal/mol', 'PDB' : '1VQB'}),
+	(552 , {'ddG'	:  '-1.45 kcal/mol', 'PDB' : '1VQB'}),
+	(553 , {'ddG'	:  '-3.21 kcal/mol', 'PDB' : '1VQB'}),
+	(554 , {'ddG'	:  '-0.68 kcal/mol', 'PDB' : '1VQB'}),
+	(555 , {'ddG'	:  '-2.72 kcal/mol', 'PDB' : '1VQB'}),
+	(556 , {'ddG'	:  '-1.10 kcal/mol', 'PDB' : '1VQB'}),
+	(557 , {'ddG'	:  '-0.62 kcal/mol', 'PDB' : '1VQB'}),
+	(558 , {'ddG'	:  '-0.05 kcal/mol', 'PDB' : '1VQB'}),
+	(559 , {'ddG'	:  '-5.30 kcal/mol', 'PDB' : '1VQB'}),
+	(560 , {'ddG'	:  '-2.02 kcal/mol', 'PDB' : '1VQB'}),
+	(561 , {'ddG'	:  '-0.67 kcal/mol', 'PDB' : '1VQB'}),
+	(562 , {'ddG'	:  '-2.21 kcal/mol', 'PDB' : '1VQB'}),
+	(563 , {'ddG'	:  '-2.62 kcal/mol', 'PDB' : '1VQB'}),
+	(564 , {'ddG'	:   '0.50 kcal/mol', 'PDB' : '1VQB'}),
+	(565 , {'ddG'	:  '-1.47 kcal/mol', 'PDB' : '1VQB'}),
+	(566 , {'ddG'	:  '-4.30 kcal/mol', 'PDB' : '1VQB'}),
+	(567 , {'ddG'	:   '0.76 kcal/mol', 'PDB' : '1VQB'}),
+	(568 , {'ddG'	:   '1.63 kcal/mol', 'PDB' : '1VQB'}),
+	(569 , {'ddG'	:   '1.23 kcal/mol', 'PDB' : '1VQB'}),
+	(570 , {'ddG'	:  '-1.50 kcal/mol', 'PDB' : '1VQB'}),
+	(571 , {'ddG'	:  '-0.66 kcal/mol', 'PDB' : '1VQB'}),
+	(572 , {'ddG'	:   '0.47 kcal/mol', 'PDB' : '1VQB'}),
 	
 	# PMID:7764048. Loss of precision on conversion from kJ/mol to kcal/mol.
-	723 : {'ddG_H2O'	: "%s kcal/mol" % str((40.0 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	724 : {'ddG_H2O'	: "%s kcal/mol" % str((39.4 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	725 : {'ddG_H2O'	: "%s kcal/mol" % str((39.2 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	726 : {'ddG_H2O'	: "%s kcal/mol" % str((37.5 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	728 : {'ddG_H2O'	: "%s kcal/mol" % str((37.9 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	729 : {'ddG_H2O'	: "%s kcal/mol" % str((35.1 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	730 : {'ddG_H2O'	: "%s kcal/mol" % str((35.7 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	731 : {'ddG_H2O'	: "%s kcal/mol" % str((34.2 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	(723 , {'ddG_H2O'	: "%s kcal/mol" % str((40.0 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(724 , {'ddG_H2O'	: "%s kcal/mol" % str((39.4 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(725 , {'ddG_H2O'	: "%s kcal/mol" % str((39.2 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(726 , {'ddG_H2O'	: "%s kcal/mol" % str((37.5 - 38.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(728 , {'ddG_H2O'	: "%s kcal/mol" % str((37.9 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(729 , {'ddG_H2O'	: "%s kcal/mol" % str((35.1 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(730 , {'ddG_H2O'	: "%s kcal/mol" % str((35.7 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(731 , {'ddG_H2O'	: "%s kcal/mol" % str((34.2 - 35.5)/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
 	
 	# PMID:2000379. Removing 'precision' of -3.94 here since I do not see where the extra decimal point of precision in ProTherm comes from.
-	868 : {'ddG' : '-3.9 kcal/mol', 'PDB' : '1VQB'}, 
+	(868 , {'ddG' : '-3.9 kcal/mol', 'PDB' : '1VQB'}), 
 	
 	# PMID:9020793. Loss of precision on conversion from kJ/mol to kcal/mol.
-	961  : {'ddG_H2O'	:   "%s kcal/mol" % str(-8.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	962  : {'ddG_H2O'	:   "%s kcal/mol" % str( 0.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	963  : {'ddG_H2O'	:   "%s kcal/mol" % str(-1.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	964  : {'ddG_H2O'	:   "%s kcal/mol" % str(-1.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	965  : {'ddG_H2O'	:   "%s kcal/mol" % str(-2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	966  : {'ddG_H2O'	:   "%s kcal/mol" % str( 1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	967  : {'ddG_H2O'	:   "%s kcal/mol" % str(-6.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	968  : {'ddG_H2O'	:   "%s kcal/mol" % str(-2.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	969  : {'ddG_H2O'	:   "%s kcal/mol" % str(-3.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	(961  , {'ddG_H2O'	:   "%s kcal/mol" % str(-8.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(962  , {'ddG_H2O'	:   "%s kcal/mol" % str( 0.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(963  , {'ddG_H2O'	:   "%s kcal/mol" % str(-1.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(964  , {'ddG_H2O'	:   "%s kcal/mol" % str(-1.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(965  , {'ddG_H2O'	:   "%s kcal/mol" % str(-2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(966  , {'ddG_H2O'	:   "%s kcal/mol" % str( 1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(967  , {'ddG_H2O'	:   "%s kcal/mol" % str(-6.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(968  , {'ddG_H2O'	:   "%s kcal/mol" % str(-2.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(969  , {'ddG_H2O'	:   "%s kcal/mol" % str(-3.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
 	# 970 has the wrong sign and is fixed above
-	971  : {'ddG_H2O'	:   "%s kcal/mol" % str(-7.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	972  : {'ddG_H2O'	:   "%s kcal/mol" % str( 2.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	2286 : {'ddG_H2O'	:   "%s kcal/mol" % str(-8.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	2287 : {'ddG_H2O'	:   "%s kcal/mol" % str(-2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	2288 : {'ddG_H2O'	:   "%s kcal/mol" % str(-1.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	2289 : {'ddG_H2O'	:   "%s kcal/mol" % str(-8.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	2290 : {'ddG_H2O'	:   "%s kcal/mol" % str(-4.4/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	2291 : {'ddG_H2O'	:   "%s kcal/mol" % str(-4.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	(971  , {'ddG_H2O'	:   "%s kcal/mol" % str(-7.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(972  , {'ddG_H2O'	:   "%s kcal/mol" % str( 2.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(2286 , {'ddG_H2O'	:   "%s kcal/mol" % str(-8.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(2287 , {'ddG_H2O'	:   "%s kcal/mol" % str(-2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(2288 , {'ddG_H2O'	:   "%s kcal/mol" % str(-1.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(2289 , {'ddG_H2O'	:   "%s kcal/mol" % str(-8.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(2290 , {'ddG_H2O'	:   "%s kcal/mol" % str(-4.4/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(2291 , {'ddG_H2O'	:   "%s kcal/mol" % str(-4.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
 	 
 	# PMID:2217161. Loss of precision on conversion from kJ/mol to kcal/mol.
-	2513  : {'ddG'	:   "%s kcal/mol" % str((2.8 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
-	2514  : {'ddG'	:   "%s kcal/mol" % str((4.3 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
-	2515  : {'ddG'	:   "%s kcal/mol" % str((1.6 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
-	2516  : {'ddG'	:   "%s kcal/mol" % str((6.2 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
-	2517  : {'ddG'	:   "%s kcal/mol" % str((2.3 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
-	2518  : {'ddG'	:   "%s kcal/mol" % str((3.4 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
-	2519  : {'ddG'	:   "%s kcal/mol" % str((5.1 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	(2513  , {'ddG'	:   "%s kcal/mol" % str((2.8 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'}),
+	(2514  , {'ddG'	:   "%s kcal/mol" % str((4.3 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'}),
+	(2515  , {'ddG'	:   "%s kcal/mol" % str((1.6 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'}),
+	(2516  , {'ddG'	:   "%s kcal/mol" % str((6.2 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'}),
+	(2517  , {'ddG'	:   "%s kcal/mol" % str((2.3 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'}),
+	(2518  , {'ddG'	:   "%s kcal/mol" % str((3.4 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'}),
+	(2519  , {'ddG'	:   "%s kcal/mol" % str((5.1 - 1.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'}),
 	
 	
 	# PMID:3409879. Loss of precision on conversion from kJ/mol to kcal/mol.
-	2745  : {'ddG_H2O'	:   "%s kcal/mol" % str((15.0 - 20.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
-	2746  : {'ddG_H2O'	:   "%s kcal/mol" % str((15.0 - 20.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
-	2747  : {'ddG_H2O'	:   "%s kcal/mol" % str((22.0 - 20.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'},
+	(2745  , {'ddG_H2O'	:   "%s kcal/mol" % str((15.0 - 20.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'}),
+	(2746  , {'ddG_H2O'	:   "%s kcal/mol" % str((15.0 - 20.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'}),
+	(2747  , {'ddG_H2O'	:   "%s kcal/mol" % str((22.0 - 20.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1IGV'}),
 	
 	# PMID:1765074. Loss of precision on conversion from kJ/mol to kcal/mol.
-	2749  : {'ddG_H2O'	: "%s kcal/mol" % str((12.5 - 16.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '3PGK'},
+	(2749  , {'ddG_H2O'	: "%s kcal/mol" % str((12.5 - 16.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '3PGK'}),
 	
 	# PMID:9020874. Loss of precision on conversion from kJ/mol to kcal/mol.
-	2776  : {'ddG_H2O'	: "%s kcal/mol" % str((13.4 - 23.8)/NUMBER_KJ_IN_KCAL), 'PDB' : '1AXB'},
-	2777  : {'ddG_H2O'	: "%s kcal/mol" % str((18.0 - 21.7)/NUMBER_KJ_IN_KCAL), 'PDB' : '1AXB'},
+	(2776  , {'ddG_H2O'	: "%s kcal/mol" % str((13.4 - 23.8)/NUMBER_KJ_IN_KCAL), 'PDB' : '1AXB'}),
+	(2777  , {'ddG_H2O'	: "%s kcal/mol" % str((18.0 - 21.7)/NUMBER_KJ_IN_KCAL), 'PDB' : '1AXB'}),
 	
 	# PMID:9215576. Loss of precision on conversion from kJ/mol to kcal/mol.
-	3112 : {'ddG_H2O'	: "%s kcal/mol" % str( 4.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'},
-	3113 : {'ddG_H2O'	: "%s kcal/mol" % str(-7.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'},
-	14154 : {'ddG'		: "%s kcal/mol" % str( 3.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'},
-	14155 : {'ddG'		: "%s kcal/mol" % str(-7.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'},
-	14156 : {'ddG'		: "%s kcal/mol" % str(-11.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'},
+	(3112 , {'ddG_H2O'	: "%s kcal/mol" % str( 4.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'}),
+	(3113 , {'ddG_H2O'	: "%s kcal/mol" % str(-7.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'}),
+	(14154 , {'ddG'		: "%s kcal/mol" % str( 3.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'}),
+	(14155 , {'ddG'		: "%s kcal/mol" % str(-7.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'}),
+	(14156 , {'ddG'		: "%s kcal/mol" % str(-11.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1CYO'}),
 
 	# PMID:9588945. Loss of precision on conversion from kJ/mol to kcal/mol.
-	3469 : {'ddG'		: "%s kcal/mol" % str(-1.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1G6N'},
-	3470 : {'ddG'		: "%s kcal/mol" % str( 0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1G6N'},
+	(3469 , {'ddG'		: "%s kcal/mol" % str(-1.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1G6N'}),
+	(3470 , {'ddG'		: "%s kcal/mol" % str( 0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1G6N'}),
 	
 	# PMID:9533624. Loss of precision on conversion from kJ/mol to kcal/mol.
-	3519 : {'ddG_H2O'	: "%s kcal/mol" % str(-3.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
-	3520 : {'ddG_H2O'	: "%s kcal/mol" % str(-6.4/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
-	3521 : {'ddG_H2O'	: "%s kcal/mol" % str(-9.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
-	3522 : {'ddG_H2O'	: "%s kcal/mol" % str( 0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
-	14241 : {'ddG'		: "%s kcal/mol" % str(-2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
-	14242 : {'ddG'		: "%s kcal/mol" % str(-5.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
-	14243 : {'ddG'		: "%s kcal/mol" % str(-7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
-	14244 : {'ddG'		: "%s kcal/mol" % str( 1.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'},
+	(3519 , {'ddG_H2O'	: "%s kcal/mol" % str(-3.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'}),
+	(3520 , {'ddG_H2O'	: "%s kcal/mol" % str(-6.4/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'}),
+	(3521 , {'ddG_H2O'	: "%s kcal/mol" % str(-9.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'}),
+	(3522 , {'ddG_H2O'	: "%s kcal/mol" % str( 0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'}),
+	(14241 , {'ddG'		: "%s kcal/mol" % str(-2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'}),
+	(14242 , {'ddG'		: "%s kcal/mol" % str(-5.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'}),
+	(14243 , {'ddG'		: "%s kcal/mol" % str(-7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'}),
+	(14244 , {'ddG'		: "%s kcal/mol" % str( 1.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1CSP'}),
 	
 	# PMID:10079068. Loss of precision on conversion from kJ/mol to kcal/mol.
-	5424 : {'ddG'		: "%s kcal/mol" % str(  1.4/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
-	5425 : {'ddG'		: "%s kcal/mol" % str(  7.2/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
-	5426 : {'ddG'		: "%s kcal/mol" % str(  8.0/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
-	5427 : {'ddG'		: "%s kcal/mol" % str(  2.1/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
-	5428 : {'ddG'		: "%s kcal/mol" % str( 19.3/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	(5424 , {'ddG'		: "%s kcal/mol" % str(  1.4/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}),
+	(5425 , {'ddG'		: "%s kcal/mol" % str(  7.2/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}),
+	(5426 , {'ddG'		: "%s kcal/mol" % str(  8.0/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}),
+	(5427 , {'ddG'		: "%s kcal/mol" % str(  2.1/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}),
+	(5428 , {'ddG'		: "%s kcal/mol" % str( 19.3/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}),
 	#5429 has the wrong sign as well
-	5430 : {'ddG'		: "%s kcal/mol" % str( 10.3/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
-	5431 : {'ddG'		: "%s kcal/mol" % str(  0.6/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
-	5432 : {'ddG'		: "%s kcal/mol" % str(  6.0/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
-	5433 : {'ddG'		: "%s kcal/mol" % str(  1.1/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
-	5434 : {'ddG'		: "%s kcal/mol" % str(  8.9/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'},
+	(5430 , {'ddG'		: "%s kcal/mol" % str( 10.3/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}),
+	(5431 , {'ddG'		: "%s kcal/mol" % str(  0.6/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}),
+	(5432 , {'ddG'		: "%s kcal/mol" % str(  6.0/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}),
+	(5433 , {'ddG'		: "%s kcal/mol" % str(  1.1/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}),
+	(5434 , {'ddG'		: "%s kcal/mol" % str(  8.9/-NUMBER_KJ_IN_KCAL), 'PDB' : '1AG2'}),
 	
 	# PMID:10388847. Loss of precision on conversion from kJ/mol to kcal/mol.
-	5541 : {'ddG_H2O'		: "%s kcal/mol" % str((22.9 - 27.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1P2P'},
-	5542 : {'ddG_H2O'		: "%s kcal/mol" % str((17.7 - 27.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1P2P'},
-	5543 : {'ddG_H2O'		: "%s kcal/mol" % str((13.8 - 27.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1P2P'},
+	(5541 , {'ddG_H2O'		: "%s kcal/mol" % str((22.9 - 27.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1P2P'}),
+	(5542 , {'ddG_H2O'		: "%s kcal/mol" % str((17.7 - 27.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1P2P'}),
+	(5543 , {'ddG_H2O'		: "%s kcal/mol" % str((13.8 - 27.2)/NUMBER_KJ_IN_KCAL), 'PDB' : '1P2P'}),
 	
 	# PMID:7549876. Loss of precision on conversion from kcal/mol to kJ/mol.
-	7253 : {'ddG_H2O'	: "-4.3 kcal/mol", 'PDB' : '3MBP'},
-	7254 : {'ddG_H2O'	: "-1.9 kcal/mol", 'PDB' : '3MBP'},
+	(7253 , {'ddG_H2O'	: "-4.3 kcal/mol", 'PDB' : '3MBP'}),
+	(7254 , {'ddG_H2O'	: "-1.9 kcal/mol", 'PDB' : '3MBP'}),
 	
 	# PMID:8043610. Loss of precision on conversion from kcal/mol to kJ/mol.
-	7257 : {'ddG_H2O'	: "-6.9 kcal/mol",  'PDB' : '1B0O'},
+	(7257 , {'ddG_H2O'	: "-6.9 kcal/mol",  'PDB' : '1B0O'}),
 	
 	# PMID:8795042. Loss of precision on conversion on conversion from kJ/mol to kcal/mol.
-	11772 : {'ddG'	: "%s kcal/mol" % str(-5.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	11773 : {'ddG'	: "%s kcal/mol" % str(-6.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	11774 : {'ddG'	: "%s kcal/mol" % str(-2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	11775 : {'ddG'	: "%s kcal/mol" % str(-5.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	11776 : {'ddG'	: "%s kcal/mol" % str(-9.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	11777 : {'ddG'	: "%s kcal/mol" % str(-5.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	11778 : {'ddG'	: "%s kcal/mol" % str(-5.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	11779 : {'ddG'	: "%s kcal/mol" % str(-7.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	11780 : {'ddG'	: "%s kcal/mol" % str(-4.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
-	11781 : {'ddG'	: "%s kcal/mol" % str(-4.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'},
+	(11772 , {'ddG'	: "%s kcal/mol" % str(-5.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(11773 , {'ddG'	: "%s kcal/mol" % str(-6.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(11774 , {'ddG'	: "%s kcal/mol" % str(-2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(11775 , {'ddG'	: "%s kcal/mol" % str(-5.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(11776 , {'ddG'	: "%s kcal/mol" % str(-9.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(11777 , {'ddG'	: "%s kcal/mol" % str(-5.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(11778 , {'ddG'	: "%s kcal/mol" % str(-5.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(11779 , {'ddG'	: "%s kcal/mol" % str(-7.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(11780 , {'ddG'	: "%s kcal/mol" % str(-4.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
+	(11781 , {'ddG'	: "%s kcal/mol" % str(-4.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}),
 	
 	# PMID:8539253. Loss of precision on conversion on conversion from kJ/mol to kcal/mol.
-	11860 : {'ddG'	: "%s kcal/mol" % str((61.1 - 71.7)/NUMBER_KJ_IN_KCAL), 'PDB' : '1ROP'},
-	11861 : {'ddG'	: "%s kcal/mol" % str((46.1 - 71.7)/NUMBER_KJ_IN_KCAL), 'PDB' : '1ROP'},
+	(11860 , {'ddG'	: "%s kcal/mol" % str((61.1 - 71.7)/NUMBER_KJ_IN_KCAL), 'PDB' : '1ROP'}),
+	(11861 , {'ddG'	: "%s kcal/mol" % str((46.1 - 71.7)/NUMBER_KJ_IN_KCAL), 'PDB' : '1ROP'}),
 	
 	# PMID:9336842. Loss of precision on conversion from kJ/mol to kcal/mol.
-	11863 : {'ddG'	: "%s kcal/mol" % str( 2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1BTA'},
+	(11863 , {'ddG'	: "%s kcal/mol" % str( 2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1BTA'}),
 	
 	# PMID:2372535. Loss of precision on conversion on conversion from kJ/mol to kcal/mol.
-	11887 : {'ddG'	: "%s kcal/mol" % str((-1.5 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
-	11888 : {'ddG'	: "%s kcal/mol" % str(( 0.9 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
-	11889 : {'ddG'	: "%s kcal/mol" % str(( 6.0 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
-	11890 : {'ddG'	: "%s kcal/mol" % str((-0.47 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
-	11891 : {'ddG'	: "%s kcal/mol" % str(( 6.0 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
-	11892 : {'ddG'	: "%s kcal/mol" % str(( 5.1 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'},
+	(11887 , {'ddG'	: "%s kcal/mol" % str((-1.5 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'}),
+	(11888 , {'ddG'	: "%s kcal/mol" % str(( 0.9 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'}),
+	(11889 , {'ddG'	: "%s kcal/mol" % str(( 6.0 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'}),
+	(11890 , {'ddG'	: "%s kcal/mol" % str((-0.47 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'}),
+	(11891 , {'ddG'	: "%s kcal/mol" % str(( 6.0 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'}),
+	(11892 , {'ddG'	: "%s kcal/mol" % str(( 5.1 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'}),
 	#11893 Seems to have been entered incorrectly so is corrected above
 	
 	# PMID:9228039. Loss of precision on data entry.
-	13199 : {'ddG'	:   '1.88 kcal/mol', 'PDB' : '2RN2'},
-	13200 : {'ddG'	:   '1.67 kcal/mol', 'PDB' : '2RN2'},
-	13201 : {'ddG'	:   '1.31 kcal/mol', 'PDB' : '2RN2'},
-	13202 : {'ddG'	:   '0.76 kcal/mol', 'PDB' : '2RN2'},
-	13203 : {'ddG'	:   '0.49 kcal/mol', 'PDB' : '2RN2'},
+	(13199 , {'ddG'	:   '1.88 kcal/mol', 'PDB' : '2RN2'}),
+	(13200 , {'ddG'	:   '1.67 kcal/mol', 'PDB' : '2RN2'}),
+	(13201 , {'ddG'	:   '1.31 kcal/mol', 'PDB' : '2RN2'}),
+	(13202 , {'ddG'	:   '0.76 kcal/mol', 'PDB' : '2RN2'}),
+	(13203 , {'ddG'	:   '0.49 kcal/mol', 'PDB' : '2RN2'}),
 	#13204 also has the wrong sign
-	13205 : {'ddG'	:  '-0.82 kcal/mol', 'PDB' : '2RN2'},
-	13206 : {'ddG'	:  '-1.19 kcal/mol', 'PDB' : '2RN2'},
-	13207 : {'ddG'	:  '-1.52 kcal/mol', 'PDB' : '2RN2'},
-	13208 : {'ddG'	:  '-1.64 kcal/mol', 'PDB' : '2RN2'},
-	13209 : {'ddG'	:  '-1.76 kcal/mol', 'PDB' : '2RN2'},
-	13210 : {'ddG'	:  '-1.79 kcal/mol', 'PDB' : '2RN2'},
-	13211 : {'ddG'	:  '-1.85 kcal/mol', 'PDB' : '2RN2'},
-	13212 : {'ddG'	:  '-2.31 kcal/mol', 'PDB' : '2RN2'},
-	13213 : {'ddG'	:  '-2.71 kcal/mol', 'PDB' : '2RN2'},
-	13214 : {'ddG'	:  '-3.59 kcal/mol', 'PDB' : '2RN2'},
-	13215 : {'ddG'	:  '-5.93 kcal/mol', 'PDB' : '2RN2'},
+	(13205 , {'ddG'	:  '-0.82 kcal/mol', 'PDB' : '2RN2'}),
+	(13206 , {'ddG'	:  '-1.19 kcal/mol', 'PDB' : '2RN2'}),
+	(13207 , {'ddG'	:  '-1.52 kcal/mol', 'PDB' : '2RN2'}),
+	(13208 , {'ddG'	:  '-1.64 kcal/mol', 'PDB' : '2RN2'}),
+	(13209 , {'ddG'	:  '-1.76 kcal/mol', 'PDB' : '2RN2'}),
+	(13210 , {'ddG'	:  '-1.79 kcal/mol', 'PDB' : '2RN2'}),
+	(13211 , {'ddG'	:  '-1.85 kcal/mol', 'PDB' : '2RN2'}),
+	(13212 , {'ddG'	:  '-2.31 kcal/mol', 'PDB' : '2RN2'}),
+	(13213 , {'ddG'	:  '-2.71 kcal/mol', 'PDB' : '2RN2'}),
+	(13214 , {'ddG'	:  '-3.59 kcal/mol', 'PDB' : '2RN2'}),
+	(13215 , {'ddG'	:  '-5.93 kcal/mol', 'PDB' : '2RN2'}),
 	
 	# PMID:8955106. Loss of precision on data entry.
-	13216 : {'ddG'	:  '1.96 kcal/mol', 'PDB' : '2RN2'},
-	13217 : {'ddG'	:  '4.05 kcal/mol', 'PDB' : '2RN2'},
-	13218 : {'ddG'	:  '0.96 kcal/mol', 'PDB' : '2RN2'},
-	13219 : {'ddG'	:  '2.67 kcal/mol', 'PDB' : '2RN2'},
-	13220 : {'ddG'	:  '2.37 kcal/mol', 'PDB' : '2RN2'},
-	13221 : {'ddG'	:  '0.28 kcal/mol', 'PDB' : '2RN2'},
-	13222 : {'ddG'	: '-0.28 kcal/mol', 'PDB' : '2RN2'},
-	13223 : {'ddG'	: '-0.22 kcal/mol', 'PDB' : '2RN2'},
-	13224 : {'ddG'	:  '1.57 kcal/mol', 'PDB' : '2RN2'},
-	13225 : {'ddG'	:  '1.08 kcal/mol', 'PDB' : '2RN2'},
-	13226 : {'ddG'	:  '0.11 kcal/mol', 'PDB' : '2RN2'},
-	13227 : {'ddG'	:  '1.84 kcal/mol', 'PDB' : '2RN2'},
-	13228 : {'ddG'	:  '1.96 kcal/mol', 'PDB' : '2RN2'},
-	13229 : {'ddG'	: '-0.74 kcal/mol', 'PDB' : '2RN2'},
-	13230 : {'ddG'	:  '2.42 kcal/mol', 'PDB' : '2RN2'},
-	13231 : {'ddG'	:  '1.12 kcal/mol', 'PDB' : '2RN2'},
-	13232 : {'ddG'	:  '0.70 kcal/mol', 'PDB' : '2RN2'},
-	13233 : {'ddG'	:  '0.44 kcal/mol', 'PDB' : '2RN2'},
-	13234 : {'ddG'	: '-0.06 kcal/mol', 'PDB' : '2RN2'},
-	13235 : {'ddG'	: '-0.06 kcal/mol', 'PDB' : '2RN2'},
-	13236 : {'ddG'	:  '0.23 kcal/mol', 'PDB' : '2RN2'},
-	13237 : {'ddG'	: '-0.35 kcal/mol', 'PDB' : '2RN2'},
-	13238 : {'ddG'	: '-0.09 kcal/mol', 'PDB' : '2RN2'},
-	13239 : {'ddG'	:  '0.53 kcal/mol', 'PDB' : '2RN2'},
-	13240 : {'ddG'	: '-0.09 kcal/mol', 'PDB' : '2RN2'},
-	13241 : {'ddG'	:  '0.85 kcal/mol', 'PDB' : '2RN2'},
+	(13216 , {'ddG'	:  '1.96 kcal/mol', 'PDB' : '2RN2'}),
+	(13217 , {'ddG'	:  '4.05 kcal/mol', 'PDB' : '2RN2'}),
+	(13218 , {'ddG'	:  '0.96 kcal/mol', 'PDB' : '2RN2'}),
+	(13219 , {'ddG'	:  '2.67 kcal/mol', 'PDB' : '2RN2'}),
+	(13220 , {'ddG'	:  '2.37 kcal/mol', 'PDB' : '2RN2'}),
+	(13221 , {'ddG'	:  '0.28 kcal/mol', 'PDB' : '2RN2'}),
+	(13222 , {'ddG'	: '-0.28 kcal/mol', 'PDB' : '2RN2'}),
+	(13223 , {'ddG'	: '-0.22 kcal/mol', 'PDB' : '2RN2'}),
+	(13224 , {'ddG'	:  '1.57 kcal/mol', 'PDB' : '2RN2'}),
+	(13225 , {'ddG'	:  '1.08 kcal/mol', 'PDB' : '2RN2'}),
+	(13226 , {'ddG'	:  '0.11 kcal/mol', 'PDB' : '2RN2'}),
+	(13227 , {'ddG'	:  '1.84 kcal/mol', 'PDB' : '2RN2'}),
+	(13228 , {'ddG'	:  '1.96 kcal/mol', 'PDB' : '2RN2'}),
+	(13229 , {'ddG'	: '-0.74 kcal/mol', 'PDB' : '2RN2'}),
+	(13230 , {'ddG'	:  '2.42 kcal/mol', 'PDB' : '2RN2'}),
+	(13231 , {'ddG'	:  '1.12 kcal/mol', 'PDB' : '2RN2'}),
+	(13232 , {'ddG'	:  '0.70 kcal/mol', 'PDB' : '2RN2'}),
+	(13233 , {'ddG'	:  '0.44 kcal/mol', 'PDB' : '2RN2'}),
+	(13234 , {'ddG'	: '-0.06 kcal/mol', 'PDB' : '2RN2'}),
+	(13235 , {'ddG'	: '-0.06 kcal/mol', 'PDB' : '2RN2'}),
+	(13236 , {'ddG'	:  '0.23 kcal/mol', 'PDB' : '2RN2'}),
+	(13237 , {'ddG'	: '-0.35 kcal/mol', 'PDB' : '2RN2'}),
+	(13238 , {'ddG'	: '-0.09 kcal/mol', 'PDB' : '2RN2'}),
+	(13239 , {'ddG'	:  '0.53 kcal/mol', 'PDB' : '2RN2'}),
+	(13240 , {'ddG'	: '-0.09 kcal/mol', 'PDB' : '2RN2'}),
+	(13241 , {'ddG'	:  '0.85 kcal/mol', 'PDB' : '2RN2'}),
 	
 	# PMID:8251481. Loss of precision on data entry.
-	13271 : {'ddG'	:  '-0.55 kcal/mol', 'PDB' : '1BVC'},
-	13272 : {'ddG'	:  '-0.56 kcal/mol', 'PDB' : '1BVC'},
-	13273 : {'ddG'	:   '0.04 kcal/mol', 'PDB' : '1BVC'},
-	13274 : {'ddG'	:  '-1.33 kcal/mol', 'PDB' : '1BVC'},
-	13275 : {'ddG'	:  '-0.64 kcal/mol', 'PDB' : '1BVC'},
-	13276 : {'ddG'	:  '-1.14 kcal/mol', 'PDB' : '1BVC'},
-	13277 : {'ddG'	:  '-1.84 kcal/mol', 'PDB' : '1BVC'},
-	13278 : {'ddG'	:   '0.63 kcal/mol', 'PDB' : '1BVC'},
-	13279 : {'ddG'	:   '0.93 kcal/mol', 'PDB' : '1BVC'},
-	13280 : {'ddG'	:  '-0.12 kcal/mol', 'PDB' : '1BVC'},
-	13281 : {'ddG'	:  '-1.10 kcal/mol', 'PDB' : '1BVC'},
-	13282 : {'ddG'	:  '-1.12 kcal/mol', 'PDB' : '1BVC'},
-	13283 : {'ddG'	:   '0.12 kcal/mol', 'PDB' : '1BVC'},
-	13284 : {'ddG'	:  '-1.72 kcal/mol', 'PDB' : '1BVC'},
-	13285 : {'ddG'	:  '-2.37 kcal/mol', 'PDB' : '1BVC'},
-	13286 : {'ddG'	:  '-0.02 kcal/mol', 'PDB' : '1BVC'},
-	13287 : {'ddG'	:   '0.00 kcal/mol', 'PDB' : '1BVC'},
-	13288 : {'ddG'	:  '-0.10 kcal/mol', 'PDB' : '1BVC'},
-	13289 : {'ddG'	:  '-1.18 kcal/mol', 'PDB' : '1BVC'},
-	13290 : {'ddG'	:  '-1.54 kcal/mol', 'PDB' : '1BVC'},
-	13291 : {'ddG'	:  '-0.79 kcal/mol', 'PDB' : '1BVC'},
-	13292 : {'ddG'	:  '-2.25 kcal/mol', 'PDB' : '1BVC'},
-	13293 : {'ddG'	:  '-0.80 kcal/mol', 'PDB' : '1BVC'},
+	(13271 , {'ddG'	:  '-0.55 kcal/mol', 'PDB' : '1BVC'}),
+	(13272 , {'ddG'	:  '-0.56 kcal/mol', 'PDB' : '1BVC'}),
+	(13273 , {'ddG'	:   '0.04 kcal/mol', 'PDB' : '1BVC'}),
+	(13274 , {'ddG'	:  '-1.33 kcal/mol', 'PDB' : '1BVC'}),
+	(13275 , {'ddG'	:  '-0.64 kcal/mol', 'PDB' : '1BVC'}),
+	(13276 , {'ddG'	:  '-1.14 kcal/mol', 'PDB' : '1BVC'}),
+	(13277 , {'ddG'	:  '-1.84 kcal/mol', 'PDB' : '1BVC'}),
+	(13278 , {'ddG'	:   '0.63 kcal/mol', 'PDB' : '1BVC'}),
+	(13279 , {'ddG'	:   '0.93 kcal/mol', 'PDB' : '1BVC'}),
+	(13280 , {'ddG'	:  '-0.12 kcal/mol', 'PDB' : '1BVC'}),
+	(13281 , {'ddG'	:  '-1.10 kcal/mol', 'PDB' : '1BVC'}),
+	(13282 , {'ddG'	:  '-1.12 kcal/mol', 'PDB' : '1BVC'}),
+	(13283 , {'ddG'	:   '0.12 kcal/mol', 'PDB' : '1BVC'}),
+	(13284 , {'ddG'	:  '-1.72 kcal/mol', 'PDB' : '1BVC'}),
+	(13285 , {'ddG'	:  '-2.37 kcal/mol', 'PDB' : '1BVC'}),
+	(13286 , {'ddG'	:  '-0.02 kcal/mol', 'PDB' : '1BVC'}),
+	(13287 , {'ddG'	:   '0.00 kcal/mol', 'PDB' : '1BVC'}),
+	(13288 , {'ddG'	:  '-0.10 kcal/mol', 'PDB' : '1BVC'}),
+	(13289 , {'ddG'	:  '-1.18 kcal/mol', 'PDB' : '1BVC'}),
+	(13290 , {'ddG'	:  '-1.54 kcal/mol', 'PDB' : '1BVC'}),
+	(13291 , {'ddG'	:  '-0.79 kcal/mol', 'PDB' : '1BVC'}),
+	(13292 , {'ddG'	:  '-2.25 kcal/mol', 'PDB' : '1BVC'}),
+	(13293 , {'ddG'	:  '-0.80 kcal/mol', 'PDB' : '1BVC'}),
 	
 	# PMID:1854726. Loss of precision on data entry of some records.
-	13308 : {'ddG'	:   '0.04 kcal/mol', 'PDB' : '2LZM'},
+	(13308 , {'ddG'	:   '0.04 kcal/mol', 'PDB' : '2LZM'}),
 	
 	# PMID:8358293. Loss of precision on data entry of some records.
-	13328 : {'ddG'	: '1.05 kcal/mol', 'PDB' : '1BVC'},
-	13329 : {'ddG'	: '0.75 kcal/mol', 'PDB' : '1BVC'},
-	13330 : {'ddG'	: '0.59 kcal/mol', 'PDB' : '1BVC'},
-	13331 : {'ddG'	: '0.16 kcal/mol', 'PDB' : '1BVC'},
-	13332 : {'ddG'	: '-0.67 kcal/mol', 'PDB' : '1BVC'},
-	13333 : {'ddG'	: '-0.26 kcal/mol', 'PDB' : '1BVC'},
-	13334 : {'ddG'	: '-0.26 kcal/mol', 'PDB' : '1BVC'},
-	13335 : {'ddG'	: '-0.44 kcal/mol', 'PDB' : '1BVC'},
-	13336 : {'ddG'	: '-0.41 kcal/mol', 'PDB' : '1BVC'},
-	13337 : {'ddG'	: '-1.12 kcal/mol', 'PDB' : '1BVC'},
-	13338 : {'ddG'	: '-1.78 kcal/mol', 'PDB' : '1BVC'},
-	13339 : {'ddG'	: '-1.45 kcal/mol', 'PDB' : '1BVC'},
-	13340 : {'ddG'	: '-1.41 kcal/mol', 'PDB' : '1BVC'},
-	13341 : {'ddG'	: '-1.60 kcal/mol', 'PDB' : '1BVC'},
-	13342 : {'ddG'	: '-1.92 kcal/mol', 'PDB' : '1BVC'},
+	(13328 , {'ddG'	: '1.05 kcal/mol', 'PDB' : '1BVC'}),
+	(13329 , {'ddG'	: '0.75 kcal/mol', 'PDB' : '1BVC'}),
+	(13330 , {'ddG'	: '0.59 kcal/mol', 'PDB' : '1BVC'}),
+	(13331 , {'ddG'	: '0.16 kcal/mol', 'PDB' : '1BVC'}),
+	(13332 , {'ddG'	: '-0.67 kcal/mol', 'PDB' : '1BVC'}),
+	(13333 , {'ddG'	: '-0.26 kcal/mol', 'PDB' : '1BVC'}),
+	(13334 , {'ddG'	: '-0.26 kcal/mol', 'PDB' : '1BVC'}),
+	(13335 , {'ddG'	: '-0.44 kcal/mol', 'PDB' : '1BVC'}),
+	(13336 , {'ddG'	: '-0.41 kcal/mol', 'PDB' : '1BVC'}),
+	(13337 , {'ddG'	: '-1.12 kcal/mol', 'PDB' : '1BVC'}),
+	(13338 , {'ddG'	: '-1.78 kcal/mol', 'PDB' : '1BVC'}),
+	(13339 , {'ddG'	: '-1.45 kcal/mol', 'PDB' : '1BVC'}),
+	(13340 , {'ddG'	: '-1.41 kcal/mol', 'PDB' : '1BVC'}),
+	(13341 , {'ddG'	: '-1.60 kcal/mol', 'PDB' : '1BVC'}),
+	(13342 , {'ddG'	: '-1.92 kcal/mol', 'PDB' : '1BVC'}),
 	
 	# PMID:8125123. Loss of precision on conversion from kJ/mol to kcal/mol.
-	13351 : {'ddG'	: "%s kcal/mol" % str(3.7/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13352 : {'ddG'	: "%s kcal/mol" % str(8.1/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13353 : {'ddG'	: "%s kcal/mol" % str(3.6/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13354 : {'ddG'	: "%s kcal/mol" % str(5.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13355 : {'ddG'	: "%s kcal/mol" % str(4.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13356 : {'ddG'	: "%s kcal/mol" % str(4.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13357 : {'ddG'	: "%s kcal/mol" % str(4.7/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13358 : {'ddG'	: "%s kcal/mol" % str(5.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13359 : {'ddG'	: "%s kcal/mol" % str(6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13360 : {'ddG'	: "%s kcal/mol" % str(6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13361 : {'ddG'	: "%s kcal/mol" % str(-0.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13362 : {'ddG'	: "%s kcal/mol" % str(2.2/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13363 : {'ddG'	: "%s kcal/mol" % str(3.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13364 : {'ddG'	: "%s kcal/mol" % str(2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13365 : {'ddG'	: "%s kcal/mol" % str(1.1/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13366 : {'ddG'	: "%s kcal/mol" % str(0.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13367 : {'ddG'	: "%s kcal/mol" % str(1.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13368 : {'ddG'	: "%s kcal/mol" % str(2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13369 : {'ddG'	: "%s kcal/mol" % str(4.8/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
-	13370 : {'ddG'	: "%s kcal/mol" % str(3.7/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'},
+	(13351 , {'ddG'	: "%s kcal/mol" % str(3.7/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13352 , {'ddG'	: "%s kcal/mol" % str(8.1/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13353 , {'ddG'	: "%s kcal/mol" % str(3.6/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13354 , {'ddG'	: "%s kcal/mol" % str(5.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13355 , {'ddG'	: "%s kcal/mol" % str(4.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13356 , {'ddG'	: "%s kcal/mol" % str(4.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13357 , {'ddG'	: "%s kcal/mol" % str(4.7/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13358 , {'ddG'	: "%s kcal/mol" % str(5.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13359 , {'ddG'	: "%s kcal/mol" % str(6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13360 , {'ddG'	: "%s kcal/mol" % str(6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13361 , {'ddG'	: "%s kcal/mol" % str(-0.4/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13362 , {'ddG'	: "%s kcal/mol" % str(2.2/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13363 , {'ddG'	: "%s kcal/mol" % str(3.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13364 , {'ddG'	: "%s kcal/mol" % str(2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13365 , {'ddG'	: "%s kcal/mol" % str(1.1/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13366 , {'ddG'	: "%s kcal/mol" % str(0.5/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13367 , {'ddG'	: "%s kcal/mol" % str(1.3/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13368 , {'ddG'	: "%s kcal/mol" % str(2.9/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13369 , {'ddG'	: "%s kcal/mol" % str(4.8/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
+	(13370 , {'ddG'	: "%s kcal/mol" % str(3.7/NUMBER_KJ_IN_KCAL), 'PDB' : '2RN2'}),
 	
 	# PMID:7473760. Loss of precision on conversion from kJ/mol to kcal/mol.
-	13422 : {'ddG'	: "%s kcal/mol" % str(-1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13423 : {'ddG'	: "%s kcal/mol" % str(-5.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13424 : {'ddG'	: "%s kcal/mol" % str(-4.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13425 : {'ddG'	: "%s kcal/mol" % str(-2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13426 : {'ddG'	: "%s kcal/mol" % str(-3.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	(13422 , {'ddG'	: "%s kcal/mol" % str(-1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13423 , {'ddG'	: "%s kcal/mol" % str(-5.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13424 , {'ddG'	: "%s kcal/mol" % str(-4.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13425 , {'ddG'	: "%s kcal/mol" % str(-2.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13426 , {'ddG'	: "%s kcal/mol" % str(-3.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
 	
 	# PMID:9010773. Loss of precision on conversion from kJ/mol to kcal/mol.
-	13427 : {'ddG'	: "%s kcal/mol" % str(-15.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	(13427 , {'ddG'	: "%s kcal/mol" % str(-15.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
 	
 	# PMID:9020766. Loss of precision on conversion from kJ/mol to kcal/mol.
-	13428 : {'ddG'	: "%s kcal/mol" % str(-6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13429 : {'ddG'	: "%s kcal/mol" % str(-1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13430 : {'ddG'	: "%s kcal/mol" % str(-3.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13431 : {'ddG'	: "%s kcal/mol" % str(-4.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13432 : {'ddG'	: "%s kcal/mol" % str(-1.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13433 : {'ddG'	: "%s kcal/mol" % str( 2.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13434 : {'ddG'	: "%s kcal/mol" % str(-6.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13435 : {'ddG'	: "%s kcal/mol" % str(-5.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	13436 : {'ddG'	: "%s kcal/mol" % str(-3.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	(13428 , {'ddG'	: "%s kcal/mol" % str(-6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13429 , {'ddG'	: "%s kcal/mol" % str(-1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13430 , {'ddG'	: "%s kcal/mol" % str(-3.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13431 , {'ddG'	: "%s kcal/mol" % str(-4.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13432 , {'ddG'	: "%s kcal/mol" % str(-1.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13433 , {'ddG'	: "%s kcal/mol" % str( 2.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13434 , {'ddG'	: "%s kcal/mol" % str(-6.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13435 , {'ddG'	: "%s kcal/mol" % str(-5.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(13436 , {'ddG'	: "%s kcal/mol" % str(-3.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
 	
 	# PMID:8433369. Table 6 has more precise DDG values at pH 3 than Table 2.
-	13817 : {'ddG'	: '-5.00 kcal/mol', 'PDB' : '2LZM'},
-	13818 : {'ddG'	: '-2.27 kcal/mol', 'PDB' : '2LZM'},
-	13819 : {'ddG'	: '-1.40 kcal/mol', 'PDB' : '2LZM'},
-	13820 : {'ddG'	: '-0.75 kcal/mol', 'PDB' : '2LZM'},
-	13821 : {'ddG'	: '-0.36 kcal/mol', 'PDB' : '2LZM'},
-	13822 : {'ddG'	: '-3.53 kcal/mol', 'PDB' : '2LZM'},
-	13823 : {'ddG'	: '-1.78 kcal/mol', 'PDB' : '2LZM'},
-	13824 : {'ddG'	: '-0.49 kcal/mol', 'PDB' : '2LZM'},
-	13825 : {'ddG'	:  '0.20 kcal/mol', 'PDB' : '2LZM'},
-	13826 : {'ddG'	: '-0.81 kcal/mol', 'PDB' : '2LZM'},
-	13827 : {'ddG'	: '-8.30 kcal/mol', 'PDB' : '2LZM'},
+	(13817 , {'ddG'	: '-5.00 kcal/mol', 'PDB' : '2LZM'}),
+	(13818 , {'ddG'	: '-2.27 kcal/mol', 'PDB' : '2LZM'}),
+	(13819 , {'ddG'	: '-1.40 kcal/mol', 'PDB' : '2LZM'}),
+	(13820 , {'ddG'	: '-0.75 kcal/mol', 'PDB' : '2LZM'}),
+	(13821 , {'ddG'	: '-0.36 kcal/mol', 'PDB' : '2LZM'}),
+	(13822 , {'ddG'	: '-3.53 kcal/mol', 'PDB' : '2LZM'}),
+	(13823 , {'ddG'	: '-1.78 kcal/mol', 'PDB' : '2LZM'}),
+	(13824 , {'ddG'	: '-0.49 kcal/mol', 'PDB' : '2LZM'}),
+	(13825 , {'ddG'	:  '0.20 kcal/mol', 'PDB' : '2LZM'}),
+	(13826 , {'ddG'	: '-0.81 kcal/mol', 'PDB' : '2LZM'}),
+	(13827 , {'ddG'	: '-8.30 kcal/mol', 'PDB' : '2LZM'}),
 	
 	# PMID:9677301. Loss of precision on conversion from kJ/mol to kcal/mol.
-	14189 : {'ddG'	: "%s kcal/mol" % str(-1.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14190 : {'ddG'	: "%s kcal/mol" % str(-5.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14191 : {'ddG'	: "%s kcal/mol" % str(-3.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	(14189 , {'ddG'	: "%s kcal/mol" % str(-1.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14190 , {'ddG'	: "%s kcal/mol" % str(-5.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14191 , {'ddG'	: "%s kcal/mol" % str(-3.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
 	#14192 was entered incorrectly so is corrected above
-	14193 : {'ddG'	: "%s kcal/mol" % str(-4.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14194 : {'ddG'	: "%s kcal/mol" % str(-6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14195 : {'ddG'	: "%s kcal/mol" % str(-1.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14196 : {'ddG'	: "%s kcal/mol" % str(-4.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14197 : {'ddG'	: "%s kcal/mol" % str(-3.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14198 : {'ddG'	: "%s kcal/mol" % str(-2.4/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14199 : {'ddG'	: "%s kcal/mol" % str( 0.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14200 : {'ddG'	: "%s kcal/mol" % str(-7.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14201 : {'ddG'	: "%s kcal/mol" % str(-6.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14202 : {'ddG'	: "%s kcal/mol" % str(-4.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	(14193 , {'ddG'	: "%s kcal/mol" % str(-4.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14194 , {'ddG'	: "%s kcal/mol" % str(-6.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14195 , {'ddG'	: "%s kcal/mol" % str(-1.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14196 , {'ddG'	: "%s kcal/mol" % str(-4.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14197 , {'ddG'	: "%s kcal/mol" % str(-3.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14198 , {'ddG'	: "%s kcal/mol" % str(-2.4/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14199 , {'ddG'	: "%s kcal/mol" % str( 0.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14200 , {'ddG'	: "%s kcal/mol" % str(-7.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14201 , {'ddG'	: "%s kcal/mol" % str(-6.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14202 , {'ddG'	: "%s kcal/mol" % str(-4.7/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
 	
 	# PMID:9649316. Loss of precision on conversion from kJ/mol to kcal/mol.
-	14203 : {'ddG'	: "%s kcal/mol" % str(-2.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14204 : {'ddG'	: "%s kcal/mol" % str(-0.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14205 : {'ddG'	: "%s kcal/mol" % str( 0.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14206 : {'ddG'	: "%s kcal/mol" % str(-4.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14207 : {'ddG'	: "%s kcal/mol" % str(-1.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14208 : {'ddG'	: "%s kcal/mol" % str(-1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
+	(14203 , {'ddG'	: "%s kcal/mol" % str(-2.1/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14204 , {'ddG'	: "%s kcal/mol" % str(-0.8/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14205 , {'ddG'	: "%s kcal/mol" % str( 0.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14206 , {'ddG'	: "%s kcal/mol" % str(-4.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14207 , {'ddG'	: "%s kcal/mol" % str(-1.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14208 , {'ddG'	: "%s kcal/mol" % str(-1.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
 	
 	# PMID:9685334. Loss of precision on conversion from kJ/mol to kcal/mol.
-	14224 : {'ddG'	: "%s kcal/mol" % str(-4.97/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'},
-	14225 : {'ddG'	: "%s kcal/mol" % str( 1.72/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'},
-	14226 : {'ddG'	: "%s kcal/mol" % str(-3.43/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'},
-	14227 : {'ddG'	: "%s kcal/mol" % str(-0.54/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'},
-	14228 : {'ddG'	: "%s kcal/mol" % str(  0.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'},
+	(14224 , {'ddG'	: "%s kcal/mol" % str(-4.97/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'}),
+	(14225 , {'ddG'	: "%s kcal/mol" % str( 1.72/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'}),
+	(14226 , {'ddG'	: "%s kcal/mol" % str(-3.43/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'}),
+	(14227 , {'ddG'	: "%s kcal/mol" % str(-0.54/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'}),
+	(14228 , {'ddG'	: "%s kcal/mol" % str(  0.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1HUE'}),
 	
 	# PMID:9398521. Loss of precision on conversion from kJ/mol to kcal/mol.
-	14235 : {'ddG'	: "%s kcal/mol" % str(-10.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14236 : {'ddG'	: "%s kcal/mol" % str(-15.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14237 : {'ddG'	: "%s kcal/mol" % str( -7.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14238 : {'ddG'	: "%s kcal/mol" % str(-11.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14239 : {'ddG'	: "%s kcal/mol" % str( -3.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	14240 : {'ddG'	: "%s kcal/mol" % str(-16.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'},
-	
-	# I do not know why this entry was here as both the paper and ProTherm use kJ/mol.
-	# PMID:16042382. Loss of precision on conversion
-	#19227 : {'ddG_H2O'	: "%s kcal/mol" % str( -4.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19228 : {'ddG_H2O'	: "%s kcal/mol" % str(-14.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19229 : {'ddG_H2O'	: "%s kcal/mol" % str(-10.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19230 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19231 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19232 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19233 : {'ddG_H2O'	: "%s kcal/mol" % str(-14.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19234 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.5/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19235 : {'ddG_H2O'	: "%s kcal/mol" % str(-13.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19236 : {'ddG_H2O'	: "%s kcal/mol" % str( -6.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19237 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19238 : {'ddG_H2O'	: "%s kcal/mol" % str( -4.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19239 : {'ddG_H2O'	: "%s kcal/mol" % str(-11.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19240 : {'ddG_H2O'	: "%s kcal/mol" % str(-15.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19241 : {'ddG_H2O'	: "%s kcal/mol" % str(-21.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19242 : {'ddG_H2O'	: "%s kcal/mol" % str(-12.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-	#19243 : {'ddG_H2O'	: "%s kcal/mol" % str( -7.0/NUMBER_KJ_IN_KCAL), 'PDB' : '5AZU'},
-}
+	(14235 , {'ddG'	: "%s kcal/mol" % str(-10.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14236 , {'ddG'	: "%s kcal/mol" % str(-15.5/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14237 , {'ddG'	: "%s kcal/mol" % str( -7.2/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14238 , {'ddG'	: "%s kcal/mol" % str(-11.3/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14239 , {'ddG'	: "%s kcal/mol" % str( -3.9/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),
+	(14240 , {'ddG'	: "%s kcal/mol" % str(-16.0/NUMBER_KJ_IN_KCAL), 'PDB' : '1LZ1'}),	
+]
 
+# Check for collisions within patch arrays
+for patch_array in [OverriddenEntries, BadOrMissingMutants, ddGTypos, RoundingErrors]:
+	colortext.write("Checking patch array: ", "silver")
+	okay = True
+	duplicatecount = {}
+	for tpl in patch_array:
+		duplicatecount[tpl[0]] = duplicatecount.get(tpl[0], 0) + 1 
+	for k, v in duplicatecount.iteritems():
+		if v > 1:
+			okay = False
+			colortext.error("Duplicate patch found for record #d." % k)
+	if okay:
+		colortext.message("okay.")
 
-# Merge the patch datasets and check for collisions
+# Merge the patch datasets into one dict and check that no collisions occur
 PDBTagSet = set(["PDB"])
 MergedPatchSet = {}
-for ID, record in OverriddenEntries.iteritems():
-	MergedPatchSet[ID] = {}
-	for k, v in record.iteritems():
-		MergedPatchSet[ID][k] = v
-knownOverlappingCases = set([])
+for patch_array in [OverriddenEntries, BadOrMissingMutants, ddGTypos, RoundingErrors]:
+	for tpl in patch_array:
+		ID = tpl[0]
+		patchrecord = tpl[1]
+		if MergedPatchSet.get(ID):
+			assert(patchrecord["PDB"] == MergedPatchSet[ID]["PDB"])
+			assert(set(patchrecord.keys()).intersection(set(MergedPatchSet[ID].keys())) == PDBTagSet)
+			# Merge
+			for k, v in patchrecord.iteritems():
+				MergedPatchSet[ID][k] = v
+		else:
+			MergedPatchSet[ID] = {}
+			for k, v in patchrecord.iteritems():
+				MergedPatchSet[ID][k] = v
 
-duplicatecount = {}
-for tpl in BadOrMissingMutants:
-	duplicatecount[tpl[0]] = duplicatecount.get(tpl[0], 0) + 1 
-for k, v in duplicatecount.iteritems():
-	if v > 1:
-		print("Duplicate in BadOrMissingMutants: %d." % k)
-assert(len(set([tpl[0] for tpl in BadOrMissingMutants])) == len(BadOrMissingMutants)) # Make sure there are no duplicate entries
-for tpl in BadOrMissingMutants:
-	ID = tpl[0]
-	record = tpl[1]
-	if MergedPatchSet.get(ID):
-		print(ID)
-		assert(ID in knownOverlappingCases)
-		assert(set(record.keys()).intersection(set(MergedPatchSet[ID].keys())) == PDBTagSet)
-		assert(record["PDB"] == MergedPatchSet[ID]["PDB"])
-		for k, v in record.iteritems():
-			MergedPatchSet[ID][k] = v
-	else:
-		MergedPatchSet[ID] = {}
-		for k, v in record.iteritems():
-			MergedPatchSet[ID][k] = v
-knownOverlappingCases = set([90, 963, 964, 2287, 3469, 3470, 5982, 5983, 14194])
-for ID, record in RoundingErrors.iteritems():
-	if MergedPatchSet.get(ID):
-		assert(ID in knownOverlappingCases)
-		assert(set(record.keys()).intersection(set(MergedPatchSet[ID].keys())) == PDBTagSet)
-		assert(record["PDB"] == MergedPatchSet[ID]["PDB"])
-		for k, v in record.iteritems():
-			MergedPatchSet[ID][k] = v
-	else:
-		MergedPatchSet[ID] = {}
-		for k, v in record.iteritems():
-			MergedPatchSet[ID][k] = v
-for ID, record in ddGTypos.iteritems():
-	if MergedPatchSet.get(ID):
-		assert(ID in knownOverlappingCases)
-		assert(set(record.keys()).intersection(set(MergedPatchSet[ID].keys())) == PDBTagSet)
-		assert(record["PDB"] == MergedPatchSet[ID]["PDB"])
-		for k, v in record.iteritems():
-			MergedPatchSet[ID][k] = v
-	else:
-		MergedPatchSet[ID] = {}
-		for k, v in record.iteritems():
-			MergedPatchSet[ID][k] = v
+# Make sure that the patch dict does not overwrite the ddGWrongSigns dict
+for ID, patchrecord in MergedPatchSet.iteritems():
+	if ID in ddGWrongSigns:
+		assert(ddGWrongSigns[ID] not in patchrecord.keys())
 
 # 1L63 is missing N163 and L164 so we use 219L instead.
 PseudoLysozyme163Cases = [13516, 13517]
@@ -2321,24 +1987,15 @@ for ID in PseudoLysozyme163Cases:
 	assert(not(MergedPatchSet.get(ID)))
 	MergedPatchSet[ID] = {'PDB_wild'	 : '219L', 			'PDB' : '2LZM'}
 
-knownOverlappingCases = set([1024, 4795, 4796, 4797, 6580, 6586, 7431, 7432, 7433, 7434, 7435, 7436, 11423, 11426, 13817, 13818, 13819, 13820, 13821, 13822, 13823, 13824, 13825, 13826, 13827, 13460, 13521, 13535, 14245, 14246, 14287, 14288, 14328, 14334, 16608, 16611, 16620, 16623, 22386, 22388, 22390, 22391, 22397])
 for ID in PseudoT4LysozymeCases:
-	if ID not in knownOverlappingCases:
-		#print(ID)
-		assert(not(MergedPatchSet.get(ID)))
 	if MergedPatchSet.get(ID):
-		#print(ID)
 		assert(MergedPatchSet[ID]['PDB'] == '2LZM')
 		assert(not(MergedPatchSet[ID].get('PDB_wild')))
 		MergedPatchSet[ID]['PDB_wild'] = '1L63'
 	else:
 		MergedPatchSet[ID] = {'PDB_wild'	 : '1L63', 			'PDB' : '2LZM'}
 
-knownOverlappingCases = set([3390, 4260, 4274, 4275, 4276, 14189, 14190, 14191, 14192, 14193, 14194, 14195, 14196, 14197, 14198, 14199, 14200, 14201, 14202, 16094, 16095, 16096, 16097])
 for ID in PseudoHumanLysozymeCases:
-	if ID not in knownOverlappingCases:
-		#print(ID)
-		assert(not(MergedPatchSet.get(ID)))
 	if MergedPatchSet.get(ID):
 		assert(MergedPatchSet[ID]['PDB'] == '1LZ1')
 		assert(not(MergedPatchSet[ID].get('PDB_wild')))
@@ -2346,14 +2003,8 @@ for ID in PseudoHumanLysozymeCases:
 	else:
 		MergedPatchSet[ID] = {'PDB_wild'	 : '2BQA', 			'PDB' : '1LZ1'}
 
-knownOverlappingCases = set([2418, 6367, 9822, 9823, 9824, 14287, 14288])
-assert(set(MergedPatchSet.keys()).intersection(set(ddGWrongSigns.keys())) == knownOverlappingCases)
-for ID in knownOverlappingCases:
-	assert(ddGWrongSigns[ID] not in MergedPatchSet[ID].keys())
 
-# todo: Unused data
-PMIDReferencesWhichICouldNotAccess = ['PMID:14529489']
-
+# In the records below where the wildtype for Bacillus subtilis (BsHPr) was entered incorrectly, 3OQN may be an appropriate PDB file as one chain has the correct wildtype sequence.
 recordsWithUnresolvedMissingData = []
 # PMID:8448200. Records 203-206. http://www.sciencedirect.com/science/article/pii/016748389390133C#
 # The protein is human cyanomet myoglobin.
@@ -2383,6 +2034,10 @@ recordsWithUnresolvedMissingData.extend(range(8380, 8383 + 1))
 # PMID:10873472. Records 8384-8401.
 # Coiled-coil protein (Synthetic). De novo design which does not appear to have been solved.
 recordsWithUnresolvedMissingData.extend(range(8384, 8401 + 1))
+# PMID:8580838. Records 8655, 14481
+# I did not add these records as the best PDB match for bsHPr is 2HID which contains the mutation M51V. 2HPR has M51V and S83C.
+recordsWithUnresolvedMissingData.append(8655)
+recordsWithUnresolvedMissingData.append(14481)
 # PMID:8161701. Record 8659.
 # The mutation is of a hybrid mutant, nuclease conA S28G, of wild-type Staphylococcal nuclease A. No PDB ID given.
 recordsWithUnresolvedMissingData.append(8659)
@@ -2404,7 +2059,7 @@ recordsWithUnresolvedMissingData.extend(range(12944, 12945 + 1))
 # The UniProt AC P08821 had no corresponding PDB ID.
 recordsWithUnresolvedMissingData.extend(range(14224, 14233 + 1))
 # PMID: 12144791. Records 15480-15486, 15497-15500
-# I did not add these records as the best PDB match for bsHPr is 2HID which contains the mutation M51V.
+# I did not add these records as the best PDB match for bsHPr is 2HID which contains the mutation M51V. 2HPR has M51V and S83C.
 recordsWithUnresolvedMissingData.extend(range(15480, 15486 + 1))
 recordsWithUnresolvedMissingData.extend(range(15497, 15500 + 1))
 # PMID: 10079065. Records 16294-16298.
@@ -2436,6 +2091,9 @@ recordsWithUnresolvedMissingData.extend(range(15409, 15451 + 1))
 # PMID: 15533036. Records 18311-18324. See reference 11, PMID:12069590
 # I am not completely sure that 1YZA is the correct PDB ID due to the uncertainty with 1YYJ for records 15409-15451. 
 recordsWithUnresolvedMissingData.extend(range(18311, 18324 + 1))
+# PMID:16566582. Records 19960-19965
+# I did not add these records as the best PDB match for bsHPr is 2HID which contains the mutation M51V. 2HPR has M51V and S83C.
+recordsWithUnresolvedMissingData.extend(range(19960, 19965 + 1))
 # PMID: 16705642. Records 20013-20048.
 # These records involve a synthetic Eglin C variant, Eglin C-F10W. A quick PDB search does not show solved structures from this source.
 recordsWithUnresolvedMissingData.extend(range(20013, 20048 + 1))
@@ -2448,8 +2106,16 @@ recordsWithUnresolvedMissingData.extend(range(20104, 20111 + 1))
 # These records involve the human FynSH3 domain. A quick PDB search does not show solved structures matching the wildtype amino acids I28 and V55 in the publication. 
 recordsWithUnresolvedMissingData.extend(range(20479, 20567 + 1))
 # PMID: 17188709. Records 20665-21892.
-# Missing the wildtype for Bacillus subtilis (BsHPr). 3OQN may be appropriate. See above. I do not know whether the synthetic protein has been solved. I also cannot immediately see how the DG/DDG values in ProTherm are computed.
-recordsWithUnresolvedMissingData.extend(range(20665, 21892 + 1))
+# Missing the wildtype for the synthetic CspB protein (CspB-TB).
+# These mutations are from wildtype CspB-Bs (1CSP). The other mutations in this range (21040-21388) are of the 6H-CspB-Bs* His-tagged variant (6H-WT*) or of the variant with the His-tag removed (WT*) so I did not include them as the DG values differ and we have no associated solved structures.
+CspBBsRecords = set([
+	21042, 21043, 21046, 21050, 21074, 21084, 21087, 21092,
+	21099, 21100, 21103, 21107, 21131, 21141, 21144, 21149,
+	21159, 21160, 21163, 21168, 21192, 21202, 21205, 21210,
+	21217, 21218, 21221, 21226, 21250, 21260, 21263, 21268,
+	21275, 21276, 21279, 21284, 21308, 21318, 21321, 21326,
+	21333, 21334, 21337, 21342, 21366, 21376, 21379, 21384,])
+recordsWithUnresolvedMissingData.extend([i for i in range(20665, 21892 + 1) if i not in CspBBsRecords]) 
 # PMID: 16799151. Records 22700-22713.
 # These records involve HFV protease, human. A quick PDB search does not show solved structures. 7HVP is a HIV-1 complex.
 recordsWithUnresolvedMissingData.extend(range(22700, 22713 + 1))
@@ -2478,6 +2144,7 @@ for recordID in range(14301, 14305 + 1):
 for recordID in range(14571, 14574 + 1):
 	badPublicationReferences[recordID] = 11714927
 
+# Records with the wrong secondary structure
 badSecondaryStructure = dict.fromkeys(
 	[2747, 4611, 11869, 12310, 12701, 12702, 12979, 12980, 12982, 12983, 16895, 19886, 19887, 19888, 19889, 19893, 22231, 24335]
 	+ range(15529, 15534 + 1)
@@ -2488,15 +2155,18 @@ badSecondaryStructure = dict.fromkeys(
 	+ range(24985, 25000 + 1)
 	,True)
 
+# Records with the wrong ASA
 badASA = dict.fromkeys(
 	[11869, 14408, 14409, 14413, 14414, 14434, 14438, 14450, 16895, 19886, 19887, 19888, 19889, 19893, 22231]
 	+ range(15529, 15534 + 1)
 	, True)
 
+
+# Set of fixed records
 fixedRecordIDs = set()
-for dset in [badPublicationReferences, MergedPatchSet, ddGWrongSigns, badSecondaryStructure, badASA]:
+for dset in [MergedPatchSet, ddGWrongSigns, badPublicationReferences, badSecondaryStructure, badASA]:
 	fixedRecordIDs = fixedRecordIDs.union(dset.keys())
-		
+
 # In these cases, the protein is elongated at the 67th position. This is more than a mutation so I ignore it. 	
 skipTheseCases = [12156, 12159, 12161, 12188, 12191, 12193, 12218, 12220, 14468]
 
@@ -2518,36 +2188,23 @@ skipTheseCases.extend([20175, 20181])
 # PMID:19647749. dG_H2O value entered as ddG_H2O.
 skipTheseCases.append(24386)
 
-
-#skipTheseCases.extend([1163]) # This case is duplicated by 13570
-DuplicatedRecords = [
-	(1163, 13570),
-	(8911, 14482),
-	(12193, 14468),
-	(13410, 13182), # Maybe more from this publication
-	(13393, 13183), # Maybe more from this publication
-	(8363, 13477), # Publication states that the duplication but the T values do not match
-	(8364, 13478), # Publication states that the duplication but the T values do not match
-	(8365, 13479), # Publication states that the duplication but the T values do not match
-]
-
-# These publications have DDG values but none are stored in ProTherm.
-MissingPublicationsPMIDsWithDDGValuesForReview = [10350481, 10504240, 10623513]
-
 #These cases fail parsing the mutation line - need to write a new regex
 #skipTheseCases.extend([19893,19894,19895])
 
-# In these cases, the structural information needed for the mutations (residues A57, A62) is missing in the PDB file
-# Some of the information is present in chain B (A57's corresponding residue) but I decided against remapping the residues. 
-skipTheseCases.extend([13451, 13452])
-
 # In this case, I couldn't map the paper's structure well enough onto 1YCC. The mutations mentioned e.g. A57 N->I do not correspond with the PDB structure (attributed to a later paper).
 skipTheseCases.append(11817)
+
+# In this case, the structural information needed for the mutation (residues A62) is missing in the PDB file
+# A57 is also missing in chain A but is present in chain B as A1057.
+skipTheseCases.extend([13452])
 
 # The DDG value here is a limit rather than a value (the paper states that the mutant (G107V) "was too unstable to yield an accurate determination of DDG_H20".
 skipTheseCases.append(2043)
 
 skipTheseCases = set(skipTheseCases)
+
+# Make sure that we do not repeat records to be skipped in the recordsWithUnresolvedMissingData set
+assert(len(set(skipTheseCases).intersection(recordsWithUnresolvedMissingData)) == 0)
 
 # Mutations involving cysteine which have a different format involving bridges (S-H or S-S)
 CysteineMutationCases = [13663, 13664, 13677, 13678]
@@ -2589,6 +2246,22 @@ missingRefMap = {
 	"J MOL BIOL 351, 402-416 (2005)"			: ("PMID", 16002092),
 	"PROTEIN SCI 16, 227-238 (2007)"			: ("PMID", 17189482),
 } 
+
+
+# todo: Unused data
+PMIDReferencesWhichICouldNotAccess = ['PMID:14529489']
+DuplicatedRecords = [
+	(1163, 13570),
+	(8911, 14482),
+	(12193, 14468),
+	(13410, 13182), # Maybe more from this publication
+	(13393, 13183), # Maybe more from this publication
+	(8363, 13477), # Publication states that the duplication but the T values do not match
+	(8364, 13478), # Publication states that the duplication but the T values do not match
+	(8365, 13479), # Publication states that the duplication but the T values do not match
+]
+# These publications have DDG values but none are stored in ProTherm.
+MissingPublicationsPMIDsWithDDGValuesForReview = [10350481, 10504240, 10623513]
 
 def getDDGUnitsUsedInDB(ddGDB):
 	results = ddGDB.locked_execute('SELECT ID, DGUnitUsedInProTherm FROM Source')
@@ -2639,8 +2312,6 @@ class ProThermReader(object):
 			self.quiet = quiet
 			# For bad data
 			self.iCodeRecords = iCodeRecords
-			self.patch = patch
-			self.patchthis = {}
 			self.singleChainPDBs = singleChainPDBs
 			self.identicalChainPDBs = identicalChainPDBs
 			self.MergedPatchSet = MergedPatchSet
@@ -2805,7 +2476,9 @@ class ProThermReader(object):
 		colortext.write("Testing rounding table for errors: ", color = "silver")
 		allowed_drift = 0.0501 # The maximum amount in kcal/mol that the fixed DDG value is allowed to deviate from the original DDG value
 		founderror = False
-		for ID,patch_dict in sorted(RoundingErrors.iteritems()):
+		for tpl in RoundingErrors:
+			ID = tpl[0]
+			patch_dict = tpl[1]
 			assert(patch_dict.get("ddG") != None or patch_dict.get("ddG_H2O") != None)
 			
 			record = self.readRecord(ID)
@@ -3335,7 +3008,6 @@ class ProThermReader(object):
 		
 		singleChainPDBs = self.singleChainPDBs
 		identicalChainPDBs = self.identicalChainPDBs
-		patch = self.patch
 		
 		# Apply the override patches
 		MergedPatchSet = self.MergedPatchSet
@@ -3440,35 +3112,8 @@ class ProThermReader(object):
 		
 				
 		if not passed:
-			# Recover when one field is missing
-			if len(missingFields) == 1:
-				# Recover when there is a ddG value and the mutation is specified
-				# The patch dict lets us either skip entries with missing information or else correct them
-				foundpatch = False
-				if record["MUTATION"] and record["MUTATION"] != "wild" and ("either_ddG" not in missingFields):
-					for patchfield, patchfield_info in patchfields.iteritems():
-						if not record[patchfield]:
-							foundpatch = patch.get(ID) and (patchfield in patch[ID].keys())
-							if not patch.get(ID):
-								if ID not in recordsWithUnresolvedMissingData:
-									colortext.error("#%d: Error processing record; no %s" %  (ID, patchfield))
-								self.singleErrors[patchfield] += 1
-								self.patchthis[ID] = "%s %s" % (patchfield, join(["%s" % record.get(pfi) for pfi in patchfield_info],"-"))
-							elif patch[ID][patchfield]:
-								record[patchfield] = patch[ID][patchfield]
-								passed = True
-							break
-					if not foundpatch:
-						if ID not in recordsWithUnresolvedMissingData:
-							colortext.error("#%d: Error processing structure; no %s " % (ID, missingFields[0]))
-						self.singleErrors[missingFields[0]] += 1
-				if not passed:
-					if ID not in recordsWithUnresolvedMissingData:
-						colortext.error("#%d: Could not fix record; Fields %s are missing" % (ID, str(missingFields)))
-				
-			else:
-				if ID not in recordsWithUnresolvedMissingData:
-					colortext.error("#%d: Fields %s are missing." % (ID, str(missingFields)))
+			if ID not in recordsWithUnresolvedMissingData:
+				colortext.error("#%d: Could not fix record; Fields %s are missing" % (ID, str(missingFields)))
 				
 		return passed
 		
