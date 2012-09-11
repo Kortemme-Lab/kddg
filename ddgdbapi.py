@@ -1177,263 +1177,353 @@ class ExperimentDefinition(DBObject):
 		
 		return self.databaseID
 	
-	
+
 class ExperimentAssayDefinition(DBObject):
 	
-	def __init__(self, ddGdb, Publication = None, DuplicateOf = None):
+	ExperimentalConditionsFields = [
+		'Temperature', 'pH', 'Buffer', 'BufferConcentration', 
+		'Ion1', 'Ion1Concentration', 'Ion2', 'Ion2Concentration', 'Ion3', 'Ion3Concentration',
+		'Additives', 'ProteinConcentration',
+		'Measure1', 'Measure2', 'Measure3',
+		'MethodOfDenaturation1','MethodOfDenaturation2'
+	]
+	ThermodynamicFields = set(['DG', 'DG_H2O', 'Tm', 'dTm', 'dHvH', 'dHcal', 'm', 'Cm', 'dCp', 'activity', 'activity_Km', 'activity_Kcat', 'activity_Kd'])
+
+	def __init__(self, ddGdb, SecondaryID, ExperimentID, Username, Publication = None, DuplicateOf = None):
 		self.ddGdb = ddGdb
+		self.DDGs = {}
+		self.Thermodynamics = {}
 		FieldNames = self.ddGdb.FieldNames.ExperimentAssay
 		d = {}
 		for k, v in FieldNames.__dict__.iteritems():
-			if k != "_name":
+			if k != "_name" and k != "ID":
 				d[k] = None
 		self.d = d
-		self.__class__.__setattr__ = self._setattr
 		
+		time_now = datetime.now() 
+		self.SecondaryID = SecondaryID
+		self.ExperimentID = ExperimentID
 		self.Publication = Publication
 		self.DuplicateOf = DuplicateOf
-	
-	def _setattr(self, k, v):
-		assert(k in self.d.keys())
-		self.d[k] = v
+		self.AddedBy = Username
+		self.AddedDate = time_now 
+		self.LastModifiedBy = Username
+		self.LastModifiedDate = time_now 
 		
-	def __repr__(self):
-		s = []
-		return ""
-		s.append("PDB ID: %s" % self.PDB_ID)
-		if self.interface:
-			s.append("Interface: %s" % self.interface)
-		if self.mutants:
-			s.append("Mutants: %s" % self.mutants)
-		if self.chains:
-			s.append("Chains: %s" % self.chains)
-		if self.mutations:
-			s.append("Mutations:\n  %s" % join(map(str, self.mutations), "\n  "))
-		return join(s, "\n")
-
-	def addMutant(self, mutant, mutant_chain):
-		self.mutants.append(mutant)
-
-	def addChain(self, chainID, ID = ""):
-		if not chainID in AllowedChainLetters:
-			raise Exception("An exception occurred processing a chain (ID='%s'):%s.\n\tThe chain '%s' is invalid." % (ID, errors, chainID))
-		self.chains.append(chainID)
+	def __setattr__(self, k, v):
+		if k == "ddGdb" or k == "d" or k == "DDGs" or k == "Thermodynamics" or k == "databaseID":
+			super(ExperimentAssayDefinition, self).__setattr__(k, v)
+		else:
+			assert(k in self.d.keys())
+			self.d[k] = v
 	
-	def getChains(self):
-		return self.chains
+	def __getattr__(self, k):
+		if k == "ddGdb" or k == "d":
+			super(ExperimentAssayDefinition, self).__getattr__(k)
+		else:
+			return self.d[k]
 	
-	def addMutation(self, mutation, ID = None):
-		errors = []
-		residueID = ("%s" % mutation.ResidueID).strip()
-		if not mutation.Chain in AllowedChainLetters:
-			errors.append("The chain '%s' is invalid." % mutation.Chain)
-		if not mutation.WildTypeAA in AllowedAminoAcids:
-			errors.append("The wildtype amino acid '%s' is invalid." % mutation.WildTypeAA)
-		if not mutation.MutantAA in AllowedAminoAcids:
-			errors.append("The mutant amino acid '%s' is invalid." % mutation.MutantAA)
-		residueID = mutation.ResidueID
-		if not residueID.isdigit():
-			if not residueID[0:-1].isdigit():
-				errors.append("The residue '%s' is invalid." % residueID)
-			elif residueID[-1] not in AllowedInsertionCodes:
-				errors.append("The insertion code '%s' of residue '%s' is invalid." % (residue[-1], residueID))
-		if mutation.SecondaryStructurePosition and not(mutation.SecondaryStructurePosition in self.AllowedSecondaryStructurePositions):
-			errors.append("The secondary structure location '%s' is invalid." % (mutation.SecondaryStructurePosition))
-		if mutation.AccessibleSurfaceArea:
-			assert(type(mutation.AccessibleSurfaceArea) == type(0.1))
-		
-		if errors:
-			ID = ID or ""
-			if ID:
-				ID = ", ID %s" % ID
-			errors = join(['\t%s\n' % e for e in errors], "")
-			raise Exception("An exception occurred processing a mutation (ID='%s'):\n%s" % (ID, errors))
-		
-		FieldNames = self.ddGdb.FieldNames.ExperimentMutation
-		self.mutations.append({
-			FieldNames.Chain 						: mutation.Chain,
-			FieldNames.ResidueID					: mutation.ResidueID,
-			FieldNames.WildTypeAA					: mutation.WildTypeAA,
-			FieldNames.MutantAA						: mutation.MutantAA,
-			FieldNames.SecondaryStructurePosition	: mutation.SecondaryStructurePosition,
-			FieldNames.AccessibleSurfaceArea		: mutation.AccessibleSurfaceArea,
-			})
-			
 	def remove(self):
 		ddGdb = self.ddGdb
 		if not self.databaseID:
 			raise Exception("Cannot remove a record with no corresponding database ID.")
-		ddGdb.locked_execute("DELETE FROM ExperimentChain WHERE ExperimentID=%s", parameters = (self.databaseID,))
-		ddGdb.locked_execute("DELETE FROM ExperimentInterface WHERE ExperimentID=%s", parameters = (self.databaseID,))
-		ddGdb.locked_execute("DELETE FROM ExperimentMutant WHERE ExperimentID=%s", parameters = (self.databaseID,))
-		ddGdb.locked_execute("DELETE FROM ExperimentMutation WHERE ExperimentID=%s", parameters = (self.databaseID,))
-		ddGdb.locked_execute("DELETE FROM Experiment WHERE ID=%s", parameters = (self.databaseID,))
+		ddGdb.locked_execute("DELETE FROM ExperimentAssayDDG WHERE ExperimentAssayID=%s", parameters = (self.databaseID,))
+		ddGdb.locked_execute("DELETE FROM ExperimentAssayThermodynamic WHERE ExperimentAssayID=%s", parameters = (self.databaseID,))
+		ddGdb.locked_execute("DELETE FROM ExperimentAssay WHERE ID=%s", parameters = (self.databaseID,))
 		
 	def find(self):
-		FieldNames = self.ddGdb.FieldNames
-		results = self.ddGdb.locked_execute('''SELECT ID, Chain, ResidueID, WildTypeAA, MutantAA FROM Experiment INNER JOIN ExperimentMutation ON Experiment.ID = ExperimentMutation.ExperimentID WHERE Experiment.Structure=%s''', parameters = (self.PDB_ID, ))
-		groupedresults = {}
-		
-		mymutations = []
-		for mutation in self.mutations:
-			mymutations.append((mutation['Chain'].upper(), mutation['ResidueID'].upper(), mutation['WildTypeAA'].upper(), mutation['MutantAA'].upper()))
-		mymutations = sorted(mymutations)
-		
-		for r in results:
-			ExperimentID = r[FieldNames.Experiment.ID]
-			groupedresults[ExperimentID] = groupedresults.get(ExperimentID, [])
-			groupedresults[ExperimentID].append((r['Chain'].upper(), r['ResidueID'].upper(), r['WildTypeAA'].upper(), r['MutantAA'].upper()))
-			
-		for ExperimentID, dbmutations in groupedresults.iteritems():
-			if sorted(dbmutations) == mymutations:
-				return ExperimentID, groupedresults[ExperimentID]
-		
+		results = self.ddGdb.locked_execute('''SELECT ID FROM ExperimentAssay WHERE SecondaryID=%s''', parameters = (self.SecondaryID, ))
+		if results:
+			assert(len(results) == 1)
+			return results[0]["ID"], self
 		return None, None
 	
-	def test(self, testonly = False, pdbPath = None, mutationAllowedToBeStoredDespiteMissingCoordinates = False):
-		
-		mutantsequences = None
-		MutantStructures = []
-		for mutant in self.mutants:
-			MutantStructure = PDBStructure(self.ddGdb, mutant)
-			
-			fastasequences = MutantStructure.parseFASTA().sequences
-			rawsequences = sorted([fs[2] for fs in fastasequences])
-				
-			if mutantsequences:
-				if mutantsequences != rawsequences:
-					raise Exception("The experiment has multiple mutants but they are not homologous:\n%s\n%s." % (mutantsequences, rawsequences))
-			else:
-				mutantsequences = rawsequences
-			MutantStructures.append(MutantStructure) 
-		
-		for MutantStructure in MutantStructures:
-			results = self.ddGdb.execute("SELECT PDB_ID FROM Structure WHERE PDB_ID = %s", parameters = (MutantStructure.dict[self.ddGdb.FlatFieldNames.PDB_ID])) 
-			if not results:
-				MutantStructure.commit()
+	def __repr__(self):
+		s = []
+		s.append("SecondaryID: %s" % self.SecondaryID)
+		s.append("ExperimentID: %s" % self.ExperimentID)
+		s.append("Publication: %s" % self.Publication)
+		s.append("DuplicateOf: %s" % self.DuplicateOf)
+		if self.DDGs.get("DDG_H2O"):
+			DDG_H2O = self.DDGs["DDG_H2O"]
+			s.append("DDG_H2O: %s kcal/mol, Rosetta convention (published as %s %s)" % (DDG_H2O["Value"], DDG_H2O["PublishedValue"], DDG_H2O["PublishedUnit"]))
+		if self.DDGs.get("DDG"):
+			DDG = self.DDGs["DDG"]
+			s.append("DDG: %s kcal/mol, Rosetta convention (published as %s %s)" % (DDG["Value"], DDG["PublishedValue"], DDG["PublishedUnit"]))
+		if self.DDGs.get("Unknown"):
+			someDDG = self.DDGs["Unknown"]
+			s.append("DDG_H2O or DDG: %s kcal/mol, Rosetta convention (published as %s %s)" % (someDDG["Value"], someDDG["PublishedValue"], someDDG["PublishedUnit"]))
+		for fieldname in ExperimentAssayDefinition.ExperimentalConditionsFields:
+			if self.__getattr__(fieldname):
+				s.append("%s: %s" % (fieldname, self.__getattr__(fieldname)))
+		if len(self.Thermodynamics) > 0:
+			s.append("Thermodynamics:")
+			for fieldname in ExperimentAssayDefinition.ThermodynamicFields:
+				if self.Thermodynamics.get(fieldname):
+					s.append("  %s: %s" % (fieldname, self.Thermodynamics.get(fieldname)["PublishedValue"]))
+		s.append("Number of transition states: %s" % self.NumberOfTransitionStates)
+		s.append("Reversibility: %s" % self.Reversibility)
+		s.append("ReversibilityLevel: %s" % self.ReversibilityLevel)
+		s.append("AddedBy: %s on %s" % (self.AddedBy, self.AddedDate))
+		s.append("LastModifiedBy: %s on %s" % (self.LastModifiedBy, self.LastModifiedDate))
+		return join(s, "\n")
 
-		# Sanity check that the wildtypes of all mutations are correct
-		if pdbPath:
-			WildTypeStructure = PDBStructure(self.ddGdb, self.PDB_ID, filepath = os.path.join(pdbPath, "%s.pdb" % self.PDB_ID))
-		else:
-			WildTypeStructure = PDBStructure(self.ddGdb, self.PDB_ID)
-		contents = WildTypeStructure.getPDBContents()
-		pdb = PDB(contents.split("\n"))
+	def addDDG(self, ddg_type, LocationOfValueInPublication, DDGValue, PublishedValue, PublishedUnit, PublishedError, NumberOfMeasurements = None, Remarks = None):
+		'''
+		DDGValue - Value is in kcal/mol using the Rosetta convention i.e. the lower the value, the more stabilizing the mutation.
+		PublishedValue - Use the exact published value here even if wrong. Use the original sign convention and values in the original unit without conversion (unless conversion is necessary to convert back to the original unit).
+		'''
+		ddGdb = self.ddGdb
+		FieldNames = ddGdb.FieldNames.ExperimentAssayDDG
 		
-		badResidues = ["CSE", "MSE"]
-		foundRes = pdb.CheckForPresenceOf(badResidues)
-		if foundRes:
-			colortext.warning("The PDB %s contains residues which could affect computation (%s)." % (pdbID, join(foundRes, ", ")))
-			failed = True
-			for res in foundRes:
-				colortext.warning("The PDB %s contains %s. Check." % (pdbID, res))
+		assert(ddg_type == "DDG" or ddg_type == "DDG_H2O" or ddg_type == "Unknown")
+		assert(not(self.DDGs.get(ddg_type)))
+		assert(len(LocationOfValueInPublication) <= 96)
+		assert(type(DDGValue) == type(0.1))
+		assert(type(PublishedValue) == type(0.1))
+		assert(PublishedUnit == "kcal/mol" or PublishedUnit == "kJ/mol" or PublishedUnit == "cal/mol")
+		if NumberOfMeasurements:
+			assert(type(NumberOfMeasurements) == type(1))
+			
+		self.DDGs[ddg_type] = {
+			FieldNames.ExperimentAssayID			: None,
+			FieldNames.Type							: ddg_type,
+			FieldNames.LocationOfValueInPublication	: LocationOfValueInPublication,
+			FieldNames.Value						: DDGValue,
+			FieldNames.PublishedValue				: PublishedValue,
+			FieldNames.PublishedUnit				: PublishedUnit,
+			FieldNames.PublishedError				: PublishedError,
+			FieldNames.NumberOfMeasurements			: NumberOfMeasurements,
+			FieldNames.Remarks						: Remarks,
+		}
 		
-		FieldNames = self.ddGdb.FieldNames.ExperimentMutation
-		for mutation in self.mutations:
-			foundMatch = False
-			for resid, wtaa in sorted(pdb.ProperResidueIDToAAMap().iteritems()):
-				c = resid[0]
-				resnum = resid[1:].strip()
-				if mutation[FieldNames.Chain] == c and mutation[FieldNames.ResidueID] == resnum and mutation[FieldNames.WildTypeAA] == wtaa:
-					foundMatch = True
-			if not foundMatch and not(mutationAllowedToBeStoredDespiteMissingCoordinates):
-				#raise colortext.Exception("%s: Could not find a match for mutation %s %s:%s -> %s in %s." % (pdbID, mutation[FieldNames.Chain], mutation[FieldNames.ResidueID], mutation[FieldNames.WildTypeAA], mutation[FieldNames.MutantAA], associatedRecordsStr ))
-				colortext.error("%s: Could not find a match for mutation %s %s:%s -> %s." % (pdbID, mutation[FieldNames.Chain], mutation[FieldNames.ResidueID], mutation[FieldNames.WildTypeAA], mutation[FieldNames.MutantAA]))
-				failed = True
+	def addThermodynamic(self, t_type, PublishedValue, PublishedUnit = 'Unknown', PublishedError = None):
+		ddGdb = self.ddGdb
+		FieldNames = ddGdb.FieldNames.ExperimentAssayThermodynamic
 		
-		# Sanity check that the chain information is correct (ProTherm has issues)
-		chainsInPDB = WildTypeStructure.chains
-		if not chainsInPDB:
-			raise Exception("The chains for %s were not read in properly." % associatedRecordsStr)
-		for c in self.chains:
-			if not c in chainsInPDB:
-				if len(chainsInPDB) == 1 and len(self.chains) == 1:
-					colortext.warning("%s: Chain '%s' of %s does not exist in the PDB %s. Chain %s exists. Use that chain instead." % (pdbID, c, associatedRecordsStr, pdbID, chainsInPDB[0]))
-					self.ddGdb.addChainWarning(pdbID, associatedRecords, c)
-					failed = True
-				else:
-					self.ddGdb.addChainError(pdbID, c)
-					raise colortext.Exception("Error committing experiment:\n%s: Chain '%s' of %s does not exist in the PDB %s. Chains %s exist." % (pdbID, c, associatedRecordsStr, pdbID, join(sorted(chainsInPDB), ", ")))
+		assert(t_type in ExperimentAssayDefinition.ThermodynamicFields)
+		assert(not(self.Thermodynamics.get(t_type)))
+		assert(len(str(PublishedValue)) <= 256)
+		# todo: Change the assertions below when we actually store the proper information
+		assert(PublishedUnit == "Unknown")
+		assert(PublishedError == None)
+		
+		self.Thermodynamics[t_type] = {
+			FieldNames.ExperimentAssayID			: None,
+			FieldNames.Type							: t_type,
+			FieldNames.PublishedValue				: str(PublishedValue),
+			FieldNames.PublishedUnit				: PublishedUnit,
+			FieldNames.PublishedError				: PublishedError,
+		}
+		
+	def test(self):
+		pass
 				
-	def commit(self, ExperimentID, UserID, testonly = False, pdbPath = None, quiet = False):
-		'''Commits the set of experiments associated with the mutation to the database. Returns the unique ID of the associated Experiment record.'''
+	def commit(self, UserID, testonly = False, pdbPath = None, quiet = False):
+		'''Commits the experimental assay to the database. Returns the unique ID of the associated ExperimentAssay record.'''
 		ddGdb = self.ddGdb
 		FieldNames = ddGdb.FieldNames
 		failed = False
 		
 		# Look for an existing record
-		ExperimentID, dbMutations = self.find()
-		if ExperimentID != None:
-			if not quiet:
-				colortext.error("\nExperiment already exists in the database with Experiment ID=%s." % ExperimentID)
-				colortext.warning("*** This record ***%s\n" % self)
-				colortext.warning("*** Database record ***\n%s\n" % dbMutations)
-			return ExperimentID
+		ExperimentAssayID = super(ExperimentAssayDefinition, self).commit()
+		if ExperimentAssayID:
+			return ExperimentAssayID
 		
-		# Test mutant homology, whether mutations exist etc.
+		# Look for an existing record
+		ExperimentAssayID, dbRecord = self.find()
+		if ExperimentAssayID != None:
+			if not quiet:
+				colortext.error("\nExperimentAssay already exists in the database with ID=%s." % ExperimentAssayID)
+				colortext.warning("*** This record ***%s\n" % self)
+				colortext.warning("*** Database record ***\n%s\n" % dbRecord)
+			return ExperimentAssayID
+		
 		self.test()
 		
+		ExperimentAssayID = None
 		try:
-			d = {
-				FieldNames.Experiment.Structure : self.PDB_ID,
-			}
 			if not testonly:
-				ddGdb.insertDict(FieldNames.Experiment._name, d)
-				ExperimentID = ddGdb.getLastRowID()
-				print("ExperimentID", ExperimentID)
-			self.databaseID = ExperimentID
+				ddGdb.insertDict(FieldNames.ExperimentAssay._name, self.d)
+				ExperimentAssayID = ddGdb.getLastRowID()
+				#print("ExperimentAssayID", ExperimentAssayID)
+			self.databaseID = ExperimentAssayID
 		except Exception, e:
-			raise Exception("\nError committing Experiment to database.\n***\n%s\n%s\n***" % (self, str(e)))
+			raise Exception("\nError committing ExperimentAssay to database.\n***\n%s\n%s\n%s\n***" % (str(e), traceback.format_exc(), self))
 		
-		if self.interface:
+		for DDGtype, ddGdict in self.DDGs.iteritems():
 			try:
-				d = {
-					FieldNames.ExperimentInterface.ExperimentID	: ExperimentID,
-					FieldNames.ExperimentInterface.Interface	: self.interface,
-				}
 				if not testonly:
-					ddGdb.insertDict(FieldNames.ExperimentInterface._name, d)
+					ddGdict["ExperimentAssayID"] = ExperimentAssayID
+					ddGdb.insertDict(FieldNames.ExperimentAssayDDG._name, ddGdict)
 			except Exception, e:
 				self.remove()
-				raise Exception("\nError committing Experiment to database.\n***\n%s\n%s\n***" % (self, str(e)))
+				raise Exception("\nError committing ExperimentAssayDDG to database.\n***\n%s\n%s\n***" % (self, str(e)))
 
-		for mutant in self.mutants:
+		for thermoType, thermodict in self.Thermodynamics.iteritems():
 			try:
-				d = {
-					FieldNames.ExperimentMutant.ExperimentID	: ExperimentID,
-					FieldNames.ExperimentMutant.Mutant			: mutant,
-				}
 				if not testonly:
-					ddGdb.insertDict(FieldNames.ExperimentMutant._name, d)
+					thermodict["ExperimentAssayID"] = ExperimentAssayID
+					ddGdb.insertDict(FieldNames.ExperimentAssayThermodynamic._name, thermodict)
 			except Exception, e:
 				self.remove()
-				raise Exception("\nError committing Experiment to database.\n***\n%s\n%s\n***" % (self, str(e)))
-
-		for chain in self.chains:
-			try:
-				d = {
-					FieldNames.ExperimentChain.ExperimentID : ExperimentID,
-					FieldNames.ExperimentChain.Chain		: chain,
-				}
-				if not testonly:
-					ddGdb.insertDict(FieldNames.ExperimentChain._name, d)
-			except Exception, e:
-				self.remove()
-				raise Exception("\nError committing Experiment to database.\n***\n%s\n%s\n***" % (self, str(e)))
-		
-		for mutation in self.mutations:
-			try:
-				mutation["ExperimentID"] = ExperimentID
-				if not testonly:
-					ddGdb.insertDict(FieldNames.ExperimentMutation._name, mutation)
-			except Exception, e:
-				self.remove()
-				raise Exception("\nError committing Experiment to database.\n***\n%s\n%s\n***" % (self, str(e)))
+				raise Exception("\nError committing ExperimentAssayThermodynamic to database.\n***\n%s\n%s\n***" % (self, str(e)))
 		
 		return self.databaseID
 	
 	
+class DataSetDDG(DBObject):
+	
+	def __init__(self, ddGdb, DataSetID, Section, RecordNumber, PublishedValue, PDB_ID, PublishedPDB_ID = None, AggregateType = 'SingleValue', MutationIsReversed = False, PossibleError = False, Remark = None, CorrectionRemark = None):
+		self.ddGdb = ddGdb
+		self.DDGSources = {}
+		
+		FieldNames = self.ddGdb.FieldNames.DataSetDDG
+		d = {}
+		for k, v in FieldNames.__dict__.iteritems():
+			if k != "_name" and k != "ID":
+				d[k] = None
+		self.d = d
+		
+		assert(len(DataSetID) <= 128)
+		assert(len(Section) <= 64)
+		assert(type(RecordNumber) == type(1))
+		assert(AggregateType == "SingleValue" or AggregateType == "MeanValue")
+		assert(type(PublishedValue) == type(0.1))
+		assert(type(MutationIsReversed) == type(True))
+		assert(len(PDB_ID) <= 10)
+		if not PublishedPDB_ID:
+			PublishedPDB_ID = PDB_ID 
+		assert(len(PublishedPDB_ID) <= 10)
+		assert(type(PossibleError) == type(True))
+		
+		self.DataSetID = DataSetID
+		self.Section = Section
+		self.RecordNumber = RecordNumber
+		self.AggregateType = AggregateType
+		self.PublishedValue = PublishedValue
+		self.MutationIsReversed = MutationIsReversed
+		self.PDB_ID = PDB_ID
+		self.PublishedPDB_ID = PublishedPDB_ID
+		self.PossibleError = PossibleError
+		self.Remark = Remark
+		self.CorrectionRemark = CorrectionRemark
+		
+	def __setattr__(self, k, v):
+		if k == "ddGdb" or k == "d" or k == "DDGSources" or k == "databaseID":
+			super(DataSetDDG, self).__setattr__(k, v)
+		else:
+			assert(k in self.d.keys())
+			self.d[k] = v
+	
+	def __getattr__(self, k):
+		if k == "ddGdb" or k == "d":
+			super(DataSetDDG, self).__getattr__(k)
+		else:
+			return self.d[k]
+	
+	def remove(self):
+		ddGdb = self.ddGdb
+		if not self.databaseID:
+			raise Exception("Cannot remove a record with no corresponding database ID.")
+		ddGdb.locked_execute("DELETE FROM DataSetDDGSource WHERE DataSetDDGID=%s", parameters = (self.databaseID,))
+		ddGdb.locked_execute("DELETE FROM DataSetDDG WHERE ID=%s", parameters = (self.databaseID,))
+		
+	def find(self):
+		results = self.ddGdb.locked_execute('''SELECT ID FROM DataSetDDG WHERE DataSetID=%s AND Section=%s and RecordNumber=%s''', parameters = (self.DataSetID, self.Section, self.RecordNumber))
+		if results:
+			assert(len(results) == 1)
+			return results[0]["ID"], self
+		return None, None
+	
+	def __repr__(self):
+		s = []
+		s.append("DataSetID: %s" % self.DataSetID)
+		s.append("Section: %s" % self.Section)
+		s.append("RecordNumber: %s" % self.RecordNumber)
+		if self.AggregateType != 'SingleValue':
+			assert(len(self.DDGSources) > 1)
+			s.append("AggregateType: %s relating to the experimental assays with the IDs %s" % (self.AggregateType, join(sorted(self.DDGSources)), ", "))
+		else:
+			assert(len(self.DDGSources) == 1)
+			s.append("Relates to the experimental assays with ID %s" % list(self.DDGSources.keys())[0])
+			for ExperimentAssayID, e_type in sorted(self.DDGSources.iteritems()):
+				s.append("%s: %s" % (ExperimentAssayID, e_type))
+		s.append("PublishedValue: %s" % self.PublishedValue)
+		s.append("PDB_ID: %s" % self.PDB_ID)
+		if self.PublishedPDB_ID != self.PDB_ID:
+			s.append("PublishedPDB_ID: %s" % self.PublishedPDB_ID)
+		if self.Remark:
+			s.append("Remark: %s" % self.Remark)
+		if self.CorrectionRemark:
+			s.append("CorrectionRemark: %s" % self.CorrectionRemark)
+		if self.MutationIsReversed:
+			s.append("[*The mutation is reversed from the published experimental assay*]")
+		if self.PossibleError:
+			s.append("[*This record is possibly erroneous*]")
+		return join(s, "\n")
 
+	def addDDGSource(self, ExperimentAssayID, e_type):
+		ddGdb = self.ddGdb
+		assert(not(self.DDGSources.get(ExperimentAssayID)))
+		assert(e_type == 'Unknown' or e_type == 'DDG' or e_type == 'DDG_H2O')
+		self.DDGSources[ExperimentAssayID] = e_type
+		if self.AggregateType == 'SingleValue':
+			assert(len(self.DDGSources) == 1)
+			
+	def test(self):
+		pass
+				
+	def commit(self, testonly = False, quiet = False):
+		'''Commits the DataSet DDG record to the database. Returns the unique ID of the associated DataSetDDG record.'''
+		ddGdb = self.ddGdb
+		FieldNames = ddGdb.FieldNames
+		failed = False
+		
+		# Look for an existing record
+		DataSetDDGID = super(DataSetDDG, self).commit()
+		if DataSetDDGID:
+			return DataSetDDGID
+		
+		# Look for an existing record
+		DataSetDDGID, dbRecord = self.find()
+		if DataSetDDGID != None:
+			if not quiet:
+				colortext.error("\nDataSetDDG already exists in the database with ID=%s." % DataSetDDGID)
+				colortext.warning("*** This record ***%s\n" % self)
+				colortext.warning("*** Database record ***\n%s\n" % dbRecord)
+			return DataSetDDGID
+		
+		self.test()
+		
+		DataSetDDGID = None
+		try:
+			if not testonly:
+				ddGdb.insertDict(FieldNames.DataSetDDG._name, self.d)
+				DataSetDDGID = ddGdb.getLastRowID()
+			else:
+				print(self.d)
+			self.databaseID = DataSetDDGID
+		except Exception, e:
+			raise Exception("\nError committing DataSetDDG to database.\n***\n%s\n%s\n%s\n***" % (str(e), traceback.format_exc(), self))
+		
+		for DDGSource, e_type in self.DDGSources.iteritems():
+			try:
+				t = {
+					FieldNames.DataSetDDGSource.DataSetDDGID		: DataSetDDGID,
+					FieldNames.DataSetDDGSource.ExperimentAssayID	: DDGSource,
+					FieldNames.DataSetDDGSource.Type				: e_type,
+				}
+				if not testonly:
+					ddGdb.insertDict(FieldNames.DataSetDDGSource._name, t)
+				else:
+					print(t)
+			except Exception, e:
+				self.remove()
+				raise Exception("\nError committing DataSetDDGSource to database.\n***\n%s\n%s\n***" % (self, str(e)))
+
+		return self.databaseID
+	
 	
 		
 

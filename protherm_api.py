@@ -1264,7 +1264,7 @@ BadOrMissingMutants = [
 ]
 
 ddGTypos = [
-	(970  , {'ddG'	:   "%s kcal/mol" % str(-0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}), # Wrong sign
+	(970  , {'ddG_H2O'	:   "%s kcal/mol" % str(-0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}), # Wrong sign
 	
 	(2232 , {'ddG'		:  '-3.46 kcal/mol',	'PDB' : '1VQB'}), # Incorrectly entered as -3.86
 
@@ -3356,10 +3356,14 @@ class ProThermReader(object):
 				assert(record['METHODS'])
 				for i in range(len(record['METHODS'])):
 					ExperimentalConditions["%s%d" % (exp2DBfield[h], i + 1)] = record['METHODS'][i]
+				for i in range(len(record['METHODS']), 2):
+					ExperimentalConditions["%s%d" % (exp2DBfield[h], i + 1)] = None
 			elif fielddata and h == "MEASURE":
 				assert(record['MEASURES'])
 				for i in range(len(record['MEASURES'])):
 					ExperimentalConditions["%s%d" % (exp2DBfield[h], i + 1)] = record['MEASURES'][i]
+				for i in range(len(record['MEASURES']), 3):
+					ExperimentalConditions["%s%d" % (exp2DBfield[h], i + 1)] = None
 			elif fielddata and h in self.numericexpfields:
 				try:
 					fielddata = float(fielddata)
