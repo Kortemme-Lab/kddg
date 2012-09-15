@@ -19,6 +19,7 @@ import rosettahelper
 import rcsb
 import colortext
 from pdb import PDB
+from ddgobjects import DBObject
 
 sqrt = math.sqrt
 DictCursor = MySQLdb.cursors.DictCursor
@@ -333,8 +334,6 @@ def readUniProtMap(ddGdb):
 				UniProtKBACToPDB[UPAC].append(pdbID)
 			else:
 				UniProtKBACToPDB[UPAC] = [pdbID]
-
-from ddgobjects import DBObject
 
 class PDBStructure(DBObject):
 	
@@ -811,7 +810,7 @@ class MutantChainMap(object):
 		
 class ExperimentDefinition(DBObject):
 	
-	AllowedSecondaryStructurePositions = ['Coil', 'Helix', 'Sheet', 'Turn']
+	AllowedSecondaryStructurePositions = ['Coil', 'Helix', 'Sheet', 'Turn', '3_10-Helix']
 	
 	def __init__(self, ddGdb, pdbid, interface = None):
 		super(ExperimentDefinition, self).__init__(ddGdb) 
@@ -1454,13 +1453,13 @@ class DataSetDDG(DBObject):
 		if self.PublishedPDB_ID != self.PDB_ID:
 			s.append("PublishedPDB_ID: %s" % self.PublishedPDB_ID)
 		if self.Remark:
-			s.append("Remark: %s" % self.Remark)
+			s.append(colortext.make("Remark: %s" % self.Remark, color="cyan"))
 		if self.CorrectionRemark:
-			s.append("CorrectionRemark: %s" % self.CorrectionRemark)
+			s.append(colortext.make("CorrectionRemark: %s" % self.CorrectionRemark, color="lightblue"))
 		if self.MutationIsReversed:
-			s.append("[*The mutation is reversed from the published experimental assay*]")
+			s.append(colortext.make("[*The mutation is reversed from the published experimental assay*]", color = "orange"))
 		if self.PossibleError:
-			s.append("[*This record is possibly erroneous*]")
+			s.append(colortext.make("[*This record is possibly erroneous*]", color = "pink"))
 		return join(s, "\n")
 
 	def addDDGSource(self, ExperimentAssayID, e_type):
@@ -1637,10 +1636,33 @@ class DataSet(DBObject):
 	def addReference(self, SourceID):
 		self.References.append(SourceID)
 	
+	def find(self):
+		results = self.ddGdb.locked_execute('''SELECT ID FROM DataSet WHERE ID=%s''', parameters = (self.dict[self.ddGdb.FieldNames.DataSet.ID]))
+		if results:
+			assert(len(results) == 1)
+			return results[0]["ID"], self
+		return None, None
+	
 	def commit(self):
-		d = self.dict
 		ddGdb = self.ddGdb
 		FieldNames = ddGdb.FieldNames
+		failed = False
+		
+		# Look for an existing record
+		DataSetID = super(DataSet, self).commit()
+		if DataSetID:
+			return DataSetID
+		
+		# Look for an existing record
+		DataSetID, dbRecord = self.find()
+		if DataSetID != None:
+			if not quiet:
+				colortext.error("\nDataSet already exists in the database with ID=%s." % DataSetID)
+				colortext.warning("*** This record ***%s\n" % self)
+				colortext.warning("*** Database record ***\n%s\n" % dbRecord)
+			return DataSetID
+		
+		d = self.dict
 		IDfield = FieldNames.DataSet.ID
 		DataSetID = None
 		try:
@@ -1662,7 +1684,22 @@ class DataSet(DBObject):
 		return self.databaseID
 
 	def __repr__(self):
-		return str(self.dict) + "\n" + join(self.References, "\n")
+		ddGdb = self.ddGdb
+		FieldNames = ddGdb.FieldNames.DataSet
+
+		s = []
+		s.append("ID: %s" % self.dict[FieldNames.ID])
+		s.append("ShortID: %s" % self.dict[FieldNames.ShortID])
+		s.append("UserID: %s" % self.dict[FieldNames.UserID])
+		s.append("Description: %s" % self.dict[FieldNames.Description])
+		s.append("CreationDateStart: %s" % self.dict[FieldNames.CreationDateStart])
+		s.append("CreationDateEnd: %s" % self.dict[FieldNames.CreationDateEnd])
+		s.append("DDGConvention: %s" % self.dict[FieldNames.DDGConvention])
+		if self.References:
+			s.append("References:")
+			for reference in self.References:
+				s.append("  %s" % reference)
+		return join(s, "\n")
 		
 	def __getitem__(self, key):
 		return dict_[key]
@@ -1731,8 +1768,36 @@ class Publication(DBObject):
 		return self.databaseID
 
 	def __repr__(self):
-		raise Exception('''Not implemented.''')
+		ddGdb = self.ddGdb
+		FieldNames = ddGdb.FieldNames.Source
 		
+		s = []
+		s.append("ID: %s" % self.dict[FieldNames.ID])
+		if self.dict[FieldNames.DGUnit]:
+			s.append("DGUnit: %s" % self.dict[FieldNames.DGUnit])
+		if self.dict[FieldNames.DDGConvention]:
+			s.append("DDGConvention: %s" % self.dict[FieldNames.DDGConvention])
+		if self.dict[FieldNames.Notes]:
+			s.append("Notes: %s" % self.dict[FieldNames.Notes])
+		if self.dict[FieldNames.DGNotes]:
+			s.append("DGNotes: %s" % self.dict[FieldNames.DGNotes])
+		if self.dict[FieldNames.DGUnitUsedInProTherm]:
+			s.append("DGUnitUsedInProTherm: %s" % self.dict[FieldNames.DGUnitUsedInProTherm])
+		if self.dict[FieldNames.DDGProThermSignNotes]:
+			s.append("DDGProThermSignNotes: %s" % self.dict[FieldNames.DDGProThermSignNotes])
+		if self.dict[FieldNames.DDGValuesNeedToBeChecked]:
+			s.append("DDGValuesNeedToBeChecked: Yes")
+		s.append("RIS: %s" % self.dict[FieldNames.RIS])
+		if self.IDs:
+			s.append("IDs:")
+			for ID in self.IDs:
+				s.append("  %s: %s" % (ID[1], ID[0])) 
+		if self.DDGLocations:
+			s.append("Locations:")
+			for Location in self.DDGLocations:
+				s.append("  %s: %s" % (Location)) 
+		return join(s, "\n")
+	
 	def __getitem__(self, key):
 		return dict_[key]
 

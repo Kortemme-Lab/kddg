@@ -27,7 +27,6 @@ class DatasetParser(AbstractClass):
 	def compareToDatabase(self, ProThermID, ExperimentScoreID, record): pass
 	def parse(self, args = None): pass
 	def addDataSet(self): pass
-	def commit(self): pass
 
 class AbstractDBObject(AbstractClass):
 	dict = {}
