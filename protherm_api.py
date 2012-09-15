@@ -792,6 +792,7 @@ OverriddenEntries.extend([
 ])
 
 # ** These cases have missing PDB IDs and length for the wild-type structure, Sso7d (synthetic). A PDB file 1BNZ has the same sequence and has been solved by X-Ray. **
+# ** The Guerois set uses 1BF4. **
 # PMID:11124040.
 for i in range(10298, 10322 + 1):
 	OverriddenEntries.append((i, {'PDB_wild'	: '1BNZ', 'LENGTH' : 64, 'MUTATED_CHAIN' : 'A', 'PDB' : ''}))
