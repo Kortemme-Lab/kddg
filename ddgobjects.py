@@ -108,3 +108,27 @@ class Mutation(object):
 		if self.MutantAA != other.MutantAA:
 			return False 
 		return True
+
+	def __cmp__(self, other):
+		'''Only checks amino acid types and residue ID.'''
+		if self.Chain != other.Chain:
+			if ord(self.Chain) < ord(other.Chain):
+				return -1
+			else:
+				return 1
+		selfResidueID = self.ResidueID
+		otherResidueID = other.ResidueID
+		if selfResidueID != otherResidueID:
+			if not selfResidueID.isdigit():
+				spair = (int(selfResidueID[:-1]), ord(selfResidueID[-1])) 
+			else:
+				spair = (int(selfResidueID), 0) 
+			if not otherResidueID.isdigit():
+				opair = (int(otherResidueID[:-1]), ord(otherResidueID[-1])) 
+			else:
+				opair = (int(otherResidueID), 0)
+			if spair < opair:
+				return -1
+			else:
+				return 1
+		return 0
