@@ -1442,7 +1442,7 @@ class DataSetDDG(DBObject):
 		s.append("RecordNumber: %s" % self.RecordNumber)
 		if self.AggregateType != 'SingleValue':
 			assert(len(self.DDGSources) > 1)
-			s.append("AggregateType: %s relating to the experimental assays with the IDs %s" % (self.AggregateType, join(sorted(self.DDGSources)), ", "))
+			s.append("AggregateType: %s relating to the experimental assays with the IDs %s" % (self.AggregateType, join(map(str, sorted(self.DDGSources)), ", ")))
 		else:
 			assert(len(self.DDGSources) == 1)
 			s.append("Relates to the experimental assays with ID %s" % list(self.DDGSources.keys())[0])
