@@ -901,7 +901,7 @@ OverriddenEntries.extend([
 	
 # PMID:8142362. Entries 4489-4492 use the proper PDB numbering. Entries 14261-14264 do not.
 OverriddenEntries.extend([
-	(14261 , {'MUTATION' : 'R 53 E',				'PDB' : '1C5G'}),
+	(14261 , {'MUTATION' : 'R 53 E',			'PDB' : '1C5G'}),
 	(14262 , {'MUTATION' : 'E 373 R',			'PDB' : '1C5G'}),
 	(14263 , {'MUTATION' : 'E 373 P',			'PDB' : '1C5G'}),
 	(14264 , {'MUTATION' : 'R 53 E, E 373 R',	'PDB' : '1C5G'}),
@@ -2140,10 +2140,12 @@ for recordID in range(13376, 13381 + 1):
 	badPublicationReferences[recordID] = 8390295
 for recordID in range(15714, 15733 + 1):
 	badPublicationReferences[recordID] = 12473461
+for recordID in range(12725, 12730 + 1):
+	badPublicationReferences[recordID] = 11714927
 for recordID in range(14301, 14305 + 1):
 	badPublicationReferences[recordID] = 11714927
-for recordID in range(14571, 14574 + 1):
-	badPublicationReferences[recordID] = 11714927
+#for recordID in range(14571, 14574 + 1):
+#	badPublicationReferences[recordID] = 11714927
 
 # Records with the wrong secondary structure
 badSecondaryStructure = dict.fromkeys(
@@ -3256,7 +3258,7 @@ class ProThermReader(object):
 				unitsUsed = self.ddGUnitsUsed[dbReferencePK]
 				assert(unitsUsed[-1] != '?') # todo: assertion after removing legacy code - this assertion can be removed on the next commit 
 				ddGline = "%s %s" % (ddGline, unitsUsed)
-					
+		
 		idx = ddGline.find("kJ/mol")
 		if idx != -1:
 			try:
@@ -3391,7 +3393,7 @@ class ProThermReader(object):
 		'''Reads a record from the current position in the file.'''
 		if not recordnumber in self.indices.keys():
 			if not self.quiet:
-				colortext.error("Record %d not found" % recordnumber)
+				colortext.error("Record %s not found" % str(recordnumber))
 			return None
 		openhandlehere = False
 		if not self.fhandle:
