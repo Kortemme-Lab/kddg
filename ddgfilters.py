@@ -7,7 +7,7 @@ Defines filters and result sets for the ddG database.
 Created by Shane O'Connor 2012.
 Copyright (c) 2012 __UCSF__. All rights reserved.
 """
-
+raise Exception("Needs to be updated")
 import pickle
 from string import join
 import ddgdbapi

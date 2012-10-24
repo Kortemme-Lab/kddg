@@ -20,10 +20,10 @@ import pickle
 import md5
 import random
 import score 
-import analysis
-from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet 
+#import analysis
+#from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet 
 
-dbfields = ddgdbapi.FieldNames()
+#todo: dbfields = ddgdbapi.FieldNames()
 
 class MutationSet(object):
 	def __init__(self):
@@ -43,8 +43,9 @@ class ddG(object):
 		self.ddGDataDB = ddgdbapi.ddGPredictionDataDatabase()
 	
 	def __del__(self):
-		self.ddGDB.close()
-		self.ddGDataDB.close()
+		pass
+		#self.ddGDB.close()
+		#self.ddGDataDB.close()
 			
 	def _createResfile(self, pdb, mutations):
 		'''The mutations here are in the original PDB numbering. pdb is assumed to use Rosetta numbering.
@@ -179,8 +180,33 @@ class ddG(object):
 		Experiment.addExperimentalScore(sourceID, ddG, pdbID)
 		Experiment.commit(self.ddGDB)
 			
-			
-	def addPrediction(self, experimentID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}):
+
+	def createPredictionsFromUserDataSet(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False):
+		
+		results = self.ddGDB.execute("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
+		results = self.ddGDB.execute("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
+		if not results:
+			return False
+		
+		if not(quiet):
+			colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, ProtocolID))
+			colortext.message("%d records found in the UserDataSet" % len(results))
+		
+		count = 0
+		showprogress = not(quiet) and len(results) > 300
+		if showprogress:
+			print("|" + ("*" * (int(len(results)/100)-2)) + "|")
+		for r in results:
+			self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDB_ID"], StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
+			if showprogress:
+				count += 1
+				if count > 100:
+					colortext.write(".", "cyan", flush = True)
+					count = 0
+		print("")
+		return(True)
+		
+	def addPrediction(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False):
 		'''This function inserts a prediction into the database.
 			The parameters define:
 				the experiment we are running the prediction for;
@@ -192,22 +218,41 @@ class ddG(object):
 			from Rosetta residue numbering to PDB residue numbering.''' 
 			
 		parameters = (experimentID,)
-		
+		assert(ReverseMutation == False) # todo: allow this later
 		try:
-			sql = ("SELECT %(PDB_ID)s, %(Content)s FROM %(Experiment)s INNER JOIN %(Structure)s WHERE %(Experiment)s.%(Structure)s=%(PDB_ID)s AND %(Experiment)s.%(ID)s=" % dbfields) + "%s"
+			predictionPDB_ID = None
+			
+			sql = "SELECT PDB_ID, Content FROM Experiment INNER JOIN Structure WHERE Experiment.Structure=PDB_ID AND Experiment.ID=%s"
 			results = self.ddGDB.execute(sql, parameters = parameters)
 			if len(results) != 1:
 				raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
+			experimentPDB_ID = results[0]["PDB_ID"]
+			
+			if PDB_ID:
+				sql = "SELECT PDB_ID, Content FROM Structure WHERE PDB_ID=%s"
+				results = self.ddGDB.execute("SELECT PDB_ID, Content FROM Structure WHERE PDB_ID=%s", parameters=(PDB_ID))
+				if len(results) != 1:
+					raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
+				predictionPDB_ID = results[0]["PDB_ID"]
+			else:
+				predictionPDB_ID = experimentPDB_ID
 			
 			# Get the related PDB ID and file
 			result = results[0]
-			pdbID = result[dbfields.PDB_ID]
-			contents = result[dbfields.Content]
+			pdbID = result["PDB_ID"]
+			contents = result["Content"]
 			
 			pdb = PDB(contents.split("\n"))
 			
 			# Check that the mutated positions exist and that the wild-type matches the PDB
-			mutations = [result for result in self.ddGDB.callproc("GetMutations", parameters = parameters, cursorClass = ddgdbapi.StdCursor)]
+			mutations = [list(result) for result in self.ddGDB.callproc("GetMutations", parameters = parameters, cursorClass = ddgdbapi.StdCursor)]
+			
+			# todo: Hack. This should be removed when PDB homologs are dealt with properly.
+			for mutation in mutations:
+				if experimentPDB_ID == "1AJ3" and predictionPDB_ID == "1U5P":
+					assert(int(mutation[1]) < 1000)
+					mutation[1] = str(int(mutation[1]) + 1762) 
+			
 			checkPDBAgainstMutations(pdbID, pdb, mutations)
 			
 			# Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
@@ -234,6 +279,9 @@ class ddG(object):
 			# Turn the lines array back into a valid PDB file				
 			strippedPDB = join(pdb.lines, "\n")
 		except Exception, e:
+			colortext.error("Error in %s, %s: " % (experimentID, UserDataSetExperimentID))
+			colortext.warning(str(e))
+			return
 			colortext.error("\nError: '%s'.\n" % (str(e)))
 			colortext.error(traceback.format_exc())
 			raise colortext.Exception("An exception occurred retrieving the experimental data for Experiment ID #%s." % experimentID)
@@ -245,27 +293,30 @@ class ddG(object):
 		Description = pickle.dumps(Description)
 		ExtraParameters = pickle.dumps(ExtraParameters)
 		
+		PredictionFieldNames = self.ddGDB.FieldNames.Prediction
 		params = {
-			dbfields.ExperimentID : experimentID,
-			dbfields.PredictionSet : PredictionSet,
-			dbfields.ProtocolID : ProtocolID,
-			dbfields.KeptHETATMLines : KeepHETATMLines,
-			dbfields.StrippedPDB : strippedPDB,
-			dbfields.ResidueMapping : pickle.dumps(pdb.get_ddGInverseResmap()),
-			dbfields.InputFiles : InputFiles,
-			dbfields.Description : Description,
-			dbfields.Status : dbfields.queued,
-			dbfields.ExtraParameters : ExtraParameters,
-			dbfields.StoreOutput : StoreOutput,
+			PredictionFieldNames.ExperimentID		: experimentID,
+			PredictionFieldNames.UserDataSetExperimentID : UserDataSetExperimentID,
+			PredictionFieldNames.PredictionSet		: PredictionSet,
+			PredictionFieldNames.ProtocolID			: ProtocolID,
+			PredictionFieldNames.KeptHETATMLines	: KeepHETATMLines,
+			PredictionFieldNames.StrippedPDB		: strippedPDB,
+			PredictionFieldNames.ResidueMapping		: pickle.dumps(pdb.get_ddGInverseResmap()),
+			PredictionFieldNames.InputFiles			: InputFiles,
+			PredictionFieldNames.Description		: Description,
+			PredictionFieldNames.Status 			: "queued",
+			PredictionFieldNames.ExtraParameters	: ExtraParameters,
+			PredictionFieldNames.StoreOutput		: StoreOutput,
 		}
 		
-		self.ddGDB.insertDict('Prediction', params)
-		
-		# Add cryptID string
-		predictionID = self.ddGDB.getLastRowID()
-		entryDate = self.ddGDB.execute("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]	
-		rdmstring = join(random.sample('0123456789abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 16), '')
-		cryptID = "%(predictionID)s%(experimentID)s%(PredictionSet)s%(ProtocolID)s%(entryDate)s%(rdmstring)s" % vars()
-		cryptID = md5.new(cryptID.encode('utf-8')).hexdigest()
-		entryDate = self.ddGDB.execute("UPDATE Prediction SET cryptID=%s WHERE ID=%s", parameters = (cryptID, predictionID))	
-		
+		if not testonly:
+			self.ddGDB.insertDict('Prediction', params)
+			
+			# Add cryptID string
+			predictionID = self.ddGDB.getLastRowID()
+			entryDate = self.ddGDB.execute("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]	
+			rdmstring = join(random.sample('0123456789abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 16), '')
+			cryptID = "%(predictionID)s%(experimentID)s%(PredictionSet)s%(ProtocolID)s%(entryDate)s%(rdmstring)s" % vars()
+			cryptID = md5.new(cryptID.encode('utf-8')).hexdigest()
+			entryDate = self.ddGDB.execute("UPDATE Prediction SET cryptID=%s WHERE ID=%s", parameters = (cryptID, predictionID))	
+			

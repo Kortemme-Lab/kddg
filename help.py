@@ -7,7 +7,7 @@ Help functionality for the ddG database.
 Created by Shane O'Connor 2012.
 Copyright (c) 2012 __UCSF__. All rights reserved.
 """
-
+raise Exception("Needs to be updated")
 import sys
 import re
 from string import join
