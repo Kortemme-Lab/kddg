@@ -718,6 +718,7 @@ OverriddenEntries.append((19914, {'LENGTH' : 104,	'ASA' : None, 'PDB' : '1ONC'})
 # 1WQ5. Two identical chains A, B. Only B has the information for residue 57.
 # In these cases, the structural information needed for the mutations (residues A57, A62) is missing in the PDB file
 # Some of the information is present in chain B (A57's corresponding residue) but I decided against remapping the residues. 
+# PMIDs:2008436, 9020793
 for i in [942, 963, 964, 2287, 13451]:
 	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'B', 'MUTATION' : 'P 1057 A', 'PDB' : '1WQ5'}))
 
@@ -772,7 +773,7 @@ for i in range(17567, 17583 + 1):
 # 1QGV is the full-length, 142-residue hDim1 protein.
 # R86A/K88A seems to be a mutation on the reduced form, 1PQN, rather than the full form, 1QGV
 # Also, given "we report the solution structure for the reduced dominant negative form of Dim1 and compare it to the crystal structure of the oxidized full length Dim1 protein"
-for i in range(16577, 16578 + 1):
+for i in range(16576, 16578 + 1):
 	OverriddenEntries.append((i, {'PDB_wild'	: '1PQN', 'LENGTH' : 127, 'PDB' : '1QGV'})) 
 
 # ** These cases have missing PDB IDs for the wild-type structure, IL6_MOUSE (P08505). It has been solved by NMR as 2L3Y where the residue IDs are off by 5 from the paper **
@@ -874,9 +875,19 @@ OverriddenEntries.append((18736  , {'PDB_wild'	: '1Y4Y', 'LENGTH' : 88, 'PDB_mut
 #18737 - mBacillus subtilis (BsHPr)
 
 # ** These cases have bad mutations **
+
+#PMID:10623553
 OverriddenEntries.extend([
 	(6367  , {'MUTATION' : 'Y 68 F', 'PDB' : '1TTG'}), # Removing bad PDB residue ID corrections (meant for 1TEN)
+])
+
+#PMID:8504078
+OverriddenEntries.extend([
 	(2554  , {'MUTATION' : 'A 18 G', 'PDB' : '2WSY'}),
+])
+
+#PMID:9485396
+OverriddenEntries.extend([
 	(11869 , {'MUTATION' : 'P 76 L, K 72 M', 'PDB' : '1YCC'}), # Table 3 describes 3R22 as a double mutant (also noted in the footnote of Table 4)
 ])
 
@@ -937,75 +948,75 @@ OverriddenEntries.extend([
 # 1UBQ also seems a better PDB ID for ubiquitin as it is an X-ray solution with just the ubiquitin chain.
 OverriddenEntries.extend([
 	## pH 2.25
-	(19422 , {'ddG'	: "%s kJ/mol" % str( -8.1  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
-	(19423 , {'ddG'	: "%s kJ/mol" % str( -8.8  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
-	(19424 , {'ddG'	: "%s kJ/mol" % str( -8.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
-	(19425 , {'ddG'	: "%s kJ/mol" % str(-14.2  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
-	(19426 , {'ddG'	: "%s kJ/mol" % str( -3.5  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
-	(19427 , {'ddG'	: "%s kJ/mol" % str( -9.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'}),
-	(19428 , {'ddG'	: "%s kJ/mol" % str( -5.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
-	(19429 , {'ddG'	: "%s kJ/mol" % str( -7.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
-	(19430 , {'ddG'	: "%s kJ/mol" % str(-11.7  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
-	(19431 , {'ddG'	: "%s kJ/mol" % str( -9.5  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
-	(19432 , {'ddG'	: "%s kJ/mol" % str(-10.8  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
-	(19433 , {'ddG'	: "%s kJ/mol" % str( -9.9  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
-	(19434 , {'ddG'	: "%s kJ/mol" % str( -6.0  -  -5.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
+	(19422 , {'ddG'	: "%s kJ/mol" % str( -8.1  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
+	(19423 , {'ddG'	: "%s kJ/mol" % str( -8.8  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
+	(19424 , {'ddG'	: "%s kJ/mol" % str( -8.7  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
+	(19425 , {'ddG'	: "%s kJ/mol" % str(-14.2  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
+	(19426 , {'ddG'	: "%s kJ/mol" % str( -3.5  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
+	(19427 , {'ddG'	: "%s kJ/mol" % str( -9.7  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
+	(19428 , {'ddG'	: "%s kJ/mol" % str( -5.7  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 L', 'PDB' : '1OTR'}),
+	(19429 , {'ddG'	: "%s kJ/mol" % str( -7.7  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
+	(19430 , {'ddG'	: "%s kJ/mol" % str(-11.7  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
+	(19431 , {'ddG'	: "%s kJ/mol" % str( -9.5  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
+	(19432 , {'ddG'	: "%s kJ/mol" % str(-10.8  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
+	(19433 , {'ddG'	: "%s kJ/mol" % str( -9.9  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
+	(19434 , {'ddG'	: "%s kJ/mol" % str( -6.0  -  -9.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
 	# pH 2.5
-	(19448 , {'ddG'	: "%s kJ/mol" % str( -6.1  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
-	(19449 , {'ddG'	: "%s kJ/mol" % str( -6.9  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
-	(19450 , {'ddG'	: "%s kJ/mol" % str( -6.6  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
-	(19451 , {'ddG'	: "%s kJ/mol" % str(-12.8  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
-	(19452 , {'ddG'	: "%s kJ/mol" % str( -1.5  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
-	(19453 , {'ddG'	: "%s kJ/mol" % str( -7.7  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'}),
-	(19454 , {'ddG'	: "%s kJ/mol" % str( -3.7  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
-	(19455 , {'ddG'	: "%s kJ/mol" % str( -5.7  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
-	(19456 , {'ddG'	: "%s kJ/mol" % str(-10.1  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
-	(19457 , {'ddG'	: "%s kJ/mol" % str( -7.6  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
-	(19458 , {'ddG'	: "%s kJ/mol" % str( -9.0  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
-	(19459 , {'ddG'	: "%s kJ/mol" % str( -8.3  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
-	(19460 , {'ddG'	: "%s kJ/mol" % str( -4.0  -  -3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
+	(19448 , {'ddG'	: "%s kJ/mol" % str( -6.1  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
+	(19449 , {'ddG'	: "%s kJ/mol" % str( -6.9  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
+	(19450 , {'ddG'	: "%s kJ/mol" % str( -6.6  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
+	(19451 , {'ddG'	: "%s kJ/mol" % str(-12.8  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
+	(19452 , {'ddG'	: "%s kJ/mol" % str( -1.5  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
+	(19453 , {'ddG'	: "%s kJ/mol" % str( -7.7  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
+	(19454 , {'ddG'	: "%s kJ/mol" % str( -3.7  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 L', 'PDB' : '1OTR'}),
+	(19455 , {'ddG'	: "%s kJ/mol" % str( -5.7  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
+	(19456 , {'ddG'	: "%s kJ/mol" % str(-10.1  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
+	(19457 , {'ddG'	: "%s kJ/mol" % str( -7.6  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
+	(19458 , {'ddG'	: "%s kJ/mol" % str( -9.0  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
+	(19459 , {'ddG'	: "%s kJ/mol" % str( -8.3  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
+	(19460 , {'ddG'	: "%s kJ/mol" % str( -4.0  -  -7.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
 	# pH 2.75
-	(19474 , {'ddG'	: "%s kJ/mol" % str( -3.0  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
-	(19475 , {'ddG'	: "%s kJ/mol" % str( -3.6  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
-	(19476 , {'ddG'	: "%s kJ/mol" % str( -3.8  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
-	(19477 , {'ddG'	: "%s kJ/mol" % str(-10.3  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
-	(19478 , {'ddG'	: "%s kJ/mol" % str(  1.7  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
-	(19479 , {'ddG'	: "%s kJ/mol" % str( -4.4  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'}),
-	(19480 , {'ddG'	: "%s kJ/mol" % str( -0.7  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
-	(19481 , {'ddG'	: "%s kJ/mol" % str( -2.7  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
-	(19482 , {'ddG'	: "%s kJ/mol" % str( -7.5  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
-	(19483 , {'ddG'	: "%s kJ/mol" % str( -4.4  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
-	(19484 , {'ddG'	: "%s kJ/mol" % str( -6.4  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
-	(19485 , {'ddG'	: "%s kJ/mol" % str( -5.2  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
-	(19486 , {'ddG'	: "%s kJ/mol" % str( -0.6  -  -0.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
+	(19474 , {'ddG'	: "%s kJ/mol" % str( -3.0  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
+	(19475 , {'ddG'	: "%s kJ/mol" % str( -3.6  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
+	(19476 , {'ddG'	: "%s kJ/mol" % str( -3.8  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
+	(19477 , {'ddG'	: "%s kJ/mol" % str(-10.3  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
+	(19478 , {'ddG'	: "%s kJ/mol" % str(  1.7  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
+	(19479 , {'ddG'	: "%s kJ/mol" % str( -4.4  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
+	(19480 , {'ddG'	: "%s kJ/mol" % str( -0.7  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 L', 'PDB' : '1OTR'}),
+	(19481 , {'ddG'	: "%s kJ/mol" % str( -2.7  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
+	(19482 , {'ddG'	: "%s kJ/mol" % str( -7.5  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
+	(19483 , {'ddG'	: "%s kJ/mol" % str( -4.4  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
+	(19484 , {'ddG'	: "%s kJ/mol" % str( -6.4  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
+	(19485 , {'ddG'	: "%s kJ/mol" % str( -5.2  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
+	(19486 , {'ddG'	: "%s kJ/mol" % str( -0.6  -  -4.4), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
 	# pH 3.0
-	(19500 , {'ddG'	: "%s kJ/mol" % str(  1.0  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
-	(19501 , {'ddG'	: "%s kJ/mol" % str(  0.3  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
-	(19502 , {'ddG'	: "%s kJ/mol" % str(  0.7  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
-	(19503 , {'ddG'	: "%s kJ/mol" % str( -6.6  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
-	(19504 , {'ddG'	: "%s kJ/mol" % str(  6.0  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
-	(19505 , {'ddG'	: "%s kJ/mol" % str( -0.1  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'}),
-	(19506 , {'ddG'	: "%s kJ/mol" % str(  3.7  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
-	(19507 , {'ddG'	: "%s kJ/mol" % str(  1.6  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
-	(19508 , {'ddG'	: "%s kJ/mol" % str( -3.1  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
-	(19509 , {'ddG'	: "%s kJ/mol" % str( -0.3  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
-	(19510 , {'ddG'	: "%s kJ/mol" % str( -2.0  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
-	(19511 , {'ddG'	: "%s kJ/mol" % str( -0.8  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
-	(19512 , {'ddG'	: "%s kJ/mol" % str(  3.6  -  3.7), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
+	(19500 , {'ddG'	: "%s kJ/mol" % str(  1.0  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
+	(19501 , {'ddG'	: "%s kJ/mol" % str(  0.3  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
+	(19502 , {'ddG'	: "%s kJ/mol" % str(  0.7  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
+	(19503 , {'ddG'	: "%s kJ/mol" % str( -6.6  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
+	(19504 , {'ddG'	: "%s kJ/mol" % str(  6.0  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
+	(19505 , {'ddG'	: "%s kJ/mol" % str( -0.1  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
+	(19506 , {'ddG'	: "%s kJ/mol" % str(  3.7  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 L', 'PDB' : '1OTR'}),
+	(19507 , {'ddG'	: "%s kJ/mol" % str(  1.6  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
+	(19508 , {'ddG'	: "%s kJ/mol" % str( -3.1  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
+	(19509 , {'ddG'	: "%s kJ/mol" % str( -0.3  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
+	(19510 , {'ddG'	: "%s kJ/mol" % str( -2.0  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
+	(19511 , {'ddG'	: "%s kJ/mol" % str( -0.8  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
+	(19512 , {'ddG'	: "%s kJ/mol" % str(  3.6  -  -0.1), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
 	# pH 3.25
-	(19526 , {'ddG'	: "%s kJ/mol" % str(  5.7  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
-	(19527 , {'ddG'	: "%s kJ/mol" % str(  4.1  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
-	(19528 , {'ddG'	: "%s kJ/mol" % str(  4.6  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
-	(19529 , {'ddG'	: "%s kJ/mol" % str( -2.2  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
-	(19530 , {'ddG'	: "%s kJ/mol" % str( 10.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
-	(19531 , {'ddG'	: "%s kJ/mol" % str(  3.9  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 K', 'PDB' : '1OTR'}),
-	(19532 , {'ddG'	: "%s kJ/mol" % str(  7.9  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
-	(19533 , {'ddG'	: "%s kJ/mol" % str(  6.1  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
-	(19534 , {'ddG'	: "%s kJ/mol" % str(  1.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
-	(19535 , {'ddG'	: "%s kJ/mol" % str(  4.1  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
-	(19536 , {'ddG'	: "%s kJ/mol" % str(  2.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
-	(19537 , {'ddG'	: "%s kJ/mol" % str(  3.4  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
-	(19538 , {'ddG'	: "%s kJ/mol" % str(  7.8  -  7.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
+	(19526 , {'ddG'	: "%s kJ/mol" % str(  5.7  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 A', 'PDB' : '1OTR'}),
+	(19527 , {'ddG'	: "%s kJ/mol" % str(  4.1  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 E', 'PDB' : '1OTR'}),
+	(19528 , {'ddG'	: "%s kJ/mol" % str(  4.6  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 F', 'PDB' : '1OTR'}),
+	(19529 , {'ddG'	: "%s kJ/mol" % str( -2.2  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 G', 'PDB' : '1OTR'}),
+	(19530 , {'ddG'	: "%s kJ/mol" % str( 10.4  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 I', 'PDB' : '1OTR'}),
+	(19531 , {'ddG'	: "%s kJ/mol" % str(  3.9  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'wild',   'PDB' : '1OTR'}),
+	(19532 , {'ddG'	: "%s kJ/mol" % str(  7.9  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 L', 'PDB' : '1OTR'}),
+	(19533 , {'ddG'	: "%s kJ/mol" % str(  6.1  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 M', 'PDB' : '1OTR'}),
+	(19534 , {'ddG'	: "%s kJ/mol" % str(  1.4  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 N', 'PDB' : '1OTR'}),
+	(19535 , {'ddG'	: "%s kJ/mol" % str(  4.1  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 Q', 'PDB' : '1OTR'}),
+	(19536 , {'ddG'	: "%s kJ/mol" % str(  2.4  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 S', 'PDB' : '1OTR'}),
+	(19537 , {'ddG'	: "%s kJ/mol" % str(  3.4  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 T', 'PDB' : '1OTR'}),
+	(19538 , {'ddG'	: "%s kJ/mol" % str(  7.8  -  3.9), 'PDB_wild' : '1UBQ', 'MUTATED_CHAIN' : 'A', 'MUTATION' : 'K 33 V', 'PDB' : '1OTR'}),
 ])
 
 # PMID: 15515183. Bad PDB ID and DDG calculation. The DDGs in the paper are given relative to alanine at position 33, not the wildtype lysine.
@@ -1030,6 +1041,7 @@ for i in range(24275, 24282 + 1) + range(24284, 24286 + 1):
 	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A',	'PDB' : '2AC0'}))
 OverriddenEntries.append((24283, {'MUTATED_CHAIN' : 'A', 'MUTATION' : 'M 133 L, C 141 V, Y 236 F, T 253 L', 'PDB' : '2AC0'})) # Standardizing record for parsing
 
+# PMID: 19683006
 for i in [24251, 24261, 24271]:
 	OverriddenEntries.append((i, {'MUTATED_CHAIN' : 'A',	'PDB' : '2AC0'})) 
 
@@ -1057,181 +1069,230 @@ for i in range(24736, 24741 + 1):
 
 BadOrMissingMutants = [
 	# ** These cases have bad PDB IDs for the mutant structure **
+	# PMID: 1569557
 	(90    , {'PDB_mutant'	 : '1BSD', 			'PDB' : '1BNI'}), 	# Data-entry error 
-	#
+	# PMID: 8448112
 	(303   , {'PDB_mutant'	 : '1SYC, 1SYD', 	'PDB' : '1STN'}),	# The two given structures are not homologous but record #2024 has the correct mutants, 1SYC and 1SYD
-	#
+	# PMID: 7929430
 	(13393 , {'PDB_mutant'	 : '1RBU', 			'PDB' : '2RN2'}), 	# 1RBU was given in records 15, 16, 13182, and 13183 and matches the correct sequence
 	(13410 , {'PDB_mutant'	 : '1RBU', 			'PDB' : '2RN2'}), 	# 1RBU was given in records 15, 16, 13182, and 13183 and matches the correct sequence
-	#
+	# PMID: 7869383
 	(13535 , {'PDB_mutant'	 : None, 			'PDB' : '2LZM'}), 	# 166H is not a valid PDB ID. 166L has the T115A mutation but also has other mutations.
-	#
+	# PMID: 1390669
 	(1751  , {'PDB_mutant'	 : None, 			'PDB' : '4LYZ'}), 	# 1JKB is a human lysozyme mutant - 4LYZ is hen egg-white lysozyme
 	(1755  , {'PDB_mutant'	 : None, 			'PDB' : '4LYZ'}), 	# 1JKB is a human lysozyme mutant - 4LYZ is hen egg-white lysozyme
 	(1759  , {'PDB_mutant'	 : None, 			'PDB' : '4LYZ'}), 	# 1JKB is a human lysozyme mutant - 4LYZ is hen egg-white lysozyme
-	#
+	# PMID:8784180
+	(2410  , {'PDB_mutant'	 : None, 			'PDB' : '1POH'}), 	# 1POH->1OPD. 1OPD is a double mutant also containing Q3E.
 	(2412  , {'PDB_mutant'	 : None, 			'PDB' : '1POH'}), 	# 1POH->1SPH. 1SPH is a bacillus subtilis HPr mutant. 1POH is an e.coli wildtype.
+	(14019 , {'PDB_mutant'	 : None, 			'PDB' : '1POH'}), 	# 1POH->1OPD. 1OPD is a double mutant also containing Q3E.
 	(14021 , {'PDB_mutant'	 : None, 			'PDB' : '1POH'}), 	# 1POH->1SPH. 1SPH is a bacillus subtilis HPr mutant. 1POH is an e.coli wildtype.
 	
 	# ** These cases have somewhat bad PDB IDs for the mutant structure **
-	#
+	# PMID:7490748
 	(1908  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPC. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
-	(9822  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPC. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
-	(14267 , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPC. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
-	#
 	(1909  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPB. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
-	(9823  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPB. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
-	#
 	(1910  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPA. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
-	(9824  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPA. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
-	(14266 , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPA. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
-	#
-	(1845  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1COA. 1COA is a double mutant also containing L20M but this may be okay?
-	(1859  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1COA. 1COA is a double mutant also containing L20M but this may be okay?
+	
+	# PMID: 7937708
+	# This patch seems erroneous - no mutant is specified (9822  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPC. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
+	# This patch seems erroneous - no mutant is specified (9823  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPB. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
+	# This patch seems erroneous - no mutant is specified (9824  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPA. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
+	
+	# PMID: 7849029
+	# This patch seems erroneous - no mutant is specified (14267 , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPC. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
+	# This patch seems erroneous - no mutant is specified(14266 , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1YPA. 2CI2 has a start tag SSVEKKPEGVNTGAGDRHN followed by an L20M mutation. The mutant also has a E78Q mutation (which may be okay - E78 in 2CI2 should be Q according to UniProt).
 	(4698  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1COA. 1COA is a double mutant also containing L20M but this may be okay?
-	(13923 , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1COA. 1COA is a double mutant also containing L20M but this may be okay?
 	(14280 , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1COA. 1COA is a double mutant also containing L20M but this may be okay?
 	
-	#
+	# PMID: 8218191
+	(1845  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1COA. 1COA is a double mutant also containing L20M but this may be okay?
+	(1859  , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1COA. 1COA is a double mutant also containing L20M but this may be okay?
+	(13923 , {'PDB_mutant'	 : None, 			'PDB' : '2CI2'}), 	# 2CI2->1COA. 1COA is a double mutant also containing L20M but this may be okay?
+	
 	# Also specifying the chain ID of the mutant structure when the same chain ID from the wildtype does not exist
+	# PMID: 2663837
 	(2294  , {'PDB_mutant'	 : None, 	'_MUTANT_CHAIN' : 'A', 	'PDB' : '1RN1'}), 	# 1RN1->1LRA. 1LRA is a double mutant also containing Q25K.
+	(13988 , {'PDB_mutant'	 : None, 	'_MUTANT_CHAIN' : 'A', 	'PDB' : '1RN1'}), 	# 1RN1->1LRA. 1LRA is a double mutant also containing Q25K.
+	# PMID: 1980207
 	(2570  , {'PDB_mutant'	 : None, 	'_MUTANT_CHAIN' : 'A', 	'PDB' : '1RN1'}), 	# 1RN1->1LRA. 1LRA is a double mutant also containing Q25K.
 	(2572  , {'PDB_mutant'	 : None, 	'_MUTANT_CHAIN' : 'A', 	'PDB' : '1RN1'}), 	# 1RN1->1LRA. 1LRA is a double mutant also containing Q25K.
-	(13988 , {'PDB_mutant'	 : None, 	'_MUTANT_CHAIN' : 'A', 	'PDB' : '1RN1'}), 	# 1RN1->1LRA. 1LRA is a double mutant also containing Q25K.
-	#
-	(2410  , {'PDB_mutant'	 : None, 			'PDB' : '1POH'}), 	# 1POH->1OPD. 1OPD is a double mutant also containing Q3E.
-	(14019 , {'PDB_mutant'	 : None, 			'PDB' : '1POH'}), 	# 1POH->1OPD. 1OPD is a double mutant also containing Q3E.
-	#
+	
+	# PMID: 11023787
 	(9787  , {'PDB_mutant'	 : None, 			'PDB' : '1CEY'}), 	# 1CEY->1E6K. 1E6K also has A2S but this may be okay? 
-	#
 	(9789  , {'PDB_mutant'	 : None, 			'PDB' : '1CEY'}), 	# 1CEY->1E6M. 1E6M also has A2S but this may be okay? 
-	#
+	
+	# PMID : 8535241
 	(13895 , {'PDB_mutant'	 : None, 			'PDB' : '4LYZ'}), 	# 4LYZ->1LSN. 1LSN is a double mutant also containing D101N.
 	
 	# ** These cases have missing PDB IDs for the mutant structure **
-	(7401  , {'PDB_mutant'	 : '1BAN', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 88 
-	(10004 , {'PDB_mutant'	 : '1BAN', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 88 
-	(16772 , {'PDB_mutant'	 : '1BAN', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 88
-	(9996  , {'PDB_mutant'	 : '1BAO', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 82 
-	(9982  , {'PDB_mutant'	 : '1BNS', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 58 
-	(12818 , {'PDB_mutant'	 : '1BPT', 			'PDB' : '1BPI'}), 	# The mutant is missing but given previously in record 1729
-	(10010 , {'PDB_mutant'	 : '1BRH', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 49 
+	# PMID: 1569559
+	(7385  , {'PDB_mutant'	 : '1BSA', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 69 
+	(7392  , {'PDB_mutant'	 : '1BSB', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 79 
 	(7393  , {'PDB_mutant'	 : '1BRI', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 80 
 	(7394  , {'PDB_mutant'	 : '1BRI', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 80 
 	(7397  , {'PDB_mutant'	 : '1BRJ', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 85 
-	(7403  , {'PDB_mutant'	 : '1BRK', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 91 
-	(7385  , {'PDB_mutant'	 : '1BSA', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 69 
-	(9991  , {'PDB_mutant'	 : '1BSA', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 69 
-	(7392  , {'PDB_mutant'	 : '1BSB', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 79 
-	(9994  , {'PDB_mutant'	 : '1BSB', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 79 
-	(10003 , {'PDB_mutant'	 : '1BSC', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 84 
 	(7398  , {'PDB_mutant'	 : '1BSE', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 86 
-	#
+	(7401  , {'PDB_mutant'	 : '1BAN', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 88 
+	(7403  , {'PDB_mutant'	 : '1BRK', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 91 
+	# PMID : 1569558
+	(9982  , {'PDB_mutant'	 : '1BNS', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 58 
+	(9991  , {'PDB_mutant'	 : '1BSA', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 69 
+	(9994  , {'PDB_mutant'	 : '1BSB', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 79 
+	(9996  , {'PDB_mutant'	 : '1BAO', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 82 
+	(10003 , {'PDB_mutant'	 : '1BSC', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 84 
+	(10004 , {'PDB_mutant'	 : '1BAN', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 88 
+	(10010 , {'PDB_mutant'	 : '1BRH', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 49 
+	# PMID: 14516751
+	(16772 , {'PDB_mutant'	 : '1BAN', 			'PDB' : '1BNI'}), 	# The mutant is missing but given previously in record 88
+	# PMID: 11841216
 	(12817 , {'PDB_mutant'	 : '1BTI', 			'PDB' : '1BPI'}), 	# The mutant is missing but given previously in record 1728
-	(14073 , {'PDB_mutant'	 : '1BTI', 			'PDB' : '1BPI'}), 	# The mutant is missing but given previously in record 1728
+	(12818 , {'PDB_mutant'	 : '1BPT', 			'PDB' : '1BPI'}), 	# The mutant is missing but given previously in record 1729
 	(12820 , {'PDB_mutant'	 : '1FAN', 			'PDB' : '1BPI'}), 	# The mutant is missing but given previously in record 1732
-	#
+	# PMID: 7540212
+	(14073 , {'PDB_mutant'	 : '1BTI', 			'PDB' : '1BPI'}), 	# The mutant is missing but given previously in record 1728
+	# PMID: 11254388
 	(10875 , {'PDB_mutant'	 : '1HIB', 			'PDB' : '1IOB'}), 	# The mutant is missing but given previously in record 21
-	#
+	# PMID: 1567879
 	(2179  , {'PDB_mutant'	 : '1LLI', 			'PDB' : '1LRP'}), 	# The mutant is missing but given previously in record 2174 
-	#
+	# PMID: 12646687
 	(16094 , {'PDB_mutant'	 : '1IX0', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given in the publication (these mutations are of the pseudo-wildtype 2BQA) 	
 	(16095 , {'PDB_mutant'	 : '1IX0', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given in the publication (these mutations are of the pseudo-wildtype 2BQA)	
 	(16096 , {'PDB_mutant'	 : '1IX0', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given in the publication (these mutations are of the pseudo-wildtype 2BQA)
 	(16097 , {'PDB_mutant'	 : '1IX0', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given in the publication (these mutations are of the pseudo-wildtype 2BQA)
-	(10838 , {'PDB_mutant'	 : '1OUA, 1LOZ', 	'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 809 	
-	(14381 , {'PDB_mutant'	 : '1OUA, 1LOZ', 	'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 809 	
-	(4260  , {'PDB_mutant'	 : '1YAO', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 804 
-	(7089  , {'PDB_mutant'	 : '1YAO', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 804 
-	(7104  , {'PDB_mutant'	 : '1YAO', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 804 
-	(14377 , {'PDB_mutant'	 : '1YAO', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 804 
-	(7096  , {'PDB_mutant'	 : '1YAP', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 805 	
-	(7111  , {'PDB_mutant'	 : '1YAP', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 805 	
-	(14384 , {'PDB_mutant'	 : '1YAP', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 805 	
-	(7088  , {'PDB_mutant'	 : '2HEC', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 3473 
-	(7103  , {'PDB_mutant'	 : '2HEC', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 3473 
+	# PMID: 11121116
+	(10838 , {'PDB_mutant'	 : '1OUA, 1LOZ', 	'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 809
+	# PMID:	10556244
 	(14376 , {'PDB_mutant'	 : '2HEC', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 3473 
-	(7095  , {'PDB_mutant'	 : '2HED', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3478 	
-	(7110  , {'PDB_mutant'	 : '2HED', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3478 	
-	(14383 , {'PDB_mutant'	 : '2HED', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3478 	
-	(7094  , {'PDB_mutant'	 : '2HEE', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3494 	
-	(7109  , {'PDB_mutant'	 : '2HEE', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3494 	
+	(14377 , {'PDB_mutant'	 : '1YAO', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 804 
+	(14381 , {'PDB_mutant'	 : '1OUA, 1LOZ', 	'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 809 	
 	(14382 , {'PDB_mutant'	 : '2HEE', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3494 	
-	# 2LZM  
-	(4343  , {'PDB_mutant'	 : '1L04, 1L05', 	'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1271
+	(14383 , {'PDB_mutant'	 : '2HED', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3478 	
+	(14384 , {'PDB_mutant'	 : '1YAP', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 805 	
+	
+	# PMID:	9677301
+	(4260  , {'PDB_mutant'	 : '1YAO', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 804 
+	
+	# PMID:	10556244
+	(7088  , {'PDB_mutant'	 : '2HEC', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 3473 
+	(7089  , {'PDB_mutant'	 : '1YAO', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 804 
+	(7095  , {'PDB_mutant'	 : '2HED', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3478 	
+	(7094  , {'PDB_mutant'	 : '2HEE', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3494 	
+	(7096  , {'PDB_mutant'	 : '1YAP', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 805 	
+	(7103  , {'PDB_mutant'	 : '2HEC', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 3473 
+	(7104  , {'PDB_mutant'	 : '1YAO', 			'PDB' : '1LZ1'}), 	# The mutant is missing but given previously in record 804 
+	(7109  , {'PDB_mutant'	 : '2HEE', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3494 	
+	(7110  , {'PDB_mutant'	 : '2HED', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 3478 	
+	(7111  , {'PDB_mutant'	 : '1YAP', 			'PDB' : '1LZ1'}), 	# The mutants are missing but given previously in record 805 	
+	
+	# PMID: 1988046
 	(4323  , {'PDB_mutant'	 : '1L19', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 13295
-	(4227  , {'PDB_mutant'	 : '1L36', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1241
-	(14260 , {'PDB_mutant'	 : '1L36', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1241
-	(8363  , {'PDB_mutant'	 : '1L44', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 91 
-	(8364  , {'PDB_mutant'	 : '1L45', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 91 
-	(8365  , {'PDB_mutant'	 : '1L46', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 91 
 	(4332  , {'PDB_mutant'	 : '1L48', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1263
+	(4343  , {'PDB_mutant'	 : '1L04, 1L05', 	'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1271
 	(4346  , {'PDB_mutant'	 : '1L49', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1541
-	(4226  , {'PDB_mutant'	 : '1L70', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1240
-	(14259 , {'PDB_mutant'	 : '1L70', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1240
+	
+	# PMID:	1998663
 	(4225  , {'PDB_mutant'	 : '1L71', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1239
+	(4226  , {'PDB_mutant'	 : '1L70', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1240
+	(4227  , {'PDB_mutant'	 : '1L36', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1241
+	
+	# PMID:	1998663
 	(14258 , {'PDB_mutant'	 : '1L71', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1239
-	# Stored as 2LZM but actually 1L63 
+	(14259 , {'PDB_mutant'	 : '1L70', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1240
+	(14260 , {'PDB_mutant'	 : '1L36', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1241
+	
+	# PMID:	10933506
+	(8363  , {'PDB_mutant'	 : '1L44', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1030 
+	(8364  , {'PDB_mutant'	 : '1L45', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1031 
+	(8365  , {'PDB_mutant'	 : '1L46', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1032 
+	
+	# PMID:	11316887. Stored as 2LZM but actually 1L63 
+	(11423 , {'PDB_mutant'	 : '237L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 3303
 	(11426 , {'PDB_mutant'	 : '126L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1161
+	
+	# PMID:	7918421
 	(4796  , {'PDB_mutant'	 : '1L68', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1059 
+	
+	# PMID:	8889173
 	(7431  , {'PDB_mutant'	 : '1L68', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1059 
 	(7432  , {'PDB_mutant'	 : '1L68', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1059 
 	(7433  , {'PDB_mutant'	 : '1L68', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1059 
 	(7434  , {'PDB_mutant'	 : '1L68', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1059 
 	(7435  , {'PDB_mutant'	 : '1L68', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1059 
 	(7436  , {'PDB_mutant'	 : '1L68', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1059 
+	
+	# PMID:	7918421
 	(14287 , {'PDB_mutant'	 : '1L68', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1059 
+	
+	# PMID:	12963380
 	(16608 , {'PDB_mutant'	 : '1L77', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1185
+	(16611 , {'PDB_mutant'	 : '235L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 3302
 	(16620 , {'PDB_mutant'	 : '1L77', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1185
+	(16623 , {'PDB_mutant'	 : '235L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 3302
+	
+	# PMID:	1553543
 	(13460 , {'PDB_mutant'	 : '1L90', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1502
-	(1024  , {'PDB_mutant'	 : '1L90', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1502 
+	
+	# PMID:	1553543
+	(1024  , {'PDB_mutant'	 : '1L90', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1502
+	 
+	# PMID:	10512706
 	(6580  , {'PDB_mutant'	 : '1L90', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1502 
 	(6586  , {'PDB_mutant'	 : '1L90', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1502 
+	
+	# PMID:	10512706
 	(14328 , {'PDB_mutant'	 : '1L90', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1502 
 	(14334 , {'PDB_mutant'	 : '1L90', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1502
+	
+	# PMID:	8901549
 	(13521 , {'PDB_mutant'	 : '1L93', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1505
-	(16611 , {'PDB_mutant'	 : '235L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 3302
-	(16623 , {'PDB_mutant'	 : '235L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 3302
-	(11423 , {'PDB_mutant'	 : '237L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 3303
+	
+	# PMID:17400925
 	(22386 , {'PDB_mutant'	 : '240L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 3292
 	(22388 , {'PDB_mutant'	 : '242L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 3294
 	(22390 , {'PDB_mutant'	 : '236L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 3299
 	(22391 , {'PDB_mutant'	 : '200L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 1023
 	(22397 , {'PDB_mutant'	 : '240L', 			'PDB' : '2LZM'}), 	# The mutant is missing but given previously in record 3292
+	
+	# PMID: 10545167
 	# Stored as 1L63
-	(20216 , {'PDB_mutant'	 : '196L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1116 (wrongly as a 2LZM single mutant)
-	(20250 , {'PDB_mutant'	 : '196L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1116 (wrongly as a 2LZM single mutant)
-	(20203 , {'PDB_mutant'	 : '1L85', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1026 (wrongly as a 2LZM single mutant)
-	(20239 , {'PDB_mutant'	 : '1L85', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1026 (wrongly as a 2LZM single mutant)
-	(20192 , {'PDB_mutant'	 : '1L90', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1502 (wrongly as a 2LZM single mutant)
-	(20228 , {'PDB_mutant'	 : '1L90', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1502 (wrongly as a 2LZM single mutant)
-	(20201 , {'PDB_mutant'	 : '200L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1023 (wrongly as a 2LZM single mutant)
-	(20237 , {'PDB_mutant'	 : '200L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1023 (wrongly as a 2LZM single mutant)
-	(20197 , {'PDB_mutant'	 : '227L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3307 (wrongly as a 2LZM single mutant)
-	(20233 , {'PDB_mutant'	 : '227L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3307 (wrongly as a 2LZM single mutant)
-	(20199 , {'PDB_mutant'	 : '235L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3302 (wrongly as a 2LZM single mutant)
-	(20235 , {'PDB_mutant'	 : '235L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3302 (wrongly as a 2LZM single mutant)
-	(20190 , {'PDB_mutant'	 : '236L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3299 (wrongly as a 2LZM single mutant)
-	(20226 , {'PDB_mutant'	 : '236L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3299 (wrongly as a 2LZM single mutant)
-	(20202 , {'PDB_mutant'	 : '237L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3303 (wrongly as a 2LZM single mutant)
-	(20238 , {'PDB_mutant'	 : '237L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3303 (wrongly as a 2LZM single mutant)
-	(20196 , {'PDB_mutant'	 : '238L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3301 (wrongly as a 2LZM single mutant)
-	(20232 , {'PDB_mutant'	 : '238L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3301 (wrongly as a 2LZM single mutant)
 	(20184 , {'PDB_mutant'	 : '239L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3291 (wrongly as a 2LZM single mutant)
-	(20220 , {'PDB_mutant'	 : '239L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3291 (wrongly as a 2LZM single mutant)
 	(20186 , {'PDB_mutant'	 : '242L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3294 (wrongly as a 2LZM single mutant)
-	(20222 , {'PDB_mutant'	 : '242L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3294 (wrongly as a 2LZM single mutant)
-	(20194 , {'PDB_mutant'	 : '244L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3297 (wrongly as a 2LZM single mutant)
-	(20230 , {'PDB_mutant'	 : '244L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3297 (wrongly as a 2LZM single mutant)
 	(20189 , {'PDB_mutant'	 : '247L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3311 (wrongly as a 2LZM single mutant)
+	(20190 , {'PDB_mutant'	 : '236L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3299 (wrongly as a 2LZM single mutant)
+	(20192 , {'PDB_mutant'	 : '1L90', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1502 (wrongly as a 2LZM single mutant)
+	(20194 , {'PDB_mutant'	 : '244L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3297 (wrongly as a 2LZM single mutant)
+	(20196 , {'PDB_mutant'	 : '238L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3301 (wrongly as a 2LZM single mutant)
+	(20197 , {'PDB_mutant'	 : '227L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3307 (wrongly as a 2LZM single mutant)
+	(20199 , {'PDB_mutant'	 : '235L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3302 (wrongly as a 2LZM single mutant)
+	(20201 , {'PDB_mutant'	 : '200L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1023 (wrongly as a 2LZM single mutant)
+	(20202 , {'PDB_mutant'	 : '237L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3303 (wrongly as a 2LZM single mutant)
+	(20203 , {'PDB_mutant'	 : '1L85', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1026 (wrongly as a 2LZM single mutant)
+	(20216 , {'PDB_mutant'	 : '196L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1116 (wrongly as a 2LZM single mutant)
+	(20237 , {'PDB_mutant'	 : '200L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1023 (wrongly as a 2LZM single mutant)
+	
+	# PMID:	10545167
+	(20220 , {'PDB_mutant'	 : '239L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3291 (wrongly as a 2LZM single mutant)
+	(20222 , {'PDB_mutant'	 : '242L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3294 (wrongly as a 2LZM single mutant)
 	(20225 , {'PDB_mutant'	 : '247L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3311 (wrongly as a 2LZM single mutant)
-	#
+	(20226 , {'PDB_mutant'	 : '236L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3299 (wrongly as a 2LZM single mutant)
+	(20228 , {'PDB_mutant'	 : '1L90', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1502 (wrongly as a 2LZM single mutant)
+	(20230 , {'PDB_mutant'	 : '244L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3297 (wrongly as a 2LZM single mutant)
+	(20232 , {'PDB_mutant'	 : '238L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3301 (wrongly as a 2LZM single mutant)
+	(20233 , {'PDB_mutant'	 : '227L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3307 (wrongly as a 2LZM single mutant)
+	(20235 , {'PDB_mutant'	 : '235L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3302 (wrongly as a 2LZM single mutant)
+	(20238 , {'PDB_mutant'	 : '237L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 3303 (wrongly as a 2LZM single mutant)
+	(20239 , {'PDB_mutant'	 : '1L85', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1026 (wrongly as a 2LZM single mutant)
+	(20250 , {'PDB_mutant'	 : '196L', 			'PDB' : '1L63'}), 	# The mutant is missing but given previously in record 1116 (wrongly as a 2LZM single mutant)
+	
+	# PMID:	12082163
 	(15184 , {'PDB_mutant'	 : '1DVV', 			'PDB' : '451C'}), 	# The mutants are missing but given previously in record 9770 	
 	(15193 , {'PDB_mutant'	 : '1DVV', 			'PDB' : '451C'}), 	# The mutants are missing but given previously in record 9770 	
+	
+	# PMID:	18957274
 	(24929 , {'PDB_mutant'	 : '1DVV', 			'PDB' : '451C'}), 	# The mutants are missing but given previously in record 9770 	
 	(24939 , {'PDB_mutant'	 : '1DVV', 			'PDB' : '451C'}), 	# The mutants are missing but given previously in record 9770 	
-	
-	
+
 	# Bad mutants
 	# PMID: 1988046. 237L and 238L are mutants of the pseudo-wildtype 1L63 and not 2LZM. The paper is mutating from 2LZM.
 	(4333  , {'PDB_mutant'	 : None, 			'PDB' : '2LZM'}),
@@ -1244,9 +1305,10 @@ BadOrMissingMutants = [
 	(4275   , {'PDB_mutant'	 : None, 			'PDB' : '1LZ1'}),
 	(4276   , {'PDB_mutant'	 : None, 			'PDB' : '1LZ1'}),
 	(14194  , {'PDB_mutant'	 : None, 			'PDB' : '1LZ1'}),
-	# 1L68 is the mutant PDB ID for record 14287 (1L63 + S44A). This record has the mutation N68A.
+	# PMID:7918421. 1L68 is the mutant PDB ID for record 14287 (1L63 + S44A). This record has the mutation N68A.
 	(4797   , {'PDB_mutant'	 : None, 			'PDB' : '2LZM'}),
 	(14288  , {'PDB_mutant'	 : None, 			'PDB' : '2LZM'}),
+	# PMID:11087397.
 	# 1GB0 is the mutant for 1LZ1 + V2L as given in the publication. 1GA0 is a completely different protein.
 	(9659   , {'PDB_mutant'	 : '1GB0', 			'PDB' : '1LZ1'}),
 	(9660   , {'PDB_mutant'	 : '1GB0', 			'PDB' : '1LZ1'}),
@@ -1254,10 +1316,12 @@ BadOrMissingMutants = [
 	(9719   , {'PDB_mutant'	 : '1GB0', 			'PDB' : '1LZ1'}),
 	(9737   , {'PDB_mutant'	 : '1GB0', 			'PDB' : '1LZ1'}),
 	(14499  , {'PDB_mutant'	 : '1GB0', 			'PDB' : '1LZ1'}),
+	# PMID:11087397.
 	# 1GB7 is the mutant for 1LZ1 + V74L as given in the publication. 1GA0 is a completely different protein.
 	(9725   , {'PDB_mutant'	 : '1GB7', 			'PDB' : '1LZ1'}),
 	(9742   , {'PDB_mutant'	 : '1GB7', 			'PDB' : '1LZ1'}),
 	(14504  , {'PDB_mutant'	 : '1GB7', 			'PDB' : '1LZ1'}),
+	# PMID:11087397.
 	# 1GBX is the mutant for 1LZ1 + V110L as given in the publication. 1GA0 is a completely different protein.
 	(9731   , {'PDB_mutant'	 : '1GBX', 			'PDB' : '1LZ1'}),
 	(9747   , {'PDB_mutant'	 : '1GBX', 			'PDB' : '1LZ1'}),
@@ -1265,12 +1329,16 @@ BadOrMissingMutants = [
 ]
 
 ddGTypos = [
+	# PMID:9020793
 	(970  , {'ddG_H2O'	:   "%s kcal/mol" % str(-0.6/NUMBER_KJ_IN_KCAL), 'PDB' : '1WQ5'}), # Wrong sign
 	
+	# PMID:8378307
 	(2232 , {'ddG'		:  '-3.46 kcal/mol',	'PDB' : '1VQB'}), # Incorrectly entered as -3.86
-
-	(2508 , {'ddG'		:  '-0.06 kcal/mol',	'PDB' : '1HFY'}), # Incorrectly entered as -0.06. This is a one-off mistake for this publication so it is not included in the ddGWrongSigns dict.
-
+	
+	# PMID:8819981
+	(2508 , {'ddG'		:  '-0.06 kcal/mol',	'PDB' : '1HFY'}), # Incorrectly entered as 0.06. This is a one-off mistake for this publication so it is not included in the ddGWrongSigns dict.
+	
+	# PMID:8612074
 	(2814 , {'ddG'		:   '0.2 kcal/mol',		'PDB' : '1BVC'}), # 2.9 - 2.7 (2.9 and 2.7 are the values of DG_NU - DG_IU for the mutant and wildtype respectively)
 	
 	# PMID:10079068. Wrong sign and rounding error.
@@ -1283,15 +1351,17 @@ ddGTypos = [
 	# PMID:7663349. I do not know where ProTherm gets -1.4 kJ/mol (−0.3346 kcal/mol) from. It is close to the difference of the Cmid * m values i.e. 4.5*1.1 - 4.09*1.13.
 	#7272 , {'ddG'		:   '%s kJ/mol' % ((1.115 * 0.41) * NUMBER_KJ_IN_KCAL),	'PDB' : '1POH'}),
 	
+	# PMID:10986129
 	(8498  , {'ddG_H2O' 	: '-2.82 kcal/mol', 'PDB' : '1TEN'}), # Typo 
 	
-	# PMID:11513583. DG values entered as DDG. Note: I am adding DDG values here. These should be double-checked.
+	# PMID:11513583. DG values entered as DDG values. Note: I am adding DDG values here. These should be double-checked.
 	(11745 , {'ddG_H2O' :  '3.1 kcal/mol', 'dG_H2O' : '12.1', 'PDB' : '2TRX'}), # D26I is a stabilizing mutation
 	(11746 , {'ddG_H2O' : '-3.7 kcal/mol', 'dG_H2O' : '5.3',  'PDB' : '2TRX'}), # Destabilizing mutation
 	(11747 , {'ddG_H2O' : '-3.1 kcal/mol', 'dG_H2O' : '5.9',  'PDB' : '2TRX'}), # Destabilizing mutation
 	(11748 , {'ddG_H2O' : '-1.4 kcal/mol', 'dG_H2O' : '7.6',  'PDB' : '2TRX'}), # Destabilizing mutation
 	(11749 , {'ddG_H2O' : '-1.1 kcal/mol', 'dG_H2O' : '7.9',  'PDB' : '2TRX'}), # Destabilizing mutation
-
+	
+	# PMID:2372535
 	(11893 , {'ddG'		: "%s kcal/mol" % str(( 8.6 - 6.0)/NUMBER_KJ_IN_KCAL), 'PDB' : '1STN'}), # Bad computation?
 	
 	# PMID:11964251 - ProTherm uses kJ/mol but does not specify them
@@ -1301,6 +1371,7 @@ ddGTypos = [
 	# PMID:9228039
 	(13204 , {'ddG'		:  '-0.46 kcal/mol', 'PDB' : '2RN2'}), # Wrong sign and rounding: "The mutant proteins A52Y, A52F, A52H, and A52K are unexpectedly unstable"
 	
+	# PMID: 9677301
 	(14192 , {'ddG' 		: "%s kcal/mol" % str(-2.7/NUMBER_KJ_IN_KCAL),	'PDB' : '1LZ1'}), # Bad computation
 	
 	# PMID:12080133. DG values taken as DDG values
@@ -1311,19 +1382,23 @@ ddGTypos = [
 	(15688 , {'ddG_H2O' 	: "%s kJ/mol" % str(-7.2 + 3.5),	'PDB' : '1OTR'}), # Error in calculation.
 	(15692 , {'dG' 		: "-16.4 kJ/mol", 'ddG'		: "%s kJ/mol" % str(-16.4 + 3.5),	'PDB' : '1OTR'}), # DG and DDG are swapped.
 	
-	(17873 , {'ddG_H2O'	: "-0.5 kcal/mol",	'PDB' : '1RN1'}),# I would need to check the reference
+	# PMID:9819211
+	(17873 , {'ddG_H2O'	: "-0.5 kcal/mol",	'PDB' : '1RN1'}),# Fixed copy-and-paste typo to allow parsing.
 	
+	# PMID:16953565
 	(20134 , {'ddG'		: '-0.51 kcal/mol',			'PDB' : '1RTB'}), # minor typo (was -0.57)
 
 	# PMID:19647749. dG_H2O value entered as ddG_H2O.
 	(24386 , {'ddG_H2O' : None, 'dG_H2O' : '-17.4 kJ/mol',  'PDB' : ''}),
 	
+	# PMID:18077463.
 	(24741, {'dG_H2O': '22.84 kJ/mol', 'PDB' : ''}), # typo as all other dG_H2O values are negated 
 	
 	# PMID:19565466.
 	(25186 , {'ddG' : '-8.58 kJ/mol', 'PDB' : '1PIN'}), # Arithmetic error (ignored minus sign)
 	(25198 , {'ddG' : '-4.00 kJ/mol', 'PDB' : '1PIN'}), # Arithmetic error
 	
+	# PMID:20340133
 	(25658 , {'ddG_H2O'	: "-1.8 kcal/mol",	'PDB' : '1RGG'}),# Arithmetic error
 	
 	# PMID:20198681
@@ -1981,7 +2056,7 @@ for ID, patchrecord in MergedPatchSet.iteritems():
 	if ID in ddGWrongSigns:
 		assert(ddGWrongSigns[ID] not in patchrecord.keys())
 
-# 1L63 is missing N163 and L164 so we use 219L instead.
+# PMID: 7507755. 1L63 is missing N163 and L164 so we use 219L instead.
 PseudoLysozyme163Cases = [13516, 13517]
 for ID in PseudoLysozyme163Cases:
 	PseudoT4LysozymeCases.remove(ID)
@@ -2003,7 +2078,6 @@ for ID in PseudoHumanLysozymeCases:
 		MergedPatchSet[ID]['PDB_wild'] = '2BQA'
 	else:
 		MergedPatchSet[ID] = {'PDB_wild'	 : '2BQA', 			'PDB' : '1LZ1'}
-
 
 # In the records below where the wildtype for Bacillus subtilis (BsHPr) was entered incorrectly, 3OQN may be an appropriate PDB file as one chain has the correct wildtype sequence.
 recordsWithUnresolvedMissingData = []
@@ -2409,7 +2483,7 @@ class ProThermReader(object):
 		else:
 			raise Exception("Trying to close a null file handle.")
 	
-	def createGenerator(self, require_one_of = [], specific_cases = None, args = None):
+	def createGenerator(self, require_one_of = [], specific_cases = None, args = None, start_index = None, end_index = None):
 		'''This function creates a generator for iterating over the set of records.
 		It was motivated by me duplicating similar code in various scripts which use the reader.
 		 
@@ -2443,19 +2517,26 @@ class ProThermReader(object):
 			colortext.printf("|" + ("*" * (int(len(self.list_of_available_keys)/1000) - 2)) + "|")
 		thousands_read = 0
 		for ID in cases:
-			
 			#Progress meter
 			if not self.quiet:
 				if ID/1000 > thousands_read:
 					colortext.write("." * ((ID/1000) - thousands_read), "green")
 					colortext.flush()
 					thousands_read += (ID/1000) - thousands_read
-		
+			
+			if start_index != None and ID < start_index:
+				continue
+			if end_index != None and ID > end_index:
+				continue
+			
 			# Skip bad cases in ProTherm
 			if ID in self.skipTheseCases:
 				continue
 			
 			record = self.readRecord(ID)		
+			
+			fixed_record = self.readRecord(ID)
+			self.fixRecord(ID, fixed_record, quiet = True)
 			
 			# Skip records where none of the require_one_of keys has a corresponding value 
 			found_one_required_key = False or require_one_of == []
@@ -2463,6 +2544,11 @@ class ProThermReader(object):
 				if record[recordkey] != None:
 					found_one_required_key = True
 					break
+			if not found_one_required_key:
+				for recordkey in require_one_of:
+					if fixed_record[recordkey] != None:
+						found_one_required_key = True
+						break
 			if not found_one_required_key:
 				continue
 			
@@ -2999,7 +3085,7 @@ class ProThermReader(object):
 	def fixThermodynamic_activity_Kd(self, ID, record):
 		pass
 	
-	def fixRecord(self, ID, record = None):
+	def fixRecord(self, ID, record = None, quiet = False):
 		'''Override bad data in ProTherm.'''
 		record = self._getRecord(ID, record)
 		
@@ -3057,7 +3143,8 @@ class ProThermReader(object):
 		for m in msrs:
 			m = m.strip()
 			if not MeasureMapping.get(m):
-				colortext.error("No measure mapping for %d" % ID)
+				if not quiet:
+					colortext.error("No measure mapping for %d" % ID)
 				passed = False
 				raise colortext.Exception("Cannot find match for measure '%s' in record %d." % (m, ID))
 			else:
@@ -3079,7 +3166,8 @@ class ProThermReader(object):
 			for m in mthds:
 				m = m.strip()
 				if not MethodMapping.get(m):
-					colortext.error("No method mapping for %d" % ID)
+					if not quiet:
+						colortext.error("No method mapping for %d" % ID)
 					passed = False
 					raise colortext.Exception("Cannot find match for method '%s' in record %d." % (m, ID))
 				else:
@@ -3114,9 +3202,10 @@ class ProThermReader(object):
 			missingFields.append("either_ddG")
 		
 				
-		if not passed:
-			if ID not in recordsWithUnresolvedMissingData:
-				colortext.error("#%d: Could not fix record; Fields %s are missing" % (ID, str(missingFields)))
+		if not quiet:
+			if not passed:
+				if ID not in recordsWithUnresolvedMissingData:
+					colortext.error("#%d: Could not fix record; Fields %s are missing" % (ID, str(missingFields)))
 				
 		return passed
 		
