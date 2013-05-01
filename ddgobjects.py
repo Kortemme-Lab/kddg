@@ -108,7 +108,7 @@ class Mutation(object):
 		if self.MutantAA != other.MutantAA:
 			return False 
 		return True
-
+	
 	def __cmp__(self, other):
 		'''Only checks amino acid types and residue ID.'''
 		if self.Chain != other.Chain:
@@ -132,3 +132,18 @@ class Mutation(object):
 			else:
 				return 1
 		return 0
+
+class SpecificMutation(Mutation):
+	'''Also checks the chain in the equality function.'''
+	def __eq__(self, other):
+		'''Only checks amino acid types and residue ID.'''
+		if self.WildTypeAA != other.WildTypeAA:
+			return False
+		if self.ResidueID != other.ResidueID:
+			return False
+		if self.MutantAA != other.MutantAA:
+			return False 
+		if self.Chain != other.Chain:
+			return False 
+		return True
+	
