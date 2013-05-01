@@ -163,7 +163,7 @@ WHERE UserDataSetID=%s AND Subset=%s ORDER BY Section, RecordNumber''', paramete
 
 class PredictionScores(object):
 
-	def __init__(self, ddGdb, PredictionSet):
+	def __init__(self, ddGdb, PredictionSet, ddG_score_type = 'kellogg.total'):
 		import pickle
 		
 		# Get the UserDataSet ID and the list of AnalysisSets associated with the Prediction set
@@ -195,14 +195,26 @@ class PredictionScores(object):
 			
 			assert(p["PExperimentID"] == p["UDSEExperimentID"])
 			ddG = pickle.loads(p["ddG"])
-			PredictedDDG = ddG["data"]["ddG"]
+			if (ddG['version'] != '0.23'):
+				print(p["PredictionID"], ddG['version'])
+				continue
+			
+			# Traverse the score hierarchy
+			PredictedDDG = ddG["data"]
+			#try:
+			for score_path in ddG_score_type.split("."):
+				PredictedDDG = PredictedDDG[score_path]
+			PredictedDDG = PredictedDDG['ddG']
+			#except:
+			#	continue
+					
 			Predictions[p["PExperimentID"]][PDB_ID] = {
 				#"ExperimentID" : p["PExperimentID"],
 				#"PDB_ID" : p["PDB_ID"],
 				"UserDataSetExperimentID" : p["UserDataSetExperimentID"],
 				"PredictedDDG" : PredictedDDG
 			}
-	
+		
 		self.Predictions = Predictions
 		self.PredictionSet = PredictionSet
 		self.UserDataSetID = UserDataSetID
@@ -306,10 +318,12 @@ class AnalysisObject(object):
 
 class Analyzer(object):
 
-	def __init__(self, PredictionSet, quiet = False):
-		self.quiet = quiet
-		self.analysis_tables = None
+	def __init__(self, PredictionSet, quiet = False, ddG_score_type = 'kellogg.total'):
 		self.PredictionSet = PredictionSet
+		self.quiet = quiet
+		self.ddG_score_type = ddG_score_type
+		
+		self.analysis_tables = None
 		self.ddGdb = ddgdbapi.ddGDatabase()
 		self.description = []
 		self.CreateAnalysisTables()
@@ -317,7 +331,7 @@ class Analyzer(object):
 	def CreateAnalysisTables(self):
 		ddGdb = self.ddGdb
 		PredictionSet = self.PredictionSet
-		predictions = PredictionScores(ddGdb, PredictionSet)
+		predictions = PredictionScores(ddGdb, PredictionSet, self.ddG_score_type)
 		predicted_scores = predictions.Predictions
 		
 		s = "Analyzing %d predictions in PredictionSet '%s' for UserDataSet '%s'." % (predictions.NumberOfPredictions, predictions.PredictionSet, predictions.UserDataSetName)
@@ -408,10 +422,13 @@ class Analyzer(object):
 		
 		gplot = None
 		analysis_table = self.analysis_tables[table_name]
+		print(table_name)
+		print(RFunction)
 		if len(analysis_table.points) == 1:
 			raise Exception("The analysis table %s set only has one data point. At least two points are required." % table_name)
 		else:
 			inputfname = self.CreateCSVFile(table_name)
+			print(inputfname)
 			try:
 				if not self.quiet:
 					colortext.printf("Running %s." % RFunction)
@@ -454,12 +471,11 @@ class Reporter(object):
 				os.remove(graphfile)
 		self.graphfiles = []
 		
-	def CreateReport(self, outfname = None, description = None):
-		#outfname
+	def CreateReport(self, outfname = 'test.pdf', description = None, filetype = "pdf"):
 		
 		latexdoc = latex.LaTeXDocument("$\\Delta\\Delta$G analysis", pdf_title = "DDG analysis")
 		
-		analysis_objects = self.analyzer.PlotAll(filetype = "pdf", createFiles = False)
+		analysis_objects = self.analyzer.PlotAll(filetype = filetype, createFiles = False)
 		
 		analysis_by_dataset = {}
 		for analysis_object in analysis_objects:
@@ -487,7 +503,7 @@ class Reporter(object):
 				imagetabs = []
 				for analysis_object in analysis_objects:
 					count +=1
-					filename = "graph%d.pdf"
+					filename = "graph%d" + (".%s" % filetype)
 					rosettahelper.writeFile(filename % count, analysis_object.contents)
 					captiontabs.append(analysis_object.description)
 					imagetabs.append(latexdoc.getImageText(filename % count, width_cm = 6))
@@ -516,7 +532,7 @@ class Reporter(object):
 				latexdoc.addTypewriterText(rosettahelper.readFile(os.path.join(script_path, "R", filename)), language="R")
 				latexdoc.clearPage()
 				
-			latexdoc.compile_pdf("test.pdf")
+			latexdoc.compile_pdf(outfname)
 		except Exception, e:
 			self.clean()
 			raise
