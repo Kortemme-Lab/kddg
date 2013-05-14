@@ -7,18 +7,18 @@ Defines filters and result sets for the ddG database.
 Created by Shane O'Connor 2012.
 Copyright (c) 2012 __UCSF__. All rights reserved.
 """
-raise Exception("Needs to be updated")
 import pickle
 from string import join
 import ddgdbapi
 from ddglib.filter import *
 
-dbfields = ddgdbapi.FieldNames()
+from ddgdbapi import ddGDatabase
+dbfields = ddGDatabase().FieldNames
 StdCursor = ddgdbapi.StdCursor
 
 class StructureResultSet(ResultSet):
 	dbname = dbfields.Structure
-	primary_key = dbfields.PDB_ID
+	primary_key = dbfields.Structure.PDB_ID
 	stored_procedures = []
 
 	def __init__(self, db, SQL = "", parameters = None, AdditionalIDs = [], retrieveAllByDefault = True):
@@ -175,7 +175,7 @@ class StructureFilter(Filter):
 		
 class ExperimentResultSet(ResultSet):
 	dbname = dbfields.Experiment
-	primary_key = dbfields.ID
+	primary_key = dbfields.Experiment.ID
 	stored_procedures = ["GetScores"]
 
 	def __init__(self, db, SQL = "", parameters = None, AdditionalIDs = [], retrieveAllByDefault = True):
@@ -413,7 +413,7 @@ class ExperimentFilter(Filter):
 			
 class PredictionResultSet(ResultSet):
 	dbname = dbfields.Prediction
-	primary_key = dbfields.ID
+	primary_key = dbfields.Prediction.ID
 	stored_procedures = []
 	
 	def __init__(self, db, SQL = "", parameters = None, AdditionalIDs = [], retrieveAllByDefault = True):

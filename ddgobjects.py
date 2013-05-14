@@ -1,5 +1,5 @@
 import inspect
-import common.colortext as colortext
+from tools import colortext
 from string import join
 
 class AbstractClass(object):

@@ -7,16 +7,16 @@ Help functionality for the ddG database.
 Created by Shane O'Connor 2012.
 Copyright (c) 2012 __UCSF__. All rights reserved.
 """
-raise Exception("Needs to be updated")
 import sys
 import re
 from string import join
-from ddgdbapi import FieldNames, StdCursor, ddGDatabase
-from common import colortext
-import ddglib#.filter import *
+from ddgdbapi import StdCursor, ddGDatabase # FieldNames
+from tools import colortext
+import ddglib
+from ddglib.filter import *
 import inspect
 
-dbfields = FieldNames()
+#dbfields = FieldNames()
 
 def _get_ResultSetFilter_data():
 	s_module = "ddglib.ddgfilters"
@@ -80,10 +80,10 @@ def ShowDatabaseStructure():
 	
 	help.append(("\n* Database stored procedures *", "white"))
 	help.append(("The stored procedures defined in the database are as follows:\n", "silver"))
-	sprocs = sorted([r[0] for r in ddGdb.execute("SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_SCHEMA = 'ddG' AND ROUTINE_TYPE = 'PROCEDURE';", cursorClass = StdCursor)])
+	sprocs = sorted([r[0] for r in ddGdb.execute("SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_SCHEMA = 'ddG' AND ROUTINE_TYPE = 'PROCEDURE'", cursorClass = StdCursor)])
 	for sproc in sprocs:
 		defn = ddGdb.execute("SHOW CREATE PROCEDURE %s" % sproc)[0]
-		mtchs = procregex.match(defn["Create Procedure"].replace("\n", " "))
+		mtchs = procregex.match((defn["Create Procedure"] or "").replace("\n", " "))
 		if mtchs:
 			help.append(("\t%s( %s )" % (defn["Procedure"], mtchs.group(1)), "green"))
 		else:

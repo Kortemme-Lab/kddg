@@ -111,14 +111,14 @@ class ResultSet(kobject):
 			else:
 				if not self.__class__.dbname:
 					raise Exception("There is not database table associated with the class %s." % ( self.__class__.__name__))
-				SQL = "SELECT %s FROM %s %s" % (self.__class__.primary_key, self.__class__.dbname, SQL)
+				SQL = "SELECT %s FROM %s %s" % (self.__class__.primary_key, self.__class__.dbname._name, SQL)
 				results = self.db.execute(SQL, parameters)
 				self.log("ResultSet object initialized with SQL query '%s' %% %s." % (SQL, parameters or ""))
 		
 		AdditionalIDs = set(AdditionalIDs)
 		if AdditionalIDs:
 			AdditionalIDs = set(AdditionalIDs)
-			allIDs = self.db.execute("SELECT %s FROM %s" % (self.__class__.primary_key, self.__class__.dbname), parameters)
+			allIDs = self.db.execute("SELECT %s FROM %s" % (self.__class__.primary_key, self.__class__.dbname._name), parameters)
 			pIDs = set([r[self.__class__.primary_key] for r in allIDs]).intersection(AdditionalIDs)
 			if not (len(pIDs) == len(AdditionalIDs)):
 				raise Exception("Records associated with the following IDs could not be found: %s." % join(AdditionalIDs.difference(pIDs), ","))
@@ -128,7 +128,7 @@ class ResultSet(kobject):
 				print("No results were returned from '%s' %% %s." % (SQL, parameters or ""))
 			else:
 				if not self.__class__.primary_key in results[0]:
-					raise Exception("The resulting set from '%s'(%s) must including the primary key field %s of %s." % (SQL, parameters, self.__class__.primary_key, self.__class__.dbname))
+					raise Exception("The resulting set from '%s'(%s) must including the primary key field %s of %s." % (SQL, parameters, self.__class__.primary_key, self.__class__.dbname._name))
 				
 		self.IDs = set([r[self.__class__.primary_key] for r in results]).union(AdditionalIDs)
 		self.initialresults = None
@@ -143,7 +143,7 @@ class ResultSet(kobject):
 	
 	def getInitialResults(self):
 		if not self.initialresults:
-			SQL = "SELECT * FROM %s" % self.__class__.dbname
+			SQL = "SELECT * FROM %s" % self.__class__.dbname._name
 			results = self.db.execute(SQL)
 			self.initialresults = [r for r in results if r[self.__class__.primary_key] in self.IDs]
 		return self.initialresults
@@ -206,11 +206,11 @@ class ResultSet(kobject):
 		pks = self.getFilteredIDs()
 		if fields:
 			if type(fields) == list:
-				SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, join(fields, ", "), self.__class__.dbname)
+				SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, join(fields, ", "), self.__class__.dbname._name)
 			else:
-				SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, fields, self.__class__.dbname)
+				SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, fields, self.__class__.dbname._name)
 		else:
-			SQL = "SELECT * FROM %s" % self.__class__.dbname
+			SQL = "SELECT * FROM %s" % self.__class__.dbname._name
 		results = self.db.execute(SQL)
 		return [r for r in results if r[self.__class__.primary_key] in pks]
 	

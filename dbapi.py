@@ -11,17 +11,17 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 import os
 from string import join
 import ddgdbapi
-from pdb import PDB, ResidueID2String, checkPDBAgainstMutations, aa1
+from tools.pdb import PDB, ResidueID2String, checkPDBAgainstMutations, aa1
 #from Bio.PDB import *
-from rosettahelper import write_file
-import common.colortext as colortext  
+from tools.fs.io import write_file
+from tools import colortext
 import traceback
 import pickle
 import md5
 import random
 import score 
 #import analysis
-#from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet 
+from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet
 
 #todo: dbfields = ddgdbapi.FieldNames()
 

@@ -14,11 +14,11 @@ import getpass
 import itertools
 if __name__ == "__main__":
 	sys.path.insert(0, "../common")
-from rosettadb import DatabaseInterface
-import rosettahelper
-import rcsb
-import colortext
-from pdb import PDB
+from tools.deprecated.rosettadb import DatabaseInterface
+from tools.fs.io import read_file, write_file
+from tools import rcsb
+from tools import colortext
+from tools.pdb import PDB
 from ddgobjects import DBObject
 
 sqrt = math.sqrt
@@ -390,15 +390,15 @@ class PDBStructure(DBObject):
 			sys.stdout.flush()
 			try:
 				contents = rcsb.getPDB(id)
-				rosettahelper.write_file(os.path.join("../pdbs", id + ".pdb"), contents)
+				write_file(os.path.join("../pdbs", id + ".pdb"), contents)
 				colortext.message("success")
 			except:
 				colortext.error("failure")
 				raise Exception("Error retrieving %s." % filename)
 			
 		else:
-			contents = rosettahelper.readFile(filename)
-		
+			contents = read_file(filename)
+
 		resolution = None
 		lines = contents.split("\n")
 		for line in lines:
