@@ -11,6 +11,7 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 import re
 from string import join
 from base import kobject
+import time
 
 class Filter(kobject):
 	
@@ -20,24 +21,29 @@ class Filter(kobject):
 		self.post_SQL_filters = []
 		#raise Exception("Calling an abstract class.")
 		
-	def apply(self, db):
+	def apply(self, db, restrict_to_these_primary_keys = []):
 		self.conditions = []
 		self.parameters = []
 		self.paramsoffset = 0
-		
+
 		self._apply()
 		conditions = self.conditions
 		parameters = self.parameters
 		assert(len(conditions) == len(parameters) - self.paramsoffset)
+		if restrict_to_these_primary_keys:
+			if type(list(restrict_to_these_primary_keys)[0]) == type('s'):
+				conditions.append("%s IN ('%s')" % (self._ResultSet.primary_key, "','".join(restrict_to_these_primary_keys)))
+			else:
+				raise Exception("Need to handle multiple types of primary keys")
 		if conditions:
 			result_set = self._ResultSet(db, SQL = "WHERE %s" % join(conditions, " AND "), parameters = tuple(parameters))
 		else:
 			result_set = self._ResultSet(db)
-		
+
 		for postfilter in self.post_SQL_filters:
 			# post_SQL_filters functions take a database connection and self._ResultSet object and return a self._ResultSet object 
 			result_set &= postfilter(db, result_set)
-			
+
 		return result_set
 
 	def __or__(self, disjunct):
@@ -125,7 +131,10 @@ class ResultSet(kobject):
 		
 		if SQL:
 			if not results:
-				print("No results were returned from '%s' %% %s." % (SQL, parameters or ""))
+				if parameters:
+					print("No results were returned from '%s' %% %s." % (SQL, parameters))
+				else:
+					print("No results were returned from '%s'." % SQL)
 			else:
 				if not self.__class__.primary_key in results[0]:
 					raise Exception("The resulting set from '%s'(%s) must including the primary key field %s of %s." % (SQL, parameters, self.__class__.primary_key, self.__class__.dbname._name))
@@ -143,7 +152,10 @@ class ResultSet(kobject):
 	
 	def getInitialResults(self):
 		if not self.initialresults:
-			SQL = "SELECT * FROM %s" % self.__class__.dbname._name
+			if self.__class__.primary_key == 'PDB_ID':
+				SQL = "SELECT * FROM %s WHERE %s IN ('%s')" % (self.__class__.dbname._name, self.__class__.primary_key, "','".join(self.IDs))
+			else:
+				raise Exception("Need to type check the primary key.")
 			results = self.db.execute(SQL)
 			self.initialresults = [r for r in results if r[self.__class__.primary_key] in self.IDs]
 		return self.initialresults
@@ -171,6 +183,8 @@ class ResultSet(kobject):
 		pkset = set()
 		for filter in ufilter.getFilters():
 			self.log("  Applying %s:" % (tag or filter.getClassName()))
+			from tools import colortext
+			colortext.message("  Applying %s to %s" % (tag or filter.getClassName(), str(pks)))
 			pkset = pkset.union(self.applyFilter(pks, filter, tag))
 		return pkset
 	
@@ -184,10 +198,11 @@ class ResultSet(kobject):
 		#self.log("Primary keys before filtering:")
 		#self.log(str(pks))
 		for taggedFilter in self.filterchain:
+			t1 = time.time()
 			filter = taggedFilter[0] 
 			tag = taggedFilter[1]
 			if filter.isOfClass(UnionFilter):
-				self.log("Applying %s:"% (tag or "Union Filter"))
+				self.log("Applying union filter %s:"% (tag or "Union Filter"))
 				pks = self.applyUnionFilter(pks, filter, tag)
 				#self.log("Primary keys after filtering:")
 				#self.log(str(pks))
@@ -198,20 +213,38 @@ class ResultSet(kobject):
 				#self.log(str(pks))
 			else:
 				raise Exception("BLARG!")
+			self.log("Filter took %0.2fs to apply."% (time.time() - t1))
+
 		self.log("Filtered record count: %d" % len(pks))
 		return pks
 	
-	def getFilteredResults(self, fields = None):
-		'''Applies the filters, returns a new dict'''
+	def getFilteredResults(self, fields = None, just_get_primary_keys = False):
+		'''Applies the filters, returns a new dict.
+			fields must be a list
+			Note: if fields is not specified and just_get_primary_keys is False then all columns will be selected.
+			This can really increase the length of the function call e.g. for Structure all PDB file contents will be returned.
+		'''
+		#import time
+		#t1 = time.time()
 		pks = self.getFilteredIDs()
+		#t2 = time.time()
+		#print('getFilteredResults.getFilteredIDs: %0.2fs' % (t2 - t1))
+
 		if fields:
-			if type(fields) == list:
-				SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, join(fields, ", "), self.__class__.dbname._name)
-			else:
-				SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, fields, self.__class__.dbname._name)
+			assert(type(fields) == list)
+			SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, join(fields, ", "), self.__class__.dbname._name)
+			#else:
+			#	SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, fields, self.__class__.dbname._name)
+		elif just_get_primary_keys:
+			SQL = "SELECT %s FROM %s" % (self.__class__.primary_key, self.__class__.dbname._name)
 		else:
 			SQL = "SELECT * FROM %s" % self.__class__.dbname._name
+
+		#print("SQL query is '%s'" % SQL)
+
 		results = self.db.execute(SQL)
+		#t3 = time.time()
+		#print('getFilteredResults.SQL execution time: %0.2fs' % (t3 - t2))
 		return [r for r in results if r[self.__class__.primary_key] in pks]
 	
 	def filterBySet(self, resSet):

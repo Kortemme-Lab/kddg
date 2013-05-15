@@ -26,7 +26,10 @@ class StructureResultSet(ResultSet):
 	
 	def applyFilter(self, pks, filter, tag):
 		if filter.isOfClass(StructureFilter):
-			structures = filter.apply(self.db)
+			# We are taking an intersection of pks (primary keys) and the results returned by the filter.
+			# Therefore, we can restrict the set of records by the pks before filtering as considering the other records
+			# is wasteful.
+			structures = filter.apply(self.db, restrict_to_these_primary_keys = pks)
 			return pks.intersection(structures.IDs)
 
 class StructureFilter(Filter):
@@ -131,7 +134,6 @@ class StructureFilter(Filter):
 				self.parameters.append("%%%s%%" % t)
 			self.conditions.append(join(tstrs, " OR "))
 			self.paramsoffset += (len(self.techniques) - 1)
-		
 		if self.bfactors_min or self.bfactors_max:
 			self.post_SQL_filters.append(self._checkTotalBFactorRange) 
 		if self.UniProtACs or self.UniProtIDs:
@@ -142,8 +144,8 @@ class StructureFilter(Filter):
 		allowedIDs = self.UniProtIDs
 		allowedACs = self.UniProtACs
 		
-		UniProtKB_AC = dbfields.UniProtKB_AC
-		UniProtKB_ID = dbfields.UniProtKB_ID
+		UniProtKB_AC = dbfields.UniProtKB.UniProtKB_AC
+		UniProtKB_ID = dbfields.UniProtKB.UniProtKB_ID
 		
 		new_IDs = {}
 		mapping = db.callproc("GetPDBUniProtIDMapping")
@@ -182,11 +184,33 @@ class ExperimentResultSet(ResultSet):
 		super(ExperimentResultSet, self).__init__(db, SQL, parameters, AdditionalIDs, retrieveAllByDefault)
 		
 		self.structure_map = {} 
-		for id in self.IDs:
-			results = db.execute("SELECT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID WHERE Experiment.ID=%s", parameters=(id,), cursorClass=StdCursor)
-			pdbID = results[0][0]
-			self.structure_map[pdbID] = self.structure_map.get(pdbID) or []
-			self.structure_map[pdbID].append(id)
+		if not self.IDs:
+			results = db.execute("SELECT DISTINCT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+			for r in results:
+				self.structure_map[r['PDB_ID']] = []
+			results = db.execute("SELECT Experiment.ID AS ExperimentID, Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+			for r in results:
+				self.structure_map[r['PDB_ID']].append(r['ExperimentID'])
+		else:
+			# We can speed this up using a SELECT ... IN query
+			id_list = list(self.IDs)
+			assert(type(id_list[0]) == type(1L))
+			for x in range(0, len(id_list), 10000):
+				query_suffix = ' WHERE Experiment.ID IN (%s)' % ','.join(map(str, id_list[x:x+1000]))
+				results = db.execute("SELECT DISTINCT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID" + query_suffix)
+				for r in results:
+					self.structure_map[r['PDB_ID']] = []
+				results = db.execute("SELECT Experiment.ID AS ExperimentID, Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID" + query_suffix)
+				for r in results:
+					self.structure_map[r['PDB_ID']].append(r['ExperimentID'])
+
+
+
+			#for id in self.IDs:
+			#	results = db.execute("SELECT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID WHERE Experiment.ID=%s", parameters=(id,))
+			#	pdbID = results[0]['PDB_ID']
+			#	self.structure_map[pdbID] = self.structure_map.get(pdbID) or []
+			#	self.structure_map[pdbID].append(id)
 
 	def applyFilter(self, pks, filter, tag):
 		if filter.isOfClass(StructureFilter):
@@ -353,7 +377,7 @@ class ExperimentFilter(Filter):
 			if self.mutant:
 				conditions.append('mutant.Code="%s"' % self.mutant)
 			conditions = join(conditions, " AND ")
-			results = db.execute('''SELECT ExperimentID, Structure, Source, Chain, ResidueID, WildtypeAA, MutantAA, wildtype.Size, mutant.Size FROM Experiment INNER JOIN ExperimentMutation ON ID=ExperimentID INNER JOIN AminoAcid as wildtype ON WildtypeAA = wildtype.Code INNER JOIN AminoAcid as mutant ON MutantAA = mutant.Code WHERE %s;''' % conditions)
+			results = db.execute('''SELECT ExperimentID, Structure, Chain, ResidueID, WildtypeAA, MutantAA, wildtype.Size, mutant.Size FROM Experiment INNER JOIN ExperimentMutation ON ID=ExperimentID INNER JOIN AminoAcid as wildtype ON WildtypeAA = wildtype.Code INNER JOIN AminoAcid as mutant ON MutantAA = mutant.Code WHERE %s''' % conditions)
 			return self._ResultSet(db, AdditionalIDs = [r["ExperimentID"] for r in results], retrieveAllByDefault = False)			
 		else:
 			return result_set
@@ -366,8 +390,8 @@ class ExperimentFilter(Filter):
 			if self.mutant_size:
 				conditions.append('mutant.Size="%s"' % self.mutant_size)
 			conditions = join(conditions, " AND ")
-			results = db.execute('''SELECT ExperimentID, Structure, Source, Chain, ResidueID, WildtypeAA, MutantAA, wildtype.Size, mutant.Size FROM Experiment INNER JOIN ExperimentMutation ON ID=ExperimentID INNER JOIN AminoAcid as wildtype ON WildtypeAA = wildtype.Code INNER JOIN AminoAcid as mutant ON MutantAA = mutant.Code WHERE %s;''' % conditions)
-			return self._ResultSet(db, AdditionalIDs = [r["ExperimentID"] for r in results], retrieveAllByDefault = False)			
+			results = db.execute('''SELECT ExperimentID, Structure, Chain, ResidueID, WildtypeAA, MutantAA, wildtype.Size, mutant.Size FROM Experiment INNER JOIN ExperimentMutation ON ID=ExperimentID INNER JOIN AminoAcid as wildtype ON WildtypeAA = wildtype.Code INNER JOIN AminoAcid as mutant ON MutantAA = mutant.Code WHERE %s''' % conditions)
+			return self._ResultSet(db, AdditionalIDs = [r["ExperimentID"] for r in results], retrieveAllByDefault = False)
 		else:
 			return result_set
 		#todo: Check that large, none = large, small + large, large
