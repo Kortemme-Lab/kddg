@@ -183,8 +183,6 @@ class ResultSet(kobject):
 		pkset = set()
 		for filter in ufilter.getFilters():
 			self.log("  Applying %s:" % (tag or filter.getClassName()))
-			from tools import colortext
-			colortext.message("  Applying %s to %s" % (tag or filter.getClassName(), str(pks)))
 			pkset = pkset.union(self.applyFilter(pks, filter, tag))
 		return pkset
 	
@@ -195,25 +193,17 @@ class ResultSet(kobject):
 	def getFilteredIDs(self):
 		'''Applies the filters, returns a new dict'''
 		pks = self.IDs
-		#self.log("Primary keys before filtering:")
-		#self.log(str(pks))
 		for taggedFilter in self.filterchain:
-			t1 = time.time()
-			filter = taggedFilter[0] 
+			filter = taggedFilter[0]
 			tag = taggedFilter[1]
 			if filter.isOfClass(UnionFilter):
 				self.log("Applying union filter %s:"% (tag or "Union Filter"))
 				pks = self.applyUnionFilter(pks, filter, tag)
-				#self.log("Primary keys after filtering:")
-				#self.log(str(pks))
 			elif Filter in filter.getBaseClasses():
 				self.log("Applying %s:" % (tag or filter.getClassName()))
 				pks = self.applyFilter(pks, filter, tag)
-				#self.log("Primary keys after filtering:")
-				#self.log(str(pks))
 			else:
 				raise Exception("BLARG!")
-			self.log("Filter took %0.2fs to apply."% (time.time() - t1))
 
 		self.log("Filtered record count: %d" % len(pks))
 		return pks
@@ -224,27 +214,17 @@ class ResultSet(kobject):
 			Note: if fields is not specified and just_get_primary_keys is False then all columns will be selected.
 			This can really increase the length of the function call e.g. for Structure all PDB file contents will be returned.
 		'''
-		#import time
-		#t1 = time.time()
 		pks = self.getFilteredIDs()
-		#t2 = time.time()
-		#print('getFilteredResults.getFilteredIDs: %0.2fs' % (t2 - t1))
 
 		if fields:
 			assert(type(fields) == list)
 			SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, join(fields, ", "), self.__class__.dbname._name)
-			#else:
-			#	SQL = "SELECT %s, %s FROM %s" % (self.__class__.primary_key, fields, self.__class__.dbname._name)
 		elif just_get_primary_keys:
 			SQL = "SELECT %s FROM %s" % (self.__class__.primary_key, self.__class__.dbname._name)
 		else:
 			SQL = "SELECT * FROM %s" % self.__class__.dbname._name
 
-		#print("SQL query is '%s'" % SQL)
-
 		results = self.db.execute(SQL)
-		#t3 = time.time()
-		#print('getFilteredResults.SQL execution time: %0.2fs' % (t3 - t2))
 		return [r for r in results if r[self.__class__.primary_key] in pks]
 	
 	def filterBySet(self, resSet):

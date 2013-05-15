@@ -204,14 +204,6 @@ class ExperimentResultSet(ResultSet):
 				for r in results:
 					self.structure_map[r['PDB_ID']].append(r['ExperimentID'])
 
-
-
-			#for id in self.IDs:
-			#	results = db.execute("SELECT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID WHERE Experiment.ID=%s", parameters=(id,))
-			#	pdbID = results[0]['PDB_ID']
-			#	self.structure_map[pdbID] = self.structure_map.get(pdbID) or []
-			#	self.structure_map[pdbID].append(id)
-
 	def applyFilter(self, pks, filter, tag):
 		if filter.isOfClass(StructureFilter):
 			structures = filter.apply(self.db)
