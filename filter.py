@@ -89,7 +89,10 @@ class ResultSet(kobject):
 	@classmethod
 	def fromIDs(cls, db, IDs):
 		return cls(db, AdditionalIDs = IDs, retrieveAllByDefault = False)
-	
+
+	def __len__(self):
+		return len(self.IDs)
+
 	def __init__(self, db, SQL = "", parameters = None, AdditionalIDs = [], retrieveAllByDefault = True):
 		'''e.g. ResultSet("CALL GetScores", parameters = 16734)
 				ResultSet("WHERE ...")'''
@@ -118,13 +121,13 @@ class ResultSet(kobject):
 				if not self.__class__.dbname:
 					raise Exception("There is not database table associated with the class %s." % ( self.__class__.__name__))
 				SQL = "SELECT %s FROM %s %s" % (self.__class__.primary_key, self.__class__.dbname._name, SQL)
-				results = self.db.execute(SQL, parameters)
+				results = self.db.execute_select(SQL, parameters)
 				self.log("ResultSet object initialized with SQL query '%s' %% %s." % (SQL, parameters or ""))
 		
 		AdditionalIDs = set(AdditionalIDs)
 		if AdditionalIDs:
 			AdditionalIDs = set(AdditionalIDs)
-			allIDs = self.db.execute("SELECT %s FROM %s" % (self.__class__.primary_key, self.__class__.dbname._name), parameters)
+			allIDs = self.db.execute_select("SELECT %s FROM %s" % (self.__class__.primary_key, self.__class__.dbname._name), parameters)
 			pIDs = set([r[self.__class__.primary_key] for r in allIDs]).intersection(AdditionalIDs)
 			if not (len(pIDs) == len(AdditionalIDs)):
 				raise Exception("Records associated with the following IDs could not be found: %s." % join(AdditionalIDs.difference(pIDs), ","))
@@ -155,8 +158,8 @@ class ResultSet(kobject):
 			if self.__class__.primary_key == 'PDB_ID':
 				SQL = "SELECT * FROM %s WHERE %s IN ('%s')" % (self.__class__.dbname._name, self.__class__.primary_key, "','".join(self.IDs))
 			else:
-				raise Exception("Need to type check the primary key.")
-			results = self.db.execute(SQL)
+				raise Exception("Need to type-check the primary key.")
+			results = self.db.execute_select(SQL)
 			self.initialresults = [r for r in results if r[self.__class__.primary_key] in self.IDs]
 		return self.initialresults
 
@@ -224,7 +227,7 @@ class ResultSet(kobject):
 		else:
 			SQL = "SELECT * FROM %s" % self.__class__.dbname._name
 
-		results = self.db.execute(SQL)
+		results = self.db.execute_select(SQL)
 		return [r for r in results if r[self.__class__.primary_key] in pks]
 	
 	def filterBySet(self, resSet):

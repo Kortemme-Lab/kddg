@@ -70,7 +70,7 @@ class ddG(object):
 			raise Exception("An error occurred creating a resfile for the ddG job.")
 	
 	def getData(self, predictionID):
-		results = self.ddGDataDB.execute("SELECT * FROM PredictionData WHERE ID=%s", parameters = (predictionID,))
+		results = self.ddGDataDB.execute_select("SELECT * FROM PredictionData WHERE ID=%s", parameters = (predictionID,))
 		if results:
 			assert(len(results) == 1)
 			return results[0]["Data"]
@@ -106,13 +106,13 @@ class ddG(object):
 					for pub in pubs:
 						print("\t%s: %s" % (pub["Type"], pub["SourceLocation.ID"]))
 						
-				experimentsets = [e[0] for e in self.ddGDB.execute("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % join(map(str, list(experiments.IDs)), ","), cursorClass = ddgdbapi.StdCursor)]
+				experimentsets = [e[0] for e in self.ddGDB.execute_select("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % join(map(str, list(experiments.IDs)), ","), cursorClass = ddgdbapi.StdCursor)]
 				
 				if experimentsets:
 					colortext.printf("\nRelated publications for experiment-set sources:", "lightgreen")
 					for id in sorted(experimentsets):
 						print(id)
-						pubs = self.ddGDB.execute("SELECT ID, Type FROM SourceLocation WHERE SourceID=%s", parameters = (id,))
+						pubs = self.ddGDB.execute_select("SELECT ID, Type FROM SourceLocation WHERE SourceID=%s", parameters = (id,))
 						for pub in pubs:
 							print("\t%s: %s" % (pub["Type"], pub["ID"]))
 		else:
@@ -126,7 +126,7 @@ class ddG(object):
 	def analyze(self, prediction_result_set, outpath = os.getcwd()):
 		PredictionIDs = sorted(list(prediction_result_set.getFilteredIDs()))
 		colortext.printf("Analyzing %d records:" % len(PredictionIDs), "lightgreen")
-		#results = self.ddGDB.execute("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % join(map(str, PredictionIDs), ","))
+		#results = self.ddGDB.execute_select("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % join(map(str, PredictionIDs), ","))
 		
 		#for r in results:
 		#	r["ddG"] = pickle.loads(r["ddG"])
@@ -134,7 +134,7 @@ class ddG(object):
 		#	experimental_scores = [expscore["ddG"] for expscore in self.ddGDB.callproc("GetScores", parameters = r["ExperimentID"])]
 		#	mean_experimental_score = float(sum(experimental_scores)) / float(len(experimental_scores))
 	
-		results = self.ddGDB.execute("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % join(map(str, PredictionIDs), ","))
+		results = self.ddGDB.execute_select("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % join(map(str, PredictionIDs), ","))
 		
 		analysis.plot(analysis._R_mean_unsigned_error, analysis._createMAEFile, results, "my_plot1.pdf", average_fn = analysis._mean)
 		analysis.plot(analysis._R_correlation_coefficient, analysis._createAveragedInputFile, results, "my_plot2.pdf", average_fn = analysis._mean)
@@ -159,7 +159,7 @@ class ddG(object):
 			Structure = ddgdbapi.PDBStructure(rootname, protein = protein, source = source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly)
 			#Structure.getPDBContents(self.ddGDB)
 			sql = ("SELECT PDB_ID FROM Structure WHERE %s=" % dbfields.PDB_ID) + "%s"
-			results = self.ddGDB.execute(sql, parameters = (rootname,))
+			results = self.ddGDB.execute_select(sql, parameters = (rootname,))
 			if results:
 				#ddgdbapi.getUniProtMapping(pdbID, storeInDatabase = True)
 				raise Exception("There is already a structure in the database with the ID %s." % rootname)
@@ -183,8 +183,8 @@ class ddG(object):
 
 	def createPredictionsFromUserDataSet(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False):
 		
-		results = self.ddGDB.execute("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
-		results = self.ddGDB.execute("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
+		results = self.ddGDB.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
+		results = self.ddGDB.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
 		if not results:
 			return False
 		
@@ -223,14 +223,14 @@ class ddG(object):
 			predictionPDB_ID = None
 			
 			sql = "SELECT PDB_ID, Content FROM Experiment INNER JOIN Structure WHERE Experiment.Structure=PDB_ID AND Experiment.ID=%s"
-			results = self.ddGDB.execute(sql, parameters = parameters)
+			results = self.ddGDB.execute_select(sql, parameters = parameters)
 			if len(results) != 1:
 				raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
 			experimentPDB_ID = results[0]["PDB_ID"]
 			
 			if PDB_ID:
 				sql = "SELECT PDB_ID, Content FROM Structure WHERE PDB_ID=%s"
-				results = self.ddGDB.execute("SELECT PDB_ID, Content FROM Structure WHERE PDB_ID=%s", parameters=(PDB_ID))
+				results = self.ddGDB.execute_select("SELECT PDB_ID, Content FROM Structure WHERE PDB_ID=%s", parameters=(PDB_ID))
 				if len(results) != 1:
 					raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
 				predictionPDB_ID = results[0]["PDB_ID"]
@@ -314,7 +314,7 @@ class ddG(object):
 			
 			# Add cryptID string
 			predictionID = self.ddGDB.getLastRowID()
-			entryDate = self.ddGDB.execute("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]	
+			entryDate = self.ddGDB.execute_select("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]
 			rdmstring = join(random.sample('0123456789abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 16), '')
 			cryptID = "%(predictionID)s%(experimentID)s%(PredictionSet)s%(ProtocolID)s%(entryDate)s%(rdmstring)s" % vars()
 			cryptID = md5.new(cryptID.encode('utf-8')).hexdigest()

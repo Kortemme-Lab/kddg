@@ -58,7 +58,8 @@ def ShowDatabaseStructure():
 		
 	help.append(("\n* Database structure *", "white"))
 	help.append(("The tables of the database are as follows (orange = primary key, blue = foreign key):\n", "silver"))
-	tablenames = sorted([r[0] for r in (ddGdb.execute("SHOW TABLES", cursorClass = StdCursor))])
+
+	tablenames = sorted([r[0] for r in (ddGdb.execute_select_StdCursor("SHOW TABLES"))])
 	for tbl in tablenames:
 		help.append((tbl, "green"))
 		fieldnames = ddGdb.execute("SHOW COLUMNS FROM %s" % tbl)
@@ -80,7 +81,7 @@ def ShowDatabaseStructure():
 	
 	help.append(("\n* Database stored procedures *", "white"))
 	help.append(("The stored procedures defined in the database are as follows:\n", "silver"))
-	sprocs = sorted([r[0] for r in ddGdb.execute("SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_SCHEMA = 'ddG' AND ROUTINE_TYPE = 'PROCEDURE'", cursorClass = StdCursor)])
+	sprocs = sorted([r[0] for r in ddGdb.execute_select_StdCursor("SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_SCHEMA = 'ddG' AND ROUTINE_TYPE = 'PROCEDURE'")])
 	for sproc in sprocs:
 		defn = ddGdb.execute("SHOW CREATE PROCEDURE %s" % sproc)[0]
 		mtchs = procregex.match((defn["Create Procedure"] or "").replace("\n", " "))

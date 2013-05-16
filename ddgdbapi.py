@@ -564,7 +564,7 @@ class PDBStructure(DBObject):
 		pdbID = self.dict[FieldNames_.PDB_ID]
 		if len(pdbID) == 4:
 			try:
-				results = ddGdb.execute("SELECT FASTA FROM Structure WHERE PDB_ID=%s", parameters=(pdbID,))
+				results = ddGdb.execute_select("SELECT FASTA FROM Structure WHERE PDB_ID=%s", parameters=(pdbID,))
 				if results:
 					assert(len(results) == 1)
 					fastafile = results[0]["FASTA"]
@@ -578,7 +578,7 @@ class PDBStructure(DBObject):
 	
 	def parseFASTA(self):
 		pdbID = self.dict[self.ddGdb.FlatFieldNames.PDB_ID]
-		results = self.ddGdb.execute("SELECT FASTA FROM Structure WHERE PDB_ID = %s", parameters = (pdbID,))
+		results = self.ddGdb.execute_select("SELECT FASTA FROM Structure WHERE PDB_ID = %s", parameters = (pdbID,))
 		if results:
 			assert(len(results) == 1)
 			return rcsb.parseFASTAs(results[0]["FASTA"])
@@ -1001,7 +1001,7 @@ class ExperimentDefinition(DBObject):
 		
 		# Add all mutant structures to the database
 		for MutantStructure in MutantStructures:
-			results = self.ddGdb.execute("SELECT PDB_ID FROM Structure WHERE PDB_ID = %s", parameters = (MutantStructure.dict[self.ddGdb.FlatFieldNames.PDB_ID])) 
+			results = self.ddGdb.execute_select("SELECT PDB_ID FROM Structure WHERE PDB_ID = %s", parameters = (MutantStructure.dict[self.ddGdb.FlatFieldNames.PDB_ID]))
 			if not results:
 				MutantStructure.commit()
 
@@ -1010,7 +1010,7 @@ class ExperimentDefinition(DBObject):
 			WildTypeStructure = PDBStructure(self.ddGdb, self.PDB_ID, filepath = os.path.join(pdbPath, "%s.pdb" % self.PDB_ID))
 		else:
 			WildTypeStructure = PDBStructure(self.ddGdb, self.PDB_ID)
-		results = self.ddGdb.execute("SELECT PDB_ID FROM Structure WHERE PDB_ID = %s", parameters = (WildTypeStructure.dict[self.ddGdb.FlatFieldNames.PDB_ID])) 
+		results = self.ddGdb.execute_select("SELECT PDB_ID FROM Structure WHERE PDB_ID = %s", parameters = (WildTypeStructure.dict[self.ddGdb.FlatFieldNames.PDB_ID]))
 		if not results:
 			WildTypeStructure.commit()
 		

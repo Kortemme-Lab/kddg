@@ -14,7 +14,6 @@ from ddglib.filter import *
 
 from ddgdbapi import ddGDatabase
 dbfields = ddGDatabase().FieldNames
-StdCursor = ddgdbapi.StdCursor
 
 class StructureResultSet(ResultSet):
 	dbname = dbfields.Structure
@@ -185,10 +184,10 @@ class ExperimentResultSet(ResultSet):
 		
 		self.structure_map = {} 
 		if not self.IDs:
-			results = db.execute("SELECT DISTINCT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+			results = db.execute_select("SELECT DISTINCT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
 			for r in results:
 				self.structure_map[r['PDB_ID']] = []
-			results = db.execute("SELECT Experiment.ID AS ExperimentID, Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+			results = db.execute_select("SELECT Experiment.ID AS ExperimentID, Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
 			for r in results:
 				self.structure_map[r['PDB_ID']].append(r['ExperimentID'])
 		else:
@@ -197,10 +196,10 @@ class ExperimentResultSet(ResultSet):
 			assert(type(id_list[0]) == type(1L))
 			for x in range(0, len(id_list), 10000):
 				query_suffix = ' WHERE Experiment.ID IN (%s)' % ','.join(map(str, id_list[x:x+1000]))
-				results = db.execute("SELECT DISTINCT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID" + query_suffix)
+				results = db.execute_select("SELECT DISTINCT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID" + query_suffix)
 				for r in results:
 					self.structure_map[r['PDB_ID']] = []
-				results = db.execute("SELECT Experiment.ID AS ExperimentID, Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID" + query_suffix)
+				results = db.execute_select("SELECT Experiment.ID AS ExperimentID, Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID" + query_suffix)
 				for r in results:
 					self.structure_map[r['PDB_ID']].append(r['ExperimentID'])
 
@@ -226,9 +225,9 @@ class ExperimentResultSet(ResultSet):
 	
 	def getStructures(self):
 		idstr = join(map(str, list(self.getFilteredIDs())), ",")
-		results = self.db.execute("SELECT Structure FROM Experiment WHERE ID IN (%s)" % idstr)
-		structureIDs = self.db.execute("SELECT DISTINCT Structure FROM Experiment WHERE ID IN (%s)" % idstr, cursorClass=StdCursor)
-		structureIDs = [s[0] for s in structureIDs]
+		results = self.db.execute_select("SELECT Structure FROM Experiment WHERE ID IN (%s)" % idstr)
+		structureIDs = self.db.execute_select("SELECT DISTINCT Structure FROM Experiment WHERE ID IN (%s)" % idstr)
+		structureIDs = [s['Structure'] for s in structureIDs]
 		sr = StructureResultSet.fromIDs(self.db, structureIDs)
 		return sr, results 
 
@@ -369,7 +368,7 @@ class ExperimentFilter(Filter):
 			if self.mutant:
 				conditions.append('mutant.Code="%s"' % self.mutant)
 			conditions = join(conditions, " AND ")
-			results = db.execute('''SELECT ExperimentID, Structure, Chain, ResidueID, WildtypeAA, MutantAA, wildtype.Size, mutant.Size FROM Experiment INNER JOIN ExperimentMutation ON ID=ExperimentID INNER JOIN AminoAcid as wildtype ON WildtypeAA = wildtype.Code INNER JOIN AminoAcid as mutant ON MutantAA = mutant.Code WHERE %s''' % conditions)
+			results = db.execute_select('''SELECT ExperimentID, Structure, Chain, ResidueID, WildtypeAA, MutantAA, wildtype.Size, mutant.Size FROM Experiment INNER JOIN ExperimentMutation ON ID=ExperimentID INNER JOIN AminoAcid as wildtype ON WildtypeAA = wildtype.Code INNER JOIN AminoAcid as mutant ON MutantAA = mutant.Code WHERE %s''' % conditions)
 			return self._ResultSet(db, AdditionalIDs = [r["ExperimentID"] for r in results], retrieveAllByDefault = False)			
 		else:
 			return result_set
@@ -382,7 +381,7 @@ class ExperimentFilter(Filter):
 			if self.mutant_size:
 				conditions.append('mutant.Size="%s"' % self.mutant_size)
 			conditions = join(conditions, " AND ")
-			results = db.execute('''SELECT ExperimentID, Structure, Chain, ResidueID, WildtypeAA, MutantAA, wildtype.Size, mutant.Size FROM Experiment INNER JOIN ExperimentMutation ON ID=ExperimentID INNER JOIN AminoAcid as wildtype ON WildtypeAA = wildtype.Code INNER JOIN AminoAcid as mutant ON MutantAA = mutant.Code WHERE %s''' % conditions)
+			results = db.execute_select('''SELECT ExperimentID, Structure, Chain, ResidueID, WildtypeAA, MutantAA, wildtype.Size, mutant.Size FROM Experiment INNER JOIN ExperimentMutation ON ID=ExperimentID INNER JOIN AminoAcid as wildtype ON WildtypeAA = wildtype.Code INNER JOIN AminoAcid as mutant ON MutantAA = mutant.Code WHERE %s''' % conditions)
 			return self._ResultSet(db, AdditionalIDs = [r["ExperimentID"] for r in results], retrieveAllByDefault = False)
 		else:
 			return result_set
@@ -390,26 +389,26 @@ class ExperimentFilter(Filter):
 
 	def _filterByNumberOfMutations(self, db, result_set):
 		if self.minmutations or self.maxmutations:
-			results = db.execute('''SELECT ExperimentID, COUNT(*) FROM ExperimentMutation GROUP BY ExperimentID;''', cursorClass=StdCursor)
+			results = db.execute_select('''SELECT ExperimentID, COUNT(*) AS C FROM ExperimentMutation GROUP BY ExperimentID''')
 			if self.minmutations and self.maxmutations:
-				IDs = [r[0] for r in results if r[1] >= self.minmutations and r[1] <= self.maxmutations] 
+				IDs = [r['ExperimentID'] for r in results if r['C'] >= self.minmutations and r['C'] <= self.maxmutations]
 			elif self.minmutations and self.maxmutations:
-				IDs = [r[0] for r in results if r[1] >= self.minmutations] 
+				IDs = [r['ExperimentID'] for r in results if r['C'] >= self.minmutations]
 			else:
-				IDs = [r[0] for r in results if r[1] <= self.maxmutations] 
+				IDs = [r['ExperimentID'] for r in results if r['C'] <= self.maxmutations]
 			return self._ResultSet(db, AdditionalIDs = IDs, retrieveAllByDefault = False)
 		else:
 			return result_set
 
 	def _filterByNumberOfChains(self, db, result_set):
 		if self.minchains or self.maxchains:
-			results = db.execute('''SELECT ExperimentID, COUNT(*) FROM ExperimentChain GROUP BY ExperimentID;''', cursorClass=StdCursor)
+			results = db.execute_select('''SELECT ExperimentID, COUNT(*) AS C FROM ExperimentChain GROUP BY ExperimentID''')
 			if self.minchains and self.maxchains:
-				IDs = [r[0] for r in results if r[1] >= self.minchains and r[1] <= self.maxchains] 
+				IDs = [r['ExperimentID'] for r in results if r['C'] >= self.minchains and r['C'] <= self.maxchains]
 			elif self.minchains and self.maxchains:
-				IDs = [r[0] for r in results if r[1] >= self.minchains] 
+				IDs = [r['ExperimentID'] for r in results if r['C'] >= self.minchains]
 			else:
-				IDs = [r[0] for r in results if r[1] <= self.maxchains] 
+				IDs = [r['ExperimentID'] for r in results if r['C'] <= self.maxchains]
 			return self._ResultSet(db, AdditionalIDs = IDs, retrieveAllByDefault = False)
 		else:
 			return result_set
@@ -434,21 +433,48 @@ class PredictionResultSet(ResultSet):
 	
 	def __init__(self, db, SQL = "", parameters = None, AdditionalIDs = [], retrieveAllByDefault = True):
 		super(PredictionResultSet, self).__init__(db, SQL, parameters, AdditionalIDs, retrieveAllByDefault)
-		
+
 		self.structure_map = {}
-		for id in self.IDs:
-			results = db.execute("SELECT Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID WHERE Prediction.ID=%s", parameters=(id,), cursorClass=StdCursor)
-			pdbID = results[0][0]
-			self.structure_map[pdbID] = self.structure_map.get(pdbID) or []
-			self.structure_map[pdbID].append(id)
-		
+		if not self.IDs:
+			results = db.execute_select("SELECT DISTINCT Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+			for r in results:
+				self.structure_map[r['PDB_ID']] = []
+			results = db.execute_select("SELECT Prediction.ID AS PredictionID, Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+			for r in results:
+				self.structure_map[r['PDB_ID']].append(r['PredictionID'])
+		else:
+			# We can speed this up using a SELECT ... IN query
+			id_list = list(self.IDs)
+			assert(type(id_list[0]) == type(1L))
+			for x in range(0, len(id_list), 10000):
+				query_suffix = ' WHERE Prediction.ID IN (%s)' % ','.join(map(str, id_list[x:x+1000]))
+				results = db.execute_select("SELECT DISTINCT Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+				for r in results:
+					self.structure_map[r['PDB_ID']] = []
+				results = db.execute_select("SELECT Prediction.ID AS PredictionID, Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID" + query_suffix)
+				for r in results:
+					self.structure_map[r['PDB_ID']].append(r['PredictionID'])
+
 		self.experiment_map = {}
-		for id in self.IDs:
-			results = db.execute("SELECT Experiment.ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID WHERE Prediction.ID=%s", parameters=(id,), cursorClass=StdCursor)
-			experimentID = results[0][0]
-			self.experiment_map[experimentID] = self.experiment_map.get(experimentID) or []
-			self.experiment_map[experimentID].append(id)
-		
+		if not self.IDs:
+			results = db.execute_select("SELECT DISTINCT Experiment.ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID")
+			for r in results:
+				self.experiment_map[r['ID']] = []
+			results = db.execute_select("SELECT Prediction.ID AS PredictionID, Experiment.ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID")
+			for r in results:
+				self.experiment_map[r['ID']].append(r['PredictionID'])
+		else:
+			# We can speed this up using a SELECT ... IN query
+			id_list = list(self.IDs)
+			assert(type(id_list[0]) == type(1L))
+			for x in range(0, len(id_list), 10000):
+				query_suffix = ' WHERE Prediction.ID IN (%s)' % ','.join(map(str, id_list[x:x+1000]))
+				results = db.execute_select("SELECT DISTINCT Experiment.ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID")
+				for r in results:
+					self.experiment_map[r['ID']] = []
+				results = db.execute_select("SELECT Prediction.ID AS PredictionID, Experiment.ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID" + query_suffix)
+				for r in results:
+					self.experiment_map[r['ID']].append(r['PredictionID'])
 	
 	def applyFilter(self, pks, filter, tag):
 		if filter.isOfClass(StructureFilter):
@@ -486,17 +512,17 @@ class PredictionResultSet(ResultSet):
 	
 	def getStructures(self):
 		idstr = join(map(str, list(self.getFilteredIDs())), ",")
-		results = self.db.execute("SELECT Prediction.ID, Experiment.Structure FROM Prediction INNER JOIN Experiment ON ExperimentID = Experiment.ID WHERE Prediction.ID IN (%s)" % idstr)
-		structureIDs = self.db.execute("SELECT DISTINCT Experiment.Structure FROM Prediction INNER JOIN Experiment ON ExperimentID = Experiment.ID WHERE Prediction.ID IN (%s)" % idstr, cursorClass=StdCursor)
-		structureIDs = [s[0] for s in structureIDs]
+		results = self.db.execute_select("SELECT Prediction.ID, Experiment.Structure FROM Prediction INNER JOIN Experiment ON ExperimentID = Experiment.ID WHERE Prediction.ID IN (%s)" % idstr)
+		structureIDs = self.db.execute_select("SELECT DISTINCT Experiment.Structure FROM Prediction INNER JOIN Experiment ON ExperimentID = Experiment.ID WHERE Prediction.ID IN (%s)" % idstr)
+		structureIDs = [s['Structure'] for s in structureIDs]
 		sr = StructureResultSet.fromIDs(self.db, structureIDs)
 		return sr, results 
 
 	def getExperiments(self):
 		idstr = join(map(str, list(self.getFilteredIDs())), ",")
-		results = self.db.execute("SELECT Prediction.ID, ExperimentID FROM Prediction WHERE Prediction.ID IN (%s)" % idstr)
-		experimentIDs = self.db.execute("SELECT DISTINCT ExperimentID FROM Prediction WHERE Prediction.ID IN (%s)" % idstr, cursorClass=StdCursor)
-		experimentIDs = [s[0] for s in experimentIDs]
+		results = self.db.execute_select("SELECT Prediction.ID, ExperimentID FROM Prediction WHERE Prediction.ID IN (%s)" % idstr)
+		experimentIDs = self.db.execute_select("SELECT DISTINCT ExperimentID FROM Prediction WHERE Prediction.ID IN (%s)" % idstr)
+		experimentIDs = [s['ExperimentID'] for s in experimentIDs]
 		er = ExperimentResultSet.fromIDs(self.db, experimentIDs)
 		return er, results 
 			
