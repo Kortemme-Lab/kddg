@@ -21,6 +21,7 @@ from tools import colortext
 from tools.pdb import PDB, relaxed_amino_acid_codes
 from tools.bio import uniprot
 from tools.hash import CRC64
+from tools.biblio.ris import RISEntry
 from ddgobjects import DBObject
 
 sqrt = math.sqrt
@@ -1897,7 +1898,7 @@ class ddGDatabase(DatabaseInterface):
     chainErrors = {}
     chainWarnings= {}
 
-    def __init__(self, passwd = None):
+    def __init__(self, passwd = None, use_utf=False):
         if not passwd:
             if os.path.exists("pw"):
                 F = open("pw")
@@ -1915,7 +1916,8 @@ class ddGDatabase(DatabaseInterface):
             user = "kortemmelab",
             passwd = passwd,
             port = 3306,
-            unix_socket = "/var/lib/mysql/mysql.sock")
+            unix_socket = "/var/lib/mysql/mysql.sock",
+            use_utf = use_utf)
 
     def _create_protein_deletion_stored_procedure(self):
         '''This stored procedure returns 1 on error, -1 when there was no associated Protein record, and 0 on success.'''
@@ -2175,6 +2177,46 @@ END
 
         # ProteinResidue records
         self._add_protein_residues(UniParcID, False)
+
+    def fill_in_publication_information(self, PublicationID):
+        if not self.use_utf:
+            raise Exception("This database was opened without specifying UTF-8 as a connection parameter. A UTF-8 connection should be used when dealing with RIS records. Add 'use_utf = True' to the constructor for %s to enable UTF-8 connection mode." % self.__class__)
+        results = self.execute_select("SELECT * FROM Publication WHERE ID=%s", parameters=(PublicationID,))
+        if results:
+            assert(len(results) == 1)
+            r = results[0]
+            if r['RIS']:
+                #print(r['RIS'])
+                try:
+                    ris = RISEntry(r['RIS'])
+                except Exception, e:
+                    raise DatabaseBadDataException('Publication', '\nRIS parsing failed on Publication with ID "%s". Error: "%s"\nTrace:\n%s\n\nSELECT * FROM Publication WHERE ID="%s"' % (PublicationID, str(e), traceback.format_exc(), PublicationID))
+
+                if ris.errors:
+                    raise Exception("Errors occurred during parsing: %s" % str(ris.errors))
+                assert(ris.format(html=False))
+                self.execute('UPDATE Publication SET Title=%s, Publication=%s, Volume=%s, Issue=%s, StartPage=%s, EndPage=%s, PublicationYear=%s, PublicationDate=%s, DOI=%s, URL=%s WHERE ID=%s',
+                        parameters=(ris.title, ris.journal, ris.volume, ris.issue, ris.startpage, ris.endpage, ris.year, ris.date, ris.doi, ris.url, PublicationID))
+
+                for a in ris.authors:
+                    assert(type(a['MiddleNames']) == type([]))
+                    d = {
+                        'PublicationID' : PublicationID,
+                        'AuthorOrder' : a['AuthorOrder'],
+                        'FirstName' : a['FirstName'],
+                        'MiddleNames' : " ".join(a['MiddleNames']),
+                        'Surname' : a['Surname'],
+                    }
+                    self.insertDictIfNew('PublicationAuthor', d, ['PublicationID', 'AuthorOrder'])
+
+                    # Update the fields e.g. when we fix RISs with bad characters (one which were created before the switch to Unicode)
+                    self.execute('UPDATE PublicationAuthor SET PublicationID=%s, AuthorOrder=%s, FirstName=%s, MiddleNames=%s, Surname=%s WHERE PublicationID=%s',
+                            parameters=(PublicationID, a['AuthorOrder'], a['FirstName'], " ".join(a['MiddleNames']), a['Surname']))
+            else:
+                return False
+        else:
+            raise DatabaseMissingKeyException('ID', Publication)
+
 
 
     def addChainWarning(self, pdbID, associatedRecords, c):
