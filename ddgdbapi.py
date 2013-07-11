@@ -13,7 +13,7 @@ import math
 import getpass
 import itertools
 if __name__ == "__main__":
-    sys.path.insert(0, "../common")
+    sys.path.insert(0, "../../")
 from tools.db.mysql import DatabaseInterface
 from tools.fs.io import read_file, write_file
 from tools.bio import rcsb
@@ -2555,6 +2555,228 @@ class DatabasePrimer(object):
             SQL = 'INSERT INTO AminoAcids (Code, LongCode, Name, Polarity, Size) VALUES (%s, %s, %s, %s, %s);'
             self.ddGdb.locked_execute(SQL, parameters = tuple(aa))
 
+    def insertRosettaCon2013Protocols(self):
+
+        FieldNames_ = ddGdb.FlatFieldNames
+
+        # Git hash -> revision map is here: http://test.rosettacommons.org/revisions_map
+        # Git hash 3b2aa5cc379873635e6e3ad2ae298cff38000b4e is numbered as revision 55464
+        git_hash = '3b2aa5cc379873635e6e3ad2ae298cff38000b4e'
+        fake_svn_revision = 55464
+
+        score_functions = {
+            'baseline' : [
+                '@/netapp/home/shaneoconner/TalarisTesting/baseline/flags',
+                '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/baseline/weights.wts',
+            ],
+            'hbond_sp2_9g' : [
+                '@/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/flags',
+                '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/weights.wts',
+            ],
+            'score12_hack_elec' : [
+                '@/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/flags',
+                '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/weights.wts',
+            ],
+            'score12prime' : [
+                '@/netapp/home/shaneoconner/TalarisTesting/score12prime/flags',
+                '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/score12prime/weights.wts',
+            ],
+            'talaris2013' : [
+                '@/netapp/home/shaneoconner/TalarisTesting/talaris2013/flags',
+                '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/talaris2013/weights.wts',
+            ],
+        }
+
+        for score_function, extra_flags in sorted(score_functions.iteritems()):
+
+            # Command for protocol 16 preminimization
+            preminCmd = {
+                FieldNames_.Type : "CommandLine",
+                FieldNames_.Command : " ".join([
+                    '%(BIN_DIR)s/minimize_with_cst.static.linuxgccrelease',
+                    '-in:file:l', '%(in:file:l)s',
+                    '-in:file:fullatom',
+                    '-ignore_unrecognized_res',
+                    '-fa_max_dis', '9.0',
+                    '-database', '%(DATABASE_DIR)s',
+                    '-ddg::harmonic_ca_tether', '0.5',
+                    '-ddg::constraint_weight','1.0',
+                    '-ddg::out_pdb_prefix', 'min_cst_0.5', # this plus the original pdb name will be used as a prefix for the output files
+                    '-ddg::sc_min_only', 'false',
+                    #'-score:weights', 'standard',
+                    #'-score:patch', 'score12',
+                    ] + extra_flags),
+                FieldNames_.Description : "Preminimization for Protocol 16 from Kellogg et al.: %s" % score_function,
+            }
+
+            # Command for protocol 16 DDG (high res protocol)
+            commonstr = [
+                '-in:file:s', '%(in:file:s)s',
+                '-ddg::mut_file', '%(mutfile)s',
+                '-database', '%(DATABASE_DIR)s',
+                '-ignore_unrecognized_res',
+                '-in:file:fullatom',
+                '-constraints::cst_file', '%(constraints::cst_file)s',
+                '-fa_max_dis', '9.0',
+                '-ddg::dump_pdbs', 'true',
+                '-ddg::suppress_checkpointing', 'true',
+            ]
+
+            softrep = ['-score:weights', 'soft_rep_design']
+            hardrep = ['-score:weights standard', '-score:patch score12']
+            minnohardrep = ['-ddg::minimization_scorefunction', 'standard', '-ddg::minimization_patch', 'score12']
+
+            protocols1617 = [
+                '-ddg::weight_file', 'soft_rep_design',
+                '-ddg::iterations', '50',
+                '-ddg::local_opt_only', 'false',
+                '-ddg::min_cst', 'true',
+                '-ddg::mean', 'false',
+                '-ddg::min', 'true',
+                '-ddg::sc_min_only', 'false', # Backbone and sidechain minimization
+                '-ddg::ramp_repulsive', 'true',
+                #'-ddg::minimization_scorefunction', 'standard',
+                #'-ddg::minimization_patch', 'score12',
+            ]
+
+            ddGCmd = {
+                FieldNames_.Type : "CommandLine",
+                FieldNames_.Command : " ".join(['%(BIN_DIR)s/ddg_monomer.static.linuxgccrelease'] + commonstr + softrep +  protocols1617 + extra_flags),
+                FieldNames_.Description : "ddG for Protocol 16 from Kellogg et al.: %s" % score_function,
+            }
+
+            alreadyExists = self.ddGdb.locked_execute("SELECT ID FROM Command WHERE Type=%s AND Command=%s", parameters = (preminCmd[FieldNames_.Type], preminCmd[FieldNames_.Command]))
+            if not alreadyExists:
+                self.ddGdb.insertDict('Command', preminCmd)
+                preminCmdID = self.ddGdb.getLastRowID()
+            else:
+                preminCmdID = alreadyExists[0]["ID"]
+
+            alreadyExists = self.ddGdb.locked_execute("SELECT ID FROM Command WHERE Type=%s AND Command=%s", parameters = (ddGCmd[FieldNames_.Type], ddGCmd[FieldNames_.Command]))
+            if not alreadyExists:
+                self.ddGdb.insertDict('Command', ddGCmd)
+                ddGCmdID = self.ddGdb.getLastRowID()
+            else:
+                ddGCmdID = alreadyExists[0]["ID"]
+
+            # Protocol 16
+            protocol_name = "Protocol16 3.5.0 (%s)" % score_function
+            alreadyExists = self.ddGdb.locked_execute("SELECT ID FROM Protocol WHERE ID=%s", parameters = (protocol_name,))
+
+            ddGTool = None
+            ddGDatabaseToolID = None
+            PreMinTool = self.ddGdb.locked_execute("SELECT ID FROM Tool WHERE Name=%s and GitHash=%s", parameters = ("Rosetta", git_hash))
+            if not PreMinTool:
+                d = {
+                    'Name' : 'Rosetta',
+                    'Version' : 'r%d' % fake_svn_revision,
+                    'GitHash' : git_hash,
+                    'SVNRevision' : fake_svn_revision,
+                    'SVNRevisionInfo' : None,
+                }
+                self.ddGdb.insertDictIfNew('Tool', d, ['Name', 'Version', 'GitHash'])
+
+            results = self.ddGdb.locked_execute("SELECT ID FROM Tool WHERE Name=%s and GitHash=%s", parameters = ("Rosetta", git_hash))
+            if results:
+                PreMinTool = results[0]["ID"]
+                ddGTool = PreMinTool
+                ddGDatabaseToolID = PreMinTool
+            else:
+                raise Exception("Cannot add protocol %s." % protocol_name)
+
+            print("Inserting %s." % protocol_name)
+            proto = {
+                FieldNames_.ID : protocol_name,
+                FieldNames_.Description : "Protocol 16 from Kellogg, Leaver-Fay, and Baker (%s)" % score_function,
+                FieldNames_.ClassName : "ddG.protocols.LizKellogg.Protocol16v2",
+                FieldNames_.Publication : "Protocol:LizKelloggProtocol16",
+            }
+            self.ddGdb.insertDictIfNew('Protocol', proto, ['ID'])
+
+            # Create protocol graph
+            pstep = {
+                FieldNames_.ProtocolID : protocol_name,
+                FieldNames_.StepID : "preminimization",
+                FieldNames_.ToolID : PreMinTool,
+                FieldNames_.CommandID : preminCmdID,
+                FieldNames_.DatabaseToolID : PreMinTool,
+                FieldNames_.DirectoryName : "",
+                FieldNames_.ClassName : None,
+                FieldNames_.Description : "Preminimization step",
+            }
+            self.ddGdb.insertDictIfNew('ProtocolStep', pstep, ['ProtocolID', 'StepID'])
+            pstep = {
+                FieldNames_.ProtocolID : protocol_name,
+                FieldNames_.StepID : "ddG",
+                FieldNames_.ToolID : ddGTool,
+                FieldNames_.CommandID : ddGCmdID,
+                FieldNames_.DatabaseToolID : ddGDatabaseToolID,
+                FieldNames_.DirectoryName : "",
+                FieldNames_.ClassName : None,
+                FieldNames_.Description : "ddG step",
+            }
+            self.ddGdb.insertDictIfNew('ProtocolStep', pstep, ['ProtocolID', 'StepID'])
+            pedge = {
+                FieldNames_.ProtocolID : protocol_name,
+                FieldNames_.FromStep : 'preminimization',
+                FieldNames_.ToStep : 'ddG',
+            }
+            self.ddGdb.insertDictIfNew('ProtocolGraphEdge', pedge, ['ProtocolID', 'FromStep', 'ToStep'])
+
+            # Create protocol cleaners
+            for fmask in ['*.cst', '*.out', '*.pdb', '*.resfile', '*._traj*']:
+                pcleaner ={
+                    FieldNames_.ProtocolID : protocol_name,
+                    FieldNames_.StepID: 'ddG',
+                    FieldNames_.FileMask: fmask,
+                    FieldNames_.Operation: 'keep',
+                    FieldNames_.Arguments: None,
+                }
+                self.ddGdb.insertDictIfNew('ProtocolCleaner', pcleaner, ['ProtocolID', 'StepID', 'FileMask'])
+            for fmask in ['*.lst', '*.pdb']:
+                pcleaner ={
+                    FieldNames_.ProtocolID : protocol_name,
+                    FieldNames_.StepID: 'preminimization',
+                    FieldNames_.FileMask: fmask,
+                    FieldNames_.Operation: 'keep',
+                    FieldNames_.Arguments: None,
+                }
+                self.ddGdb.insertDictIfNew('ProtocolCleaner', pcleaner, ['ProtocolID', 'StepID', 'FileMask'])
+
+            # Create protocol parameters
+            pparam = {
+                FieldNames_.ProtocolID : protocol_name,
+                FieldNames_.FromStep : "",
+                FieldNames_.ToStep : 'ddG',
+                FieldNames_.ParameterID: 'mutfile',
+                FieldNames_.Value: None,
+            }
+            self.ddGdb.insertDictIfNew('ProtocolParameter', pparam, ['ProtocolID', 'FromStep', 'ToStep', 'ParameterID'])
+            pparam = {
+                FieldNames_.ProtocolID : protocol_name,
+                FieldNames_.FromStep : "",
+                FieldNames_.ToStep : 'preminimization',
+                FieldNames_.ParameterID: 'in:file:l',
+                FieldNames_.Value: None,
+            }
+            self.ddGdb.insertDictIfNew('ProtocolParameter', pparam, ['ProtocolID', 'FromStep', 'ToStep', 'ParameterID'])
+            pparam = {
+                FieldNames_.ProtocolID : protocol_name,
+                FieldNames_.FromStep : 'preminimization',
+                FieldNames_.ToStep : 'ddG',
+                FieldNames_.ParameterID: 'constraints::cst_file',
+                FieldNames_.Value: None,
+            }
+            self.ddGdb.insertDictIfNew('ProtocolParameter', pparam, ['ProtocolID', 'FromStep', 'ToStep', 'ParameterID'])
+            pparam = {
+                FieldNames_.ProtocolID : protocol_name,
+                FieldNames_.FromStep : 'preminimization',
+                FieldNames_.ToStep : 'ddG',
+                FieldNames_.ParameterID: 'in:file:s',
+                FieldNames_.Value: None,
+            }
+            self.ddGdb.insertDictIfNew('ProtocolParameter', pparam, ['ProtocolID', 'FromStep', 'ToStep', 'ParameterID'])
+
     def insertKelloggLeaverFayBakerProtocols(self):
 
         protocols = [{} for i in range(0,21)]
@@ -2736,3 +2958,4 @@ if __name__ == "__main__":
     #primer.insertTools()
     #primer.addPDBSources()
     #primer.updateCommand()
+    #primer.insertRosettaCon2013Protocols()
