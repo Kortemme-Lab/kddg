@@ -69,6 +69,28 @@ class ddG(object):
         else:
             raise Exception("An error occurred creating a resfile for the ddG job.")
 
+    def _createMutfile(self, pdb, mutations):
+        '''The mutations here are in the original PDB numbering. pdb is assumed to use Rosetta numbering.
+            We use the pdb mapping from PDB numbering to Rosetta numbering to generate the mutfile.
+        '''
+        mutfile = []
+        for mutation in mutations:
+            chain = mutation[0]
+            resid = mutation[1]
+            wt = mutation[2]
+            mt = mutation[3]
+
+            # Check that the expected wildtype exists in the PDB
+            readwt = pdb.getAminoAcid(pdb.getAtomLine(chain, resid))
+            assert(wt == aa1[readwt])
+            resid = resid.strip()
+            mutfile.append("%(wt)s %(resid)s %(mt)s" % vars())
+        if mutfile:
+            mutfile = ["total %d" % len(mutations), "%d" % len(mutations)] + mutfile
+            return join(mutfile, "\n")
+        else:
+            raise Exception("An error occurred creating a mutfile for the ddG job.")
+
     def getData(self, predictionID):
         results = self.ddGDataDB.execute_select("SELECT * FROM PredictionData WHERE ID=%s", parameters = (predictionID,))
         if results:
@@ -197,7 +219,7 @@ class ddG(object):
         if showprogress:
             print("|" + ("*" * (int(len(results)/100)-2)) + "|")
         for r in results:
-            self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDB_ID"], StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
+            self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
             if showprogress:
                 count += 1
                 if count > 100:
@@ -222,41 +244,42 @@ class ddG(object):
         try:
             predictionPDB_ID = None
 
-            sql = "SELECT PDB_ID, Content FROM Experiment INNER JOIN Structure WHERE Experiment.Structure=PDB_ID AND Experiment.ID=%s"
+            sql = "SELECT PDBFileID, Content FROM Experiment INNER JOIN PDBFile WHERE Experiment.PDBFileID=PDBFile.ID AND Experiment.ID=%s"
             results = self.ddGDB.execute_select(sql, parameters = parameters)
             if len(results) != 1:
                 raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
-            experimentPDB_ID = results[0]["PDB_ID"]
+            experimentPDB_ID = results[0]["PDBFileID"]
 
             if PDB_ID:
-                sql = "SELECT PDB_ID, Content FROM Structure WHERE PDB_ID=%s"
-                results = self.ddGDB.execute_select("SELECT PDB_ID, Content FROM Structure WHERE PDB_ID=%s", parameters=(PDB_ID))
+                #sql = "SELECT ID, Content FROM PDBFile WHERE ID=%s"
+                results = self.ddGDB.execute_select("SELECT ID, Content FROM PDBFile WHERE ID=%s", parameters=(PDB_ID))
                 if len(results) != 1:
                     raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
-                predictionPDB_ID = results[0]["PDB_ID"]
+                predictionPDB_ID = results[0]["ID"]
             else:
                 predictionPDB_ID = experimentPDB_ID
 
             # Get the related PDB ID and file
+            assert(len(results) == 1)
             result = results[0]
-            pdbID = result["PDB_ID"]
+            pdbID = result["ID"]
             contents = result["Content"]
 
             pdb = PDB(contents.split("\n"))
 
             # Check that the mutated positions exist and that the wild-type matches the PDB
-            mutations = [list(result) for result in self.ddGDB.callproc("GetMutations", parameters = parameters, cursorClass = ddgdbapi.StdCursor)]
+            mutations = self.ddGDB.call_select_proc("GetMutations", parameters = parameters)
 
             # todo: Hack. This should be removed when PDB homologs are dealt with properly.
             for mutation in mutations:
                 if experimentPDB_ID == "1AJ3" and predictionPDB_ID == "1U5P":
-                    assert(int(mutation[1]) < 1000)
-                    mutation[1] = str(int(mutation[1]) + 1762)
+                    assert(int(mutation['ResidueID']) < 1000)
+                    mutation['ResidueID'] = str(int(mutation['ResidueID']) + 1762)
 
             checkPDBAgainstMutations(pdbID, pdb, mutations)
 
             # Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
-            chains = [result[0] for result in self.ddGDB.callproc("GetChains", parameters = parameters, cursorClass = ddgdbapi.StdCursor)]
+            chains = [result['Chain'] for result in self.ddGDB.call_select_proc("GetChains", parameters = parameters)]
             pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
 
             # - Post stripping checks -
@@ -266,7 +289,7 @@ class ddG(object):
             remappedMutations = [[m[0], ResidueID2String(m[1]), m[2], m[3]] for m in remappedMutations]
 
             #resfile = self._createResfile(pdb, remappedMutations)
-            mutfile = self._createMutfile(pdb, remappedMutations) # todo: needs to be added
+            mutfile = self._createMutfile(pdb, remappedMutations)
 
             # Check to make sure that we haven't stripped all the ATOM lines
             if not pdb.GetAllATOMLines():
@@ -310,7 +333,6 @@ class ddG(object):
             PredictionFieldNames.ExtraParameters	: ExtraParameters,
             PredictionFieldNames.StoreOutput		: StoreOutput,
         }
-
         if not testonly:
             self.ddGDB.insertDict('Prediction', params)
 
