@@ -19,7 +19,6 @@ from tools.fs.io import read_file, write_file
 from tools.bio import rcsb
 from tools import colortext
 from tools.pdb import PDB, relaxed_amino_acid_codes
-from tools.bio import uniprot
 from tools.hash import CRC64
 from tools.biblio.ris import RISEntry
 from ddgobjects import DBObject
@@ -2083,6 +2082,7 @@ END
     def add_protein_from_UniParc_ID(self, UniParcID, cache_dir = None):
         '''Adds a Protein record and related records for the UniParc sequence with ID UniParcID. Returns the ID of the protein.'''
 
+        from tools.bio import uniprot # import moved here to get around differences in the custom-built simplejson package on the webserver (Python 2.4.3) and those shipped with Python 2.7.3
         uniparco = uniprot.UniParcEntry(UniParcID, cache_dir = cache_dir)
 
         # Sanity check the sequence, allowing unknown residues 'X'
@@ -2515,8 +2515,8 @@ class DatabasePrimer(object):
                 raise Exception("Database integrity failure: Cannot delete an Experiment (ID = %s) with an associated Prediction (ID = %s)." % (ID, predictions[0]['ID']))
 
     def insertUniProtKB(self):
-        uniprot = os.path.join("..", "rawdata", "uniprotmapping.csv")
-        F = open(uniprot)
+        uniprot_flname = os.path.join("..", "rawdata", "uniprotmapping.csv")
+        F = open(uniprot_flname)
         lines = F.read().split("\n")[1:]
         F.close()
         UniProtKB = {}
