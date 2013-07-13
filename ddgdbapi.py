@@ -2566,28 +2566,62 @@ class DatabasePrimer(object):
 
         score_functions = {
             'baseline' : [
-                '@/netapp/home/shaneoconner/TalarisTesting/baseline/flags',
-                '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/baseline/weights.wts',
+                [
+                    '@/netapp/home/shaneoconner/TalarisTesting/baseline/flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/baseline/weights.wts',
+                ],
+                [
+                    '@/netapp/home/shaneoconner/TalarisTesting/baseline/flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/baseline/weights.wts',
+                ],
             ],
             'hbond_sp2_9g' : [
-                '@/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/flags',
-                '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/weights.wts',
+                [
+                    '@/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/weights.wts',
+                ],
+                [
+                    '@/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/weights.wts',
+                ],
             ],
             'score12_hack_elec' : [
-                '@/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/flags',
-                '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/weights.wts',
+                [
+                    '@/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/weights.wts',
+                ],
+                [
+                    '@/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/weights.wts',
+                ],
             ],
             'score12prime' : [
-                '@/netapp/home/shaneoconner/TalarisTesting/score12prime/flags',
-                '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/score12prime/weights.wts',
+                [
+                    '@/netapp/home/shaneoconner/TalarisTesting/score12prime/flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/score12prime/weights.wts',
+                ],
+                [
+                    '@/netapp/home/shaneoconner/TalarisTesting/score12prime/flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/score12prime/weights.wts',
+                ],
             ],
             'talaris2013' : [
-                '@/netapp/home/shaneoconner/TalarisTesting/talaris2013/flags',
-                '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/talaris2013/weights.wts',
+                [
+                    '@/netapp/home/shaneoconner/TalarisTesting/talaris2013/flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/talaris2013/weights.wts',
+                ],
+                [
+                    '@/netapp/home/shaneoconner/TalarisTesting/talaris2013/flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/talaris2013/weights.wts',
+                ],
             ],
         }
 
         for score_function, extra_flags in sorted(score_functions.iteritems()):
+
+            assert(len(extra_flags) == 2)
+            assert(len(extra_flags[0]) == 3)
+            assert(len(extra_flags[1]) == 3)
 
             # Command for protocol 16 preminimization
             preminCmd = {
@@ -2603,9 +2637,7 @@ class DatabasePrimer(object):
                     '-ddg::constraint_weight','1.0',
                     '-ddg::out_pdb_prefix', 'min_cst_0.5', # this plus the original pdb name will be used as a prefix for the output files
                     '-ddg::sc_min_only', 'false',
-                    #'-score:weights', 'standard',
-                    #'-score:patch', 'score12',
-                    ] + extra_flags),
+                    ] + extra_flags[0]),
                 FieldNames_.Description : "Preminimization for Protocol 16 from Kellogg et al.: %s" % score_function,
             }
 
@@ -2613,21 +2645,22 @@ class DatabasePrimer(object):
             commonstr = [
                 '-in:file:s', '%(in:file:s)s',
                 '-ddg::mut_file', '%(mutfile)s',
+                '-constraints::cst_file', '%(constraints::cst_file)s',
                 '-database', '%(DATABASE_DIR)s',
+                # Extra flags Andrew does not explicitly use but which are in the documentation
                 '-ignore_unrecognized_res',
                 '-in:file:fullatom',
-                '-constraints::cst_file', '%(constraints::cst_file)s',
                 '-fa_max_dis', '9.0',
                 '-ddg::dump_pdbs', 'true',
                 '-ddg::suppress_checkpointing', 'true',
             ]
 
-            softrep = ['-score:weights', 'soft_rep_design']
-            hardrep = ['-score:weights standard', '-score:patch score12']
-            minnohardrep = ['-ddg::minimization_scorefunction', 'standard', '-ddg::minimization_patch', 'score12']
+            softrep = []#['-ddg:weight_file', 'soft_rep_design']
+            # use  -ddg:weight_file? hardrep = ['-score:weights standard', '-score:patch score12']
+            # use  -ddg:weight_file? minnohardrep = ['-ddg::minimization_scorefunction', 'standard', '-ddg::minimization_patch', 'score12']
 
             protocols1617 = [
-                '-ddg::weight_file', 'soft_rep_design',
+                '-ddg:weight_file', 'soft_rep_design',
                 '-ddg::iterations', '50',
                 '-ddg::local_opt_only', 'false',
                 '-ddg::min_cst', 'true',
@@ -2635,13 +2668,11 @@ class DatabasePrimer(object):
                 '-ddg::min', 'true',
                 '-ddg::sc_min_only', 'false', # Backbone and sidechain minimization
                 '-ddg::ramp_repulsive', 'true',
-                #'-ddg::minimization_scorefunction', 'standard',
-                #'-ddg::minimization_patch', 'score12',
             ]
 
             ddGCmd = {
                 FieldNames_.Type : "CommandLine",
-                FieldNames_.Command : " ".join(['%(BIN_DIR)s/ddg_monomer.static.linuxgccrelease'] + commonstr + softrep +  protocols1617 + extra_flags),
+                FieldNames_.Command : " ".join(['%(BIN_DIR)s/ddg_monomer.static.linuxgccrelease'] + commonstr + softrep +  protocols1617 + extra_flags[1]),
                 FieldNames_.Description : "ddG for Protocol 16 from Kellogg et al.: %s" % score_function,
             }
 
@@ -2705,6 +2736,8 @@ class DatabasePrimer(object):
                 FieldNames_.Description : "Preminimization step",
             }
             self.ddGdb.insertDictIfNew('ProtocolStep', pstep, ['ProtocolID', 'StepID'])
+            self.ddGdb.execute("UPDATE ProtocolStep SET ClassName=%s WHERE ProtocolID=%s AND StepID=%s", parameters = ('ddG.protocols.LizKellogg.Protocol16v2Preminimization', protocol_name, 'preminimization'))
+
             pstep = {
                 FieldNames_.ProtocolID : protocol_name,
                 FieldNames_.StepID : "ddG",
@@ -2716,6 +2749,7 @@ class DatabasePrimer(object):
                 FieldNames_.Description : "ddG step",
             }
             self.ddGdb.insertDictIfNew('ProtocolStep', pstep, ['ProtocolID', 'StepID'])
+            self.ddGdb.execute("UPDATE ProtocolStep SET ClassName=%s WHERE ProtocolID=%s AND StepID=%s", parameters = ('GenericDDGTask', protocol_name, 'ddG'))
             pedge = {
                 FieldNames_.ProtocolID : protocol_name,
                 FieldNames_.FromStep : 'preminimization',
@@ -2948,7 +2982,7 @@ class DatabasePrimer(object):
 if __name__ == "__main__":
     ddGdb = ddGDatabase()
 
-    #primer = DatabasePrimer(ddGdb)
+    primer = DatabasePrimer(ddGdb)
     #primer.insertUniProtKB()
     #primer.checkForCSEandMSE()
     #primer.computeBFactors()
@@ -2958,4 +2992,4 @@ if __name__ == "__main__":
     #primer.insertTools()
     #primer.addPDBSources()
     #primer.updateCommand()
-    #primer.insertRosettaCon2013Protocols()
+    primer.insertRosettaCon2013Protocols()
