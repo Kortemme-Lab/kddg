@@ -8,12 +8,12 @@ import time
 import inspect
 from tempfile import mkstemp
 
-import common.colortext as colortext
+import tools.colortext as colortext
 import ddgdbapi
-import common.rosettahelper as rosettahelper
-from common.rosettahelper import kJtokcal
+import tools.deprecated.rosettahelper as rosettahelper
+from tools.deprecated.rosettahelper import kJtokcal
 
-import latex
+import tools.latex as latex
 
 script_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 
@@ -22,7 +22,8 @@ class RInterface(object):
 	@staticmethod
 	def _runRScript(RScript):
 		rscriptname = rosettahelper.writeTempFile(".", RScript)
-		p = subprocess.Popen(["/opt/R-2.15.1/bin/R","CMD", "BATCH", rscriptname]) 
+		#p = subprocess.Popen(["/opt/R-2.15.1/bin/R","CMD", "BATCH", rscriptname])
+		p = subprocess.Popen(["R","CMD", "BATCH", rscriptname])
 		while True:
 			time.sleep(0.3)
 			errcode = p.poll()
@@ -184,10 +185,10 @@ class PredictionScores(object):
 		AnalysisSets = sorted([r["Subset"] for r in AnalysisSets])
 		
 		# Get list of Kellogg record IDs for which we have predictions and experimental DDG values
-		dbpredictions = ddGdb.execute("SELECT Prediction.ID as PredictionID, Prediction.ExperimentID AS PExperimentID, UserDataSetExperiment.ExperimentID AS UDSEExperimentID, PDB_ID, UserDataSetExperiment.ID AS UserDataSetExperimentID, ddG FROM Prediction INNER JOIN UserDataSetExperiment ON UserDataSetExperiment.ID=UserDataSetExperimentID WHERE PredictionSet=%s AND Status='done'", parameters=(PredictionSet,))
+		dbpredictions = ddGdb.execute("SELECT Prediction.ID as PredictionID, Prediction.ExperimentID AS PExperimentID, UserDataSetExperiment.ExperimentID AS UDSEExperimentID, UserDataSetExperiment.PDBFileID, UserDataSetExperiment.ID AS UserDataSetExperimentID, ddG FROM Prediction INNER JOIN UserDataSetExperiment ON UserDataSetExperiment.ID=UserDataSetExperimentID WHERE PredictionSet=%s AND Status='done'", parameters=(PredictionSet,))
 		Predictions = {}
 		for p in dbpredictions:
-			PDB_ID = p["PDB_ID"]
+			PDB_ID = p["PDBFileID"]
 			Predictions[p["PExperimentID"]] = Predictions.get(p["PExperimentID"], {})
 			if Predictions[p["PExperimentID"]].get(PDB_ID):
 				raise colortext.Exception("There are multiple predictions for Experiment ID %d with PDB ID %s in the PredictionSet. This case is currently not handled (perhaps averaged values would be acceptable)." % (p["PExperimentID"], PDB_ID))
@@ -195,10 +196,12 @@ class PredictionScores(object):
 			
 			assert(p["PExperimentID"] == p["UDSEExperimentID"])
 			ddG = pickle.loads(p["ddG"])
-			if (ddG['version'] != '0.23'):
-				print(p["PredictionID"], ddG['version'])
+
+			if (ddG['version'] == '0.1'):
+				pass
+			elif (ddG['version'] != '0.23'):
 				continue
-			
+
 			# Traverse the score hierarchy
 			PredictedDDG = ddG["data"]
 			#try:
@@ -214,7 +217,7 @@ class PredictionScores(object):
 				"UserDataSetExperimentID" : p["UserDataSetExperimentID"],
 				"PredictedDDG" : PredictedDDG
 			}
-		
+
 		self.Predictions = Predictions
 		self.PredictionSet = PredictionSet
 		self.UserDataSetID = UserDataSetID
@@ -229,7 +232,7 @@ class PublishedDatasetScores(object):
 	def __init__(self, ddGdb, ShortID):
 		'''Creates a dict with the published dataset DDG in kcal/mol (Rosetta convention), the published PDB ID, and the fixed PDB ID (which may be the same as the published).''' 
 		scores = {}
-		results = ddGdb.execute("SELECT DDGConvention, Section, RecordNumber, PDB_ID, PublishedPDB_ID, PublishedValue as PublishedValueInKcal, AggregateType FROM DataSetDDG INNER JOIN DataSet ON DataSet.ID=DataSetID WHERE ShortID=%s", parameters=(ShortID, ))
+		results = ddGdb.execute("SELECT DDGConvention, Section, RecordNumber, PDBFileID, PublishedPDBFileID, PublishedValue as PublishedValueInKcal, AggregateType FROM DataSetDDG INNER JOIN DataSet ON DataSet.ID=DataSetID WHERE ShortID=%s", parameters=(ShortID, ))
 		for r in results:
 			scores[r["Section"]] = scores.get(r["Section"], {})
 			assert(not(scores[r["Section"]].get(r["RecordNumber"])))
@@ -239,8 +242,8 @@ class PublishedDatasetScores(object):
 				DDG =- DDG
 			
 			scores[r["Section"]][r["RecordNumber"]] = {
-				"PDB_ID" : r["PDB_ID"],
-				"PublishedPDB_ID" : r["PublishedPDB_ID"],
+				"PDB_ID" : r["PDBFileID"],
+				"PublishedPDB_ID" : r["PublishedPDBFileID"],
 				"PublishedDatasetDDG" : DDG,
 				"AggregateType" : r["AggregateType"],
 			}
@@ -334,7 +337,7 @@ class Analyzer(object):
 		predictions = PredictionScores(ddGdb, PredictionSet, self.ddG_score_type)
 		predicted_scores = predictions.Predictions
 		
-		s = "Analyzing %d predictions in PredictionSet '%s' for UserDataSet '%s'." % (predictions.NumberOfPredictions, predictions.PredictionSet, predictions.UserDataSetName)
+		s = "Analyzing %d predictions in PredictionSet '%s' for UserDataSet '%s'. " % (predictions.NumberOfPredictions, predictions.PredictionSet.replace("_", "\_"), predictions.UserDataSetName)
 		s += "Running analysis over the following analysis sets: '%s'." % (join(predictions.AnalysisSets, "', '"))
 		self.description.append(("black", s))
 		if not self.quiet:
