@@ -15,7 +15,7 @@ if ('%(filetype)s' == 'pdf'){
 #Use alpha 0.25 for PNG
 if ('%(filetype)s' == 'pdf')
 {
-	txtalpha <- 0.1
+	txtalpha <- 0.3
 	redtxtalpha <- 0.3
 } else if ('%(filetype)s' == 'postscript') { # postscript does not handle transparency
 	txtalpha <- 1.0
@@ -51,7 +51,9 @@ rvalue
 # To change the font of the axis titles, use e.g.:
 # 	p <- p + theme(axis.title.x = element_text(face="bold", colour="#990000", size=20),
 
-p <- qplot(%(experiment_field)s, PredictedDDG, main="%(title)s", data=a, xlab=xlabel, ylab=ylabel, shape = I(4), alpha = I(txtalpha)) + # label=ProThermID
+# shape I(20) is a small dot, I(19) is a large dot, I(4) is a cross
+
+p <- qplot(%(experiment_field)s, PredictedDDG, main="%(title)s", data=a, xlab=xlabel, ylab=ylabel, shape = I(19), alpha = I(txtalpha)) + # label=ProThermID
 		geom_abline(size = 0.25, intercept = lmv_intercept, slope = lmv_PredictedDDG) +
 		geom_abline(color="blue",size = 0.25, intercept = 0, slope = fitlmv_PredictedDDG  )
 
