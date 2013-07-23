@@ -1955,6 +1955,39 @@ COMMIT;
 END
 """, allow_unsafe_query = True)
 
+    def _delete_protocol(self, ProtocolID):
+        # ProtocolCleaner -> ProtocolStep -> (Protocol, Toolx2, Command)
+        # ProtocolFilter-> ProtocolGraphEdge -> ProtocolStep
+        # ProtocolParameter-> ProtocolStep
+        # ProtocolScorer (unused so far)
+        # Delete in order ProtocolCleaner, ProtocolFilter, ProtocolParameter, ProtocolGraphEdge, ProtocolStep, Protocol
+
+        #protocol_steps = self.execute("SELECT FROM ProtocolStep WHERE ProtocolID=%s", parameters = (ProtocolID,))
+        print('here')
+        if self.execute('''SELECT ID FROM Prediction WHERE ProtocolID=%s''', parameters = (ProtocolID,)):
+            return False
+        print('there')
+
+        command_IDs = [r['CommandID'] for r in self.execute('''SELECT CommandID FROM ProtocolStep WHERE ProtocolID=%s''', parameters = (ProtocolID,))]
+        tool_IDs = [r['ToolID'] for r in self.execute('''SELECT ToolID FROM ProtocolStep WHERE ProtocolID=%s''', parameters = (ProtocolID,))
+                    ] + [r['DatabaseToolID'] for r in self.execute('''SELECT DatabaseToolID FROM ProtocolStep WHERE ProtocolID=%s''', parameters = (ProtocolID,))]
+
+        self.execute('''DELETE FROM ProtocolCleaner WHERE ProtocolID=%s''', parameters = (ProtocolID,))
+        self.execute('''DELETE FROM ProtocolFilter WHERE ProtocolID=%s''', parameters = (ProtocolID,))
+        self.execute('''DELETE FROM ProtocolParameter WHERE ProtocolID=%s''', parameters = (ProtocolID,))
+        self.execute('''DELETE FROM ProtocolGraphEdge WHERE ProtocolID=%s''', parameters = (ProtocolID,))
+        self.execute('''DELETE FROM ProtocolStep WHERE ProtocolID=%s''', parameters = (ProtocolID,))
+        self.execute('''DELETE FROM Protocol WHERE ID=%s''', parameters = (ProtocolID,))
+
+        try:
+            for command_ID in command_IDs:
+                self.execute('''DELETE FROM Command WHERE ID=%s''', parameters = (command_ID,))
+        except:
+            pass
+
+        return True
+
+
     def _delete_protein(self, ProteinID):
         '''Returns True if deletion was successful and False if no records were deleted.
         An exception is raised if deletion was not possible.'''
@@ -2564,35 +2597,38 @@ class DatabasePrimer(object):
         git_hash = '3b2aa5cc379873635e6e3ad2ae298cff38000b4e'
         fake_svn_revision = 55464
 
+        git_hash = '4858db45b295dcbb1202a6a91128919404c72569'
+        fake_svn_revision = 55534
+
         score_functions = {
             'baseline' : [
                 [
-                    '@/netapp/home/shaneoconner/TalarisTesting/baseline/flags',
-                    '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/baseline/weights.wts',
+                    '@/netapp/home/shaneoconner/TalarisTestingFinal/baseline/score.flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTestingFinal/baseline/baseline.wts',
                 ],
                 [
-                    '@/netapp/home/shaneoconner/TalarisTesting/baseline/flags',
-                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/baseline/weights.wts',
-                ],
-            ],
-            'hbond_sp2_9g' : [
-                [
-                    '@/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/flags',
-                    '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/weights.wts',
-                ],
-                [
-                    '@/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/flags',
-                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/hbond_sp2_9g/weights.wts',
+                    '@/netapp/home/shaneoconner/TalarisTestingFinal/baseline/score.flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTestingFinal/baseline/baseline.wts',
                 ],
             ],
-            'score12_hack_elec' : [
+            'sp2_9g' : [
                 [
-                    '@/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/flags',
-                    '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/weights.wts',
+                    '@/netapp/home/shaneoconner/TalarisTestingFinal/sp2_9g/score.flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTestingFinal/sp2_9g/sp2_9g.wts',
                 ],
                 [
-                    '@/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/flags',
-                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/score12_hack_elec/weights.wts',
+                    '@/netapp/home/shaneoconner/TalarisTestingFinal/sp2_9g/score.flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTestingFinal/sp2_9g/sp2_9g.wts',
+                ],
+            ],
+            'score12he' : [
+                [
+                    '@/netapp/home/shaneoconner/TalarisTestingFinal/score12he/score.flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTestingFinal/score12he/score12he.wts',
+                ],
+                [
+                    '@/netapp/home/shaneoconner/TalarisTestingFinal/score12he/score.flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTestingFinal/score12he/score12he.wts',
                 ],
             ],
             'score12prime' : [
@@ -2605,14 +2641,27 @@ class DatabasePrimer(object):
                     '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/score12prime/weights.wts',
                 ],
             ],
-            'talaris2013' : [
+        }
+
+        score_functions = {
+            'score12prime' : [
                 [
-                    '@/netapp/home/shaneoconner/TalarisTesting/talaris2013/flags',
-                    '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/talaris2013/weights.wts',
+                    '@/netapp/home/shaneoconner/TalarisTesting/score12prime/flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTesting/score12prime/weights.wts',
                 ],
                 [
-                    '@/netapp/home/shaneoconner/TalarisTesting/talaris2013/flags',
-                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/talaris2013/weights.wts',
+                    '@/netapp/home/shaneoconner/TalarisTesting/score12prime/flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTesting/score12prime/weights.wts',
+                ],
+            ],
+            'talaris2013' : [
+                [
+                    '@/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/score.flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/sp2_paper_talaris2013.wts',
+                ],
+                [
+                   '@/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/score.flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/sp2_paper_talaris2013.wts',
                 ],
             ],
         }
@@ -2692,6 +2741,7 @@ class DatabasePrimer(object):
 
             # Protocol 16
             protocol_name = "Protocol16 3.5.0 (%s)" % score_function
+            protocol_name = "Protocol16 3.5.1 (%s)" % score_function
             alreadyExists = self.ddGdb.locked_execute("SELECT ID FROM Protocol WHERE ID=%s", parameters = (protocol_name,))
 
             ddGTool = None

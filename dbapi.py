@@ -202,10 +202,50 @@ class ddG(object):
         Experiment.addExperimentalScore(sourceID, ddG, pdbID)
         Experiment.commit(self.ddGDB)
 
+    def charge_PredictionSet_by_number_of_residues(self, PredictionSet):
+        '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
+        from tools.bio.rcsb import parseFASTAs
 
-    def createPredictionsFromUserDataSet(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False):
+        ddGdb = self.ddGDB
+        predictions = ddGdb.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
 
-        results = self.ddGDB.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
+        PDB_chain_lengths ={}
+        for prediction in predictions:
+            chain_records = ddGdb.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
+            num_residues = 0
+            for chain_record in chain_records:
+                key = (chain_record['PDBFileID'], chain_record['Chain'])
+
+                if PDB_chain_lengths.get(key) == None:
+                    fasta = ddGdb.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
+                    assert(len(fasta) == 1)
+                    fasta = fasta[0]['FASTA']
+                    f = parseFASTAs(fasta)
+                    PDB_chain_lengths[key] = len(f[chain_record['PDBFileID']][chain_record['Chain']])
+                chain_length = PDB_chain_lengths[key]
+                num_residues += chain_length
+
+            print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
+
+            predictions = ddGdb.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
+
+    def create_PredictionSet(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40):
+        Status = 'halted'
+        if not halted:
+            Status = 'active'
+        d = {
+            'ID'        : PredictionSetID,
+            'Status'    : Status,
+            'Priority'  : Priority,
+            'BatchSize' : BatchSize,
+        }
+        self.ddGDB.insertDictIfNew("PredictionSet", d, ['ID'])
+
+    def createPredictionsFromUserDataSet(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
+
+        assert(self.ddGDB.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
+
+        #results = self.ddGDB.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
         results = self.ddGDB.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
         if not results:
             return False
@@ -225,6 +265,8 @@ class ddG(object):
                 if count > 100:
                     colortext.write(".", "cyan", flush = True)
                     count = 0
+            if shortrun and count > 4:
+                break
         print("")
         return(True)
 
