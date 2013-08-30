@@ -16,8 +16,8 @@ from ddgdbapi import ddGDatabase
 dbfields = ddGDatabase().FieldNames
 
 class StructureResultSet(ResultSet):
-	dbname = dbfields.Structure
-	primary_key = dbfields.Structure.PDB_ID
+	dbname = dbfields.PDBFile
+	primary_key = dbfields.PDBFile.ID
 	stored_procedures = []
 
 	def __init__(self, db, SQL = "", parameters = None, AdditionalIDs = [], retrieveAllByDefault = True):
@@ -139,6 +139,7 @@ class StructureFilter(Filter):
 			self.post_SQL_filters.append(self._filterByUniProt) 
 	
 	def _filterByUniProt(self, db, result_set):
+		raise Exception("PDB_ID is now PDBFile.ID. GetPDBUniProtIDMapping needs to be updated.")
 		oldIDs = dict.fromkeys(result_set.IDs, True)
 		allowedIDs = self.UniProtIDs
 		allowedACs = self.UniProtACs
@@ -184,10 +185,10 @@ class ExperimentResultSet(ResultSet):
 		
 		self.structure_map = {} 
 		if not self.IDs:
-			results = db.execute_select("SELECT DISTINCT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+			results = db.execute_select("SELECT DISTINCT PDBFile.ID AS PDB_ID FROM Experiment INNER JOIN PDBFile on Experiment.PDBFileID=PDBFile.ID")
 			for r in results:
 				self.structure_map[r['PDB_ID']] = []
-			results = db.execute_select("SELECT Experiment.ID AS ExperimentID, Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+			results = db.execute_select("SELECT Experiment.ID AS ExperimentID, PDBFile.ID AS PDB_ID FROM Experiment INNER JOIN Structure on Experiment.PDBFileID=PDBFile.ID")
 			for r in results:
 				self.structure_map[r['PDB_ID']].append(r['ExperimentID'])
 		else:
@@ -196,10 +197,10 @@ class ExperimentResultSet(ResultSet):
 			assert(type(id_list[0]) == type(1L))
 			for x in range(0, len(id_list), 10000):
 				query_suffix = ' WHERE Experiment.ID IN (%s)' % ','.join(map(str, id_list[x:x+1000]))
-				results = db.execute_select("SELECT DISTINCT Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID" + query_suffix)
+				results = db.execute_select("SELECT DISTINCT PDBFile.ID AS PDB_ID FROM Experiment INNER JOIN Structure on Experiment.PDBFileID=PDBFile.ID" + query_suffix)
 				for r in results:
 					self.structure_map[r['PDB_ID']] = []
-				results = db.execute_select("SELECT Experiment.ID AS ExperimentID, Structure.PDB_ID FROM Experiment INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID" + query_suffix)
+				results = db.execute_select("SELECT Experiment.ID AS ExperimentID, PDBFile.ID AS PDB_ID FROM Experiment INNER JOIN Structure on Experiment.PDBFileID=PDBFile.ID" + query_suffix)
 				for r in results:
 					self.structure_map[r['PDB_ID']].append(r['ExperimentID'])
 
@@ -436,10 +437,10 @@ class PredictionResultSet(ResultSet):
 
 		self.structure_map = {}
 		if not self.IDs:
-			results = db.execute_select("SELECT DISTINCT Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+			results = db.execute_select("SELECT DISTINCT PDBFile.ID AS PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.PDBFileID=PDBFile.ID")
 			for r in results:
 				self.structure_map[r['PDB_ID']] = []
-			results = db.execute_select("SELECT Prediction.ID AS PredictionID, Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+			results = db.execute_select("SELECT Prediction.ID AS PredictionID, PDBFile.ID AS PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.PDBFileID=PDBFile.ID")
 			for r in results:
 				self.structure_map[r['PDB_ID']].append(r['PredictionID'])
 		else:
@@ -448,10 +449,10 @@ class PredictionResultSet(ResultSet):
 			assert(type(id_list[0]) == type(1L))
 			for x in range(0, len(id_list), 10000):
 				query_suffix = ' WHERE Prediction.ID IN (%s)' % ','.join(map(str, id_list[x:x+1000]))
-				results = db.execute_select("SELECT DISTINCT Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID")
+				results = db.execute_select("SELECT DISTINCT PDBFile.ID AS PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.PDBFileID=PDBFile.ID")
 				for r in results:
 					self.structure_map[r['PDB_ID']] = []
-				results = db.execute_select("SELECT Prediction.ID AS PredictionID, Structure.PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.Structure=Structure.PDB_ID" + query_suffix)
+				results = db.execute_select("SELECT Prediction.ID AS PredictionID, PDBFile.ID AS PDB_ID FROM Prediction INNER JOIN Experiment ON ExperimentID=Experiment.ID INNER JOIN Structure on Experiment.PDBFileID=PDBFile.ID" + query_suffix)
 				for r in results:
 					self.structure_map[r['PDB_ID']].append(r['PredictionID'])
 
@@ -512,8 +513,8 @@ class PredictionResultSet(ResultSet):
 	
 	def getStructures(self):
 		idstr = join(map(str, list(self.getFilteredIDs())), ",")
-		results = self.db.execute_select("SELECT Prediction.ID, Experiment.Structure FROM Prediction INNER JOIN Experiment ON ExperimentID = Experiment.ID WHERE Prediction.ID IN (%s)" % idstr)
-		structureIDs = self.db.execute_select("SELECT DISTINCT Experiment.Structure FROM Prediction INNER JOIN Experiment ON ExperimentID = Experiment.ID WHERE Prediction.ID IN (%s)" % idstr)
+		results = self.db.execute_select("SELECT Prediction.ID, Experiment.PDBFileID FROM Prediction INNER JOIN Experiment ON ExperimentID = Experiment.ID WHERE Prediction.ID IN (%s)" % idstr)
+		structureIDs = self.db.execute_select("SELECT DISTINCT Experiment.PDBFileID FROM Prediction INNER JOIN Experiment ON ExperimentID = Experiment.ID WHERE Prediction.ID IN (%s)" % idstr)
 		structureIDs = [s['Structure'] for s in structureIDs]
 		sr = StructureResultSet.fromIDs(self.db, structureIDs)
 		return sr, results 
