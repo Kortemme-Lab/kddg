@@ -16,7 +16,7 @@ if __name__ == "__main__":
 	sys.path.insert(0, "../common")
 from tools.db.mysql import DatabaseInterface
 from tools.fs.io import read_file, write_file
-from tools import rcsb
+from tools.bio import rcsb
 from tools import colortext
 from tools.pdb import PDB
 from ddgobjects import DBObject
