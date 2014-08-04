@@ -2666,6 +2666,19 @@ class DatabasePrimer(object):
             ],
         }
 
+        score_functions = {
+            'talaris2013sc' : [
+                [
+                    '@/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/score.flags',
+                    '-score:weights', '/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/sp2_paper_talaris2013_scaled.wts',
+                ],
+                [
+                   '@/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/score.flags',
+                    '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/sp2_paper_talaris2013_scaled.wts',
+                ],
+            ],
+        }
+
         for score_function, extra_flags in sorted(score_functions.iteritems()):
 
             assert(len(extra_flags) == 2)
@@ -2808,7 +2821,7 @@ class DatabasePrimer(object):
             self.ddGdb.insertDictIfNew('ProtocolGraphEdge', pedge, ['ProtocolID', 'FromStep', 'ToStep'])
 
             # Create protocol cleaners
-            for fmask in ['*.cst', '*.out', '*.pdb', '*.resfile', '*._traj*']:
+            for fmask in ['*.cst', '*.out', '*.pdb', '*.mutfile', '*._traj*']:
                 pcleaner ={
                     FieldNames_.ProtocolID : protocol_name,
                     FieldNames_.StepID: 'ddG',
@@ -3042,4 +3055,4 @@ if __name__ == "__main__":
     #primer.insertTools()
     #primer.addPDBSources()
     #primer.updateCommand()
-    primer.insertRosettaCon2013Protocols()
+    #primer.insertRosettaCon2013Protocols()

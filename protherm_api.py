@@ -9,10 +9,13 @@ sys.path.insert(0, "..")
 if __name__ == "__main__":
 	sys.path.insert(0, "../common")
 from string import join
-import common.colortext as colortext
+#import common.colortext as colortext
+import tools.colortext as colortext
 import ddgdbapi
 import ddgobjects
-from common.rosettahelper import kJtokcal, NUMBER_KJ_IN_KCAL, NUMBER_KELVIN_AT_ZERO_CELSIUS
+#from common.rosettahelper import kJtokcal, NUMBER_KJ_IN_KCAL, NUMBER_KELVIN_AT_ZERO_CELSIUS
+from tools.deprecated.rosettahelper import kJtokcal, NUMBER_KJ_IN_KCAL, NUMBER_KELVIN_AT_ZERO_CELSIUS
+from tools.bio.basics import Mutation as MutationO
 
 sometimesFields = ["ION_NAME_2", "ION_CONC_2", "ION_NAME_3", "ION_CONC_3", "ION_CON_1C"] # ION_CON_1C seems to be a weird typo in version 23581
 
@@ -2592,7 +2595,6 @@ class ProThermReader(object):
 			
 	def test(self):
 		self.testRounding()
-		MutationO = ddgobjects.Mutation
 		success = True
 		expected_results = {
 		# PLAIN
@@ -3287,7 +3289,7 @@ class ProThermReader(object):
 		
 		mutobjects = []
 		for mutation in mutations:
-			mutobjects.append(ddgobjects.Mutation(mutation["WildTypeAA"], mutation["ResidueID"], mutation["MutantAA"]))
+			mutobjects.append(MutationO(mutation["WildTypeAA"], mutation["ResidueID"], mutation["MutantAA"]))
 			
 		mutation_locations = []
 		if (not badSecondaryStructure.get(ID)) and record["SEC.STR."]:
