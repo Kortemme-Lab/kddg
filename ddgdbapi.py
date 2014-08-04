@@ -18,11 +18,13 @@ from tools.db.mysql import DatabaseInterface
 from tools.fs.io import read_file, write_file
 from tools.bio import rcsb
 from tools import colortext
-from tools.pdb import PDB, relaxed_amino_acid_codes
+from tools.bio.pdb import PDB
+from tools.bio.basics import  relaxed_residue_types_1 as relaxed_amino_acid_codes
 from tools.hash import CRC64
 from tools.biblio.ris import RISEntry
 from ddgobjects import DBObject
 
+relaxed_amino_acid_codes = list(relaxed_amino_acid_codes)
 sqrt = math.sqrt
 DictCursor = MySQLdb.cursors.DictCursor
 StdCursor = MySQLdb.cursors.Cursor
