@@ -44,7 +44,8 @@ fitcoefs
 xlabel <- expression(paste(plain("Experimental ")*Delta*Delta*plain("G (kcal/mol)")))
 ylabel <- expression(paste(plain("Predicted ")*Delta*Delta*plain(G)))
 rvalue <- cor(a$PredictedDDG, a$%(experiment_field)s)
-rvalue
+
+paste('PYTHON_VALUE', 'float', 'correlation', rvalue)
 
 # To change the font size of the axis labels (tick labels), use e.g.:
 # 	p <- p + theme(axis.text.x=element_text(size=22))
@@ -95,6 +96,9 @@ p <- p + geom_text(hjust=0, size=8, aes(xpos, ypos_cor, fontface="plain", family
 aexp = a$%(experiment_field)s
 apre = a$PredictedDDG
 maevalue <- MAE(aexp, apre)
+
+paste('PYTHON_VALUE', 'float', 'MAE', maevalue)
+
 p <- p + geom_text(hjust=0, size=8, aes(xpos, ypos_mae, fontface="plain", family = fface, label=sprintf("MAE = %%0.4f", round(maevalue, digits = 4))))
 
 #p <- p + geom_text(size=6, fontfamily = 'sans family', aes(min(a$%(experiment_field)s) + 3+1,max(a$PredictedDDG)+1, label=sprintf("cor(y,x) = %%f", round(rvalue, digits = 4)))) 

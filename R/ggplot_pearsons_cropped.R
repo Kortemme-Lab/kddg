@@ -35,6 +35,9 @@ coefs <- coef(lm(PredictedDDG~%(experiment_field)s, data = a[want,]))
 fitcoefs = coef(lm(PredictedDDG~0 + %(experiment_field)s, data = a[want,]))
 fitlmv_predicted <- as.numeric(fitcoefs[1])
 rvalue <- cor(a[want,]$Experimental, a[want,]$Predicted)
+
+paste('PYTHON_VALUE', 'float', 'correlation', rvalue)
+
 lmv_intercept <- as.numeric(coefs[1])
 lmv_PredictedDDG <- as.numeric(coefs[2])
 
@@ -92,6 +95,9 @@ p <- p + geom_text(hjust=0, size=8, aes(xpos, ypos_cor, fontface="plain", family
 aexp = a[want,]$%(experiment_field)s
 apre = a[want,]$PredictedDDG
 maevalue <- MAE(aexp, apre)
+
+paste('PYTHON_VALUE', 'float', 'MAE', maevalue)
+
 p <- p + geom_text(hjust=0, size=8, aes(xpos, ypos_mae, fontface="plain", family = fface, label=sprintf("MAE = %%0.4f", round(maevalue, digits = 4))))
 
 
