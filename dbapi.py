@@ -11,7 +11,9 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 import os
 from string import join
 import ddgdbapi
-from tools.pdb import PDB, ResidueID2String, checkPDBAgainstMutations, aa1
+from tools.bio.pdb import PDB
+from tools.bio.basics import residue_type_3to1_map as aa1
+from tools.bio.basics import Mutation
 #from Bio.PDB import *
 from tools.fs.io import write_file
 from tools import colortext
@@ -34,6 +36,7 @@ class MutationSet(object):
 
     def getChains(self):
         return sorted(list(set([m[0] for m in self.mutations])))
+
 
 class ddG(object):
     '''This class is responsible for inserting prediction jobs to the database.'''
@@ -74,11 +77,12 @@ class ddG(object):
             We use the pdb mapping from PDB numbering to Rosetta numbering to generate the mutfile.
         '''
         mutfile = []
+
         for mutation in mutations:
-            chain = mutation[0]
-            resid = mutation[1]
-            wt = mutation[2]
-            mt = mutation[3]
+            chain = mutation.Chain
+            resid = PDB.ResidueID2String(mutation.ResidueID)
+            wt = mutation.WildTypeAA
+            mt = mutation.MutantAA
 
             # Check that the expected wildtype exists in the PDB
             readwt = pdb.getAminoAcid(pdb.getAtomLine(chain, resid))
@@ -178,7 +182,7 @@ class ddG(object):
             rootname = pdbID
 
         try:
-            Structure = ddgdbapi.PDBStructure(rootname, protein = protein, source = source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly)
+            Structure = ddgdbapi.PDBStructure(self.ddGDB, rootname, protein = protein, source = source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly)
             #Structure.getPDBContents(self.ddGDB)
             sql = ("SELECT PDB_ID FROM Structure WHERE %s=" % dbfields.PDB_ID) + "%s"
             results = self.ddGDB.execute_select(sql, parameters = (rootname,))
@@ -201,6 +205,14 @@ class ddG(object):
             Experiment.addChain(c)
         Experiment.addExperimentalScore(sourceID, ddG, pdbID)
         Experiment.commit(self.ddGDB)
+
+    def createDummyExperiment_ankyrin_repeat(self, pdbID, mutations, chain):
+        experiment = ddgdbapi.ExperimentDefinition(self.ddGDB, pdbID, interface = None)
+        experiment.addChain(chain)
+        for m in mutations:
+            experiment.addMutation(m)
+        experiment.commit(False)
+
 
     def charge_PredictionSet_by_number_of_residues(self, PredictionSet):
         '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
@@ -291,6 +303,7 @@ class ddG(object):
             if len(results) != 1:
                 raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
             experimentPDB_ID = results[0]["PDBFileID"]
+            pdbID = results[0]["PDBFileID"]
 
             if PDB_ID:
                 #sql = "SELECT ID, Content FROM PDBFile WHERE ID=%s"
@@ -298,13 +311,13 @@ class ddG(object):
                 if len(results) != 1:
                     raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
                 predictionPDB_ID = results[0]["ID"]
+                pdbID = results[0]["ID"]
             else:
                 predictionPDB_ID = experimentPDB_ID
 
             # Get the related PDB ID and file
             assert(len(results) == 1)
             result = results[0]
-            pdbID = result["ID"]
             contents = result["Content"]
 
             pdb = PDB(contents.split("\n"))
@@ -313,12 +326,16 @@ class ddG(object):
             mutations = self.ddGDB.call_select_proc("GetMutations", parameters = parameters)
 
             # todo: Hack. This should be removed when PDB homologs are dealt with properly.
+            mutation_objects = []
             for mutation in mutations:
                 if experimentPDB_ID == "1AJ3" and predictionPDB_ID == "1U5P":
                     assert(int(mutation['ResidueID']) < 1000)
                     mutation['ResidueID'] = str(int(mutation['ResidueID']) + 1762)
+                mutation_objects.append(Mutation(mutation['WildTypeAA'], mutation['ResidueID'], mutation['MutantAA'], mutation['Chain']))
 
-            checkPDBAgainstMutations(pdbID, pdb, mutations)
+            #todo: a
+            #checkPDBAgainstMutations(pdbID, pdb, mutations)
+            pdb.validate_mutations(mutation_objects)
 
             # Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
             chains = [result['Chain'] for result in self.ddGDB.call_select_proc("GetChains", parameters = parameters)]
@@ -327,8 +344,9 @@ class ddG(object):
             # - Post stripping checks -
             # Get the 'Chain ResidueID' PDB-formatted identifier for each mutation mapped to Rosetta numbering
             # then check again that the mutated positions exist and that the wild-type matches the PDB
+            colortext.warning('mutations %s' % (str(mutations)))
+
             remappedMutations = pdb.remapMutations(mutations, pdbID)
-            remappedMutations = [[m[0], ResidueID2String(m[1]), m[2], m[3]] for m in remappedMutations]
 
             #resfile = self._createResfile(pdb, remappedMutations)
             mutfile = self._createMutfile(pdb, remappedMutations)
@@ -345,7 +363,7 @@ class ddG(object):
             # Turn the lines array back into a valid PDB file
             strippedPDB = join(pdb.lines, "\n")
         except Exception, e:
-            colortext.error("Error in %s, %s: " % (experimentID, UserDataSetExperimentID))
+            colortext.error("Error in %s, %s: .\n%s" % (experimentID, UserDataSetExperimentID, traceback.format_exc()))
             colortext.warning(str(e))
             return
             colortext.error("\nError: '%s'.\n" % (str(e)))

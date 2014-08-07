@@ -19,7 +19,7 @@ from tools.fs.io import read_file, write_file
 from tools.bio import rcsb
 from tools import colortext
 from tools.bio.pdb import PDB
-from tools.bio.basics import  relaxed_residue_types_1 as relaxed_amino_acid_codes
+from tools.bio.basics import relaxed_residue_types_1 as relaxed_amino_acid_codes
 from tools.hash import CRC64
 from tools.biblio.ris import RISEntry
 from ddgobjects import DBObject
@@ -353,14 +353,16 @@ class PDBStructure(DBObject):
         super(PDBStructure, self).__init__(ddGdb)
         FieldNames_ = ddGdb.FlatFieldNames
         self.dict = {
-            FieldNames_.PDB_ID : pdbID,
+            #FieldNames_.PDB_ID : pdbID,
+            FieldNames_.ID : pdbID,
+            FieldNames_.FileSource : pdbID,
             FieldNames_.Content : content,
             FieldNames_.FASTA : None,
             FieldNames_.Resolution : None,
-            FieldNames_.NumberOfMolecules : None,
-            FieldNames_.Length : None,
-            FieldNames_.Protein : protein,
-            FieldNames_.Source : source,
+            #FieldNames_.NumberOfMolecules : None,
+            #FieldNames_.Length : None,
+            #FieldNames_.Protein : protein,
+            #FieldNames_.Source : source,
             FieldNames_.Techniques : None,
             FieldNames_.BFactors : None,
             FieldNames_.Publication : None,
@@ -377,7 +379,7 @@ class PDBStructure(DBObject):
         ddGdb = self.ddGdb
         FieldNames_ = ddGdb.FlatFieldNames
         d = self.dict
-        id = d[FieldNames_.PDB_ID]
+        id = d[FieldNames_.ID]
         if len(id) != 4:
             print(id)
         assert(len(id) <= 10)
@@ -902,7 +904,7 @@ class ExperimentDefinition(DBObject):
     def find(self):
 
         FieldNames = self.ddGdb.FieldNames
-        results = self.ddGdb.locked_execute('''SELECT ID, Chain, ResidueID, WildTypeAA, MutantAA FROM Experiment INNER JOIN ExperimentMutation ON Experiment.ID = ExperimentMutation.ExperimentID WHERE Experiment.Structure=%s''', parameters = (self.PDB_ID, ))
+        results = self.ddGdb.locked_execute('''SELECT ID, Chain, ResidueID, WildTypeAA, MutantAA FROM Experiment INNER JOIN ExperimentMutation ON Experiment.ID = ExperimentMutation.ExperimentID WHERE Experiment.PDBFileID=%s''', parameters = (self.PDB_ID, ))
         groupedresults = {}
 
         ExperimentIDsWithMatchingMutations = {}
@@ -924,7 +926,7 @@ class ExperimentDefinition(DBObject):
             #print("Database record found with matched mutations: %s" % groupedresults[ExperimentID])
             for ExperimentID, foundMutations in sorted(ExperimentIDsWithMatchingMutations.iteritems()):
                 results = self.ddGdb.locked_execute('''SELECT Chain FROM Experiment INNER JOIN ExperimentChain ON Experiment.ID = ExperimentChain.ExperimentID WHERE Experiment.ID=%s''', parameters = (ExperimentID, ), cursorClass = StdCursor)
-                foundChains = sorted([r[0] for r in results])
+                foundChains = sorted([r['Chain'] for r in results])
                 if foundChains != sorted(self.chains):
                     matchedAllInformation = False
                 else:
@@ -942,13 +944,13 @@ class ExperimentDefinition(DBObject):
                     pass
                     #print("Database record found with matched interface: %s" % foundInterfaces)
 
-                results = self.ddGdb.locked_execute('''SELECT Mutant, WildTypeChainID, MutantChainID FROM Experiment INNER JOIN ExperimentMutant ON Experiment.ID = ExperimentMutant.ExperimentID WHERE Experiment.ID=%s''', parameters = (ExperimentID, ))
+                results = self.ddGdb.locked_execute('''SELECT MutantPDBFileID, WildTypeChainID, MutantChainID FROM Experiment INNER JOIN ExperimentMutant ON Experiment.ID = ExperimentMutant.ExperimentID WHERE Experiment.ID=%s''', parameters = (ExperimentID, ))
                 storedMutants = []
                 for r in results:
-                    storedMutants.append((r["Mutant"], r["Mutant"], r["Mutant"]))
+                    storedMutants.append((r["MutantPDBFileID"], r["MutantPDBFileID"], r["MutantPDBFileID"]))
                     foundMutant = False
                     for mm in self.mutantmaps:
-                        if mm.mutant_PDB_ID == r["Mutant"] and mm.wildtype_chain == r["WildTypeChainID"] and mm.mutant_chain == r["MutantChainID"]:
+                        if mm.mutant_PDB_ID == r["MutantPDBFileID"] and mm.wildtype_chain == r["WildTypeChainID"] and mm.mutant_chain == r["MutantChainID"]:
                             foundMutant = True
                             break
                     if not foundMutant:
@@ -1019,13 +1021,20 @@ class ExperimentDefinition(DBObject):
             WildTypeStructure = PDBStructure(self.ddGdb, self.PDB_ID, filepath = os.path.join(pdbPath, "%s.pdb" % self.PDB_ID))
         else:
             WildTypeStructure = PDBStructure(self.ddGdb, self.PDB_ID)
-        results = self.ddGdb.execute_select("SELECT PDB_ID FROM Structure WHERE PDB_ID = %s", parameters = (WildTypeStructure.dict[self.ddGdb.FlatFieldNames.PDB_ID]))
+        results = self.ddGdb.execute_select("SELECT ID FROM PDBFile WHERE ID = %s", parameters = (WildTypeStructure.dict[self.ddGdb.FlatFieldNames.ID]))
         if not results:
             WildTypeStructure.commit()
 
-        # Create a PDB object from the wildtype
-        contents = WildTypeStructure.getPDBContents()
+        results = self.ddGdb.execute_select("SELECT Content FROM PDBFile WHERE ID = %s", parameters = (WildTypeStructure.dict[self.ddGdb.FlatFieldNames.ID]))
+        contents = results[0]['Content']
         wildtype_pdb = PDB(contents.split("\n"))
+
+        # Create a PDB object from the wildtype
+        if False:
+            # todo: this seems unnecessary - look at it again in the code refactor
+            contents = WildTypeStructure.getPDBContents()
+            wildtype_pdb = PDB(contents.split("\n"))
+
 
         # Check for the existance of CSE or MSE residues which can cause problems for Rosetta
         badResidues = ["CSE", "MSE"]
@@ -1041,7 +1050,7 @@ class ExperimentDefinition(DBObject):
         for mutation in self.mutations:
             foundMatch = False
             foundAlternativeWildType = None
-            for resid, wtaa in sorted(wildtype_pdb.ProperResidueIDToAAMap().iteritems()):
+            for resid, wtaa in sorted(wildtype_pdb.get_residue_id_to_type_map().iteritems()):
                 c = resid[0]
                 resnum = resid[1:].strip()
                 if mutation.Chain == c and mutation.ResidueID == resnum:
@@ -1060,7 +1069,7 @@ class ExperimentDefinition(DBObject):
             # Sanity check that the mutant structure has the mutation.
             # Note: This assumes the residue numbering is identical which may not be the case. Otherwise, mappings must be provided in the database.
             for mutant_pdb in mutant_pdbs:
-                for resid, mutantaa in sorted(mutant_pdb.ProperResidueIDToAAMap().iteritems()):
+                for resid, mutantaa in sorted(mutant_pdb.get_residue_id_to_type_map().iteritems()):
                     c = resid[0]
                     resnum = resid[1:].strip()
                     if mutation.Chain == c and mutation.ResidueID == resnum:
@@ -1077,7 +1086,9 @@ class ExperimentDefinition(DBObject):
                     failed = True
 
         # Sanity check that the chain information is correct (ProTherm has issues)
-        chainsInPDB = WildTypeStructure.chains
+        # todo: this was the old code chainsInPDB = WildTypeStructure.chains
+        chainsInPDB = wildtype_pdb.atom_chain_order
+
         if not chainsInPDB:
             raise Exception("The chains for %s were not read in properly." % associatedRecordsStr)
         for c in self.chains:
@@ -1116,7 +1127,7 @@ class ExperimentDefinition(DBObject):
 
         try:
             d = {
-                FieldNames.Experiment.Structure : self.PDB_ID,
+                FieldNames.Experiment.PDBFileID : self.PDB_ID,
             }
             if not testonly:
                 ddGdb.insertDict(FieldNames.Experiment._name, d)
