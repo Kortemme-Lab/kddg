@@ -1821,9 +1821,10 @@ class Publication(DBObject):
     def __getitem__(self, key):
         return dict_[key]
 
-class ddGPredictionDataDatabase(object):
 
-    def __init__(self, passwd = None):
+class ddGPredictionDataDatabase(DatabaseInterface):
+
+    def __init__(self, passwd = None, use_utf=False):
         if not passwd:
             if os.path.exists("pw"):
                 F = open("pw")
@@ -1831,54 +1832,18 @@ class ddGPredictionDataDatabase(object):
                 F.close()
             else:
                 passwd = getpass.getpass("Enter password to connect to MySQL database:")
-
         self.passwd = passwd
-        self.connectToServer()
-        self.numTries = 32
-        self.lastrowid = None
 
-    def close(self):
-        self.connection.close()
-
-    def connectToServer(self):
-        print("[CONNECTING TO SQL SERVER]")
-        self.connection = MySQLdb.Connection(host = "kortemmelab.ucsf.edu", db = "ddGPredictionData", user = "kortemmelab", passwd = self.passwd, port = 3306, unix_socket = "/var/lib/mysql/mysql.sock")
-
-    def execute(self, sql, parameters = None, cursorClass = MySQLdb.cursors.DictCursor, quiet = False):
-        """Execute SQL query. This uses DictCursor by default."""
-        i = 0
-        errcode = 0
-        caughte = None
-        while i < self.numTries:
-            i += 1
-            try:
-                cursor = self.connection.cursor(cursorClass)
-                if parameters:
-                    errcode = cursor.execute(sql, parameters)
-                else:
-                    errcode = cursor.execute(sql)
-                self.connection.commit()
-                results = cursor.fetchall()
-                self.lastrowid = int(cursor.lastrowid)
-                cursor.close()
-                return results
-            except MySQLdb.OperationalError, e:
-                caughte = str(e)
-                errcode = e[0]
-                if errcode == 2006 or errcode == 2013:
-                    self.connectToServer()
-                self.connection.ping()
-                continue
-            except Exception, e:
-                caughte = str(e)
-                traceback.print_exc()
-                break
-
-        if not quiet:
-            sys.stderr.write("\nSQL execution error in query %s at %s:" % (sql, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-            sys.stderr.write("\nErrorcode/Error: %d - '%s'.\n" % (errcode, str(caughte)))
-            sys.stderr.flush()
-        raise MySQLdb.OperationalError(caughte)
+        super(ddGPredictionDataDatabase, self).__init__({},
+            isInnoDB = True,
+            numTries = 32,
+            host = "kortemmelab.ucsf.edu",
+            db = "ddGPredictionData",
+            user = "kortemmelab",
+            passwd = passwd,
+            port = 3306,
+            unix_socket = "/var/lib/mysql/mysql.sock",
+            use_utf = use_utf)
 
 
 class DatabaseMissingKeyException(Exception):
