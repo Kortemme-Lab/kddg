@@ -13,7 +13,9 @@ import ddgdbapi
 from ddglib.filter import *
 
 from ddgdbapi import ddGDatabase
-dbfields = ddGDatabase().FieldNames
+
+if __name__ == '__main__':
+    dbfields = ddGDatabase().FieldNames
 
 class StructureResultSet(ResultSet):
 	dbname = dbfields.PDBFile

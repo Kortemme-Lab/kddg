@@ -18,18 +18,20 @@ import md5
 import random
 import datetime
 from io import BytesIO
+import zipfile
 
 import score
 import ddgdbapi
 from tools.bio.pdb import PDB
 from tools.bio.basics import residue_type_3to1_map as aa1
 from tools.bio.basics import Mutation
+from tools.bio.alignment import ScaffoldModelChainMapper
 #from Bio.PDB import *
 from tools.fs.io import write_file
 from tools.process import Popen
 from tools import colortext
 #import analysis
-from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet
+#from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet
 
 #todo: dbfields = ddgdbapi.FieldNames()
 
@@ -47,9 +49,9 @@ class MutationSet(object):
 class ddG(object):
     '''This class is responsible for inserting prediction jobs to the database.'''
 
-    def __init__(self):
-        self.ddGDB = ddgdbapi.ddGDatabase()
-        self.ddGDataDB = ddgdbapi.ddGPredictionDataDatabase()
+    def __init__(self, passwd = None, username = None):
+        self.ddGDB = ddgdbapi.ddGDatabase(passwd = passwd, username = username)
+        self.ddGDataDB = ddgdbapi.ddGPredictionDataDatabase(passwd = passwd, username = username)
 
     def __del__(self):
         pass
@@ -502,16 +504,17 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     #### todo: these following functions should be refactored and renamed. In particular, the graphing functions should
     ####       be moved into the tools repository
 
-    def analyze_results(self, PredictionSet, graph_filename, scoring_method, scoring_type, graph_title = None):
+    def analyze_results(self, PredictionSet, scoring_method, scoring_type, graph_title = None, PredictionIDs = None, graph_filename = None):
         import json
+
         results = self.get_flattened_prediction_results(PredictionSet)
         sortable_results = {}
         for r in results:
-            sortable_results[(json.loads(r['Scores'])['data'][scoring_method][scoring_type]['ddG'], r['ExperimentID'])] = r
+            if (not PredictionIDs) or (r['PredictionID'] in PredictionIDs):
+                sortable_results[(json.loads(r['Scores'])['data'][scoring_method][scoring_type]['ddG'], r['ExperimentID'])] = r
         count = 0
 
         set_of_mutations = set()
-
         for k, r in sorted(sortable_results.iteritems()):
             #if r['FlattenedMutations'].find('A E141L') != -1 and r['FlattenedMutations'].find('A S142A') != -1 and r['FlattenedMutations'].find('A L78Y') != -1:
             #    print('%f, %s' % (k[0], r['FlattenedMutations']))
@@ -528,8 +531,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             mutations = [m for m in map(string.strip, r['FlattenedMutations'].split(',')) if m]
             for m in mutations:
                 set_of_mutations.add((int(m.split()[1][1:-1]), m))
-            if r['FlattenedMutations'].find('A L78Y') == -1:
-                print('%f, %s' % (k[0], r['FlattenedMutations']))
+            #if r['FlattenedMutations'].find('A L78Y') == -1:
+            #    print('%f, %s' % (k[0], r['FlattenedMutations']))
             #    #count += 1
 
         data = []
@@ -542,17 +545,20 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 else:
                     line.append(0)
             data.append((json.loads(r['Scores'])['data'][scoring_method][scoring_type]['ddG'], line))
-            if r['FlattenedMutations'].find('A L78Y') == -1:
-                pruned_data.append((json.loads(r['Scores'])['data'][scoring_method][scoring_type]['ddG'], line))
+            #if r['FlattenedMutations'].find('A L78Y') == -1:
+            pruned_data.append((json.loads(r['Scores'])['data'][scoring_method][scoring_type]['ddG'], line))
 
         labels = [m[1] for m in sorted(set_of_mutations)]
 
         graph_title = graph_title or r'$\Delta\Delta$G predictions for %s (%s.%s)' % (PredictionSet, scoring_method.replace(',0A', '.0$\AA$').replace('_', ' '), scoring_type)
-        self.write_graph(graph_filename, graph_title, labels, pruned_data, scoring_method, scoring_type)
+
+        if graph_filename:
+            return self.write_graph(graph_filename, graph_title, labels, pruned_data, scoring_method, scoring_type)
+        else:
+            return self.create_graph(graph_title, labels, pruned_data, scoring_method, scoring_type)
 
     def write_graph(self, graph_filename, graph_title, labels, data, scoring_method, scoring_type):
         byte_stream = self.create_graph(graph_title, labels, data, scoring_method, scoring_type)
-        print(graph_filename)
         write_file(graph_filename, byte_stream.getvalue(), 'wb')
 
     def create_graph(self, graph_title, labels, data, scoring_method, scoring_type):
@@ -563,10 +569,13 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         assert(data)
         data_length = float(len(data))
         y_offset = (1.75 * data_length) / 128
+        y_offset = 1.75
         image_dpi = (400 * data_length) / 128
+        image_dpi = 400
         point_sizes = {1 : 100, 64: 75, 128: 50, 192: 25, 256: 10}
         index = round(data_length / 64.0) * 64
         point_size = point_sizes.get(index, 10)
+        point_size = 50
 
         matplotlib.rc('figure', figsize=(8.27, 20.69))
 
@@ -694,7 +703,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             print(s)
             print(t)
 
-    def create_pymol_session(output_filepath, download_dir, PredictionID, task_number, keep_files = True):
+    def create_pymol_session(download_dir, PredictionID, task_number, keep_files = True):
         '''Create a PyMOL session for a pair of structures.'''
 
         # Retrieve and unzip results
@@ -719,6 +728,42 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             shutil.rmtree(download_dir)
         return chain_mapper.generate_pymol_session()
 
-    def write_pymol_session(output_filepath, download_dir, PredictionID, task_number, keep_files = True):
-        PSE_file = create_pymol_session(output_filepath, download_dir, PredictionID, task_number, keep_files = keep_files)
+    def create_pymol_session_in_memory(self, PredictionID, task_number):
+        '''Create a PyMOL session for a pair of structures.
+        '''
+        # todo: This should replace create_pymol_session since creating a PyMOL session should be a separate task from extracting an archive. write_pymol_session should be changed to use this function
+
+        # Retrieve and unzip results
+        archive = self.getData(PredictionID)
+        zipped_content = zipfile.ZipFile(BytesIO(archive), 'r', zipfile.ZIP_DEFLATED)
+
+        try:
+            # Get the name of the files from the zip
+            wildtype_filename = os.path.join(str(PredictionID), 'repacked_wt_round_%d.pdb' % task_number)
+            mutant_filename = None
+            for filepath in sorted(zipped_content.namelist()):
+                filename = os.path.split(filepath)[1]
+                if filename.startswith('mut_') and filename.endswith('_round_%d.pdb' % task_number):
+                    mutant_filename = os.path.join(str(PredictionID), filename)
+                    break
+
+            PyMOL_session = None
+            file_list = zipped_content.namelist()
+
+            # If both files exist in the zip, extract their contents in memory and create a PyMOL session pair (PSE, script)
+            if (mutant_filename in file_list) and (wildtype_filename in file_list):
+                wildtype_pdb = zipped_content.open(wildtype_filename, 'r').read()
+                mutant_pdb = zipped_content.open(mutant_filename, 'U').read()
+                chain_mapper = ScaffoldModelChainMapper.from_file_contents(wildtype_pdb, mutant_pdb)
+                PyMOL_session = chain_mapper.generate_pymol_session(pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol')
+
+            zipped_content.close()
+            return PyMOL_session
+
+        except Exception, e:
+            zipped_content.close()
+            raise Exception(str(e))
+
+    def write_pymol_session(download_dir, PredictionID, task_number, keep_files = True):
+        PSE_file = create_pymol_session(download_dir, PredictionID, task_number, keep_files = keep_files)
         write_file(output_filepath, PSE_file[0], 'wb')

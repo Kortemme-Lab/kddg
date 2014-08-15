@@ -1824,7 +1824,7 @@ class Publication(DBObject):
 
 class ddGPredictionDataDatabase(DatabaseInterface):
 
-    def __init__(self, passwd = None, use_utf=False):
+    def __init__(self, passwd = None, username = 'kortemmelab', use_utf=False):
         if not passwd:
             if os.path.exists("pw"):
                 F = open("pw")
@@ -1839,7 +1839,7 @@ class ddGPredictionDataDatabase(DatabaseInterface):
             numTries = 32,
             host = "kortemmelab.ucsf.edu",
             db = "ddGPredictionData",
-            user = "kortemmelab",
+            user = username,
             passwd = passwd,
             port = 3306,
             unix_socket = "/var/lib/mysql/mysql.sock",
@@ -1875,13 +1875,14 @@ class ddGDatabase(DatabaseInterface):
     chainErrors = {}
     chainWarnings= {}
 
-    def __init__(self, passwd = None, use_utf=False):
+    def __init__(self, passwd = None, username = 'kortemmelab', use_utf=False):
         if not passwd:
             if os.path.exists("pw"):
                 F = open("pw")
                 passwd = F.read().strip()
                 F.close()
             else:
+                import traceback
                 passwd = getpass.getpass("Enter password to connect to MySQL database:")
         self.passwd = passwd
 
@@ -1890,7 +1891,7 @@ class ddGDatabase(DatabaseInterface):
             numTries = 32,
             host = "kortemmelab.ucsf.edu",
             db = "ddG",
-            user = "kortemmelab",
+            user = username,
             passwd = passwd,
             port = 3306,
             unix_socket = "/var/lib/mysql/mysql.sock",
