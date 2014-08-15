@@ -49,7 +49,7 @@ class MutationSet(object):
 class ddG(object):
     '''This class is responsible for inserting prediction jobs to the database.'''
 
-    def __init__(self, passwd = None, username = None):
+    def __init__(self, passwd = None, username = 'kortemmelab'):
         self.ddGDB = ddgdbapi.ddGDatabase(passwd = passwd, username = username)
         self.ddGDataDB = ddgdbapi.ddGPredictionDataDatabase(passwd = passwd, username = username)
 
@@ -504,10 +504,14 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     #### todo: these following functions should be refactored and renamed. In particular, the graphing functions should
     ####       be moved into the tools repository
 
-    def analyze_results(self, PredictionSet, scoring_method, scoring_type, graph_title = None, PredictionIDs = None, graph_filename = None):
+    def analyze_results(self, PredictionSet, scoring_method, scoring_type, graph_title = None, PredictionIDs = None, graph_filename = None, cached_results = None, num_datapoints = 0):
+        '''The num_datapoints is mainly for debugging - tuning the resolution/DPI to fit the number of datapoints.'''
         import json
 
-        results = self.get_flattened_prediction_results(PredictionSet)
+        results = cached_results
+        if not results:
+            results = self.get_flattened_prediction_results(PredictionSet)
+
         sortable_results = {}
         for r in results:
             if (not PredictionIDs) or (r['PredictionID'] in PredictionIDs):
@@ -552,6 +556,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
         graph_title = graph_title or r'$\Delta\Delta$G predictions for %s (%s.%s)' % (PredictionSet, scoring_method.replace(',0A', '.0$\AA$').replace('_', ' '), scoring_type)
 
+        pruned_data = pruned_data[0:num_datapoints or len(pruned_data)]
+        
         if graph_filename:
             return self.write_graph(graph_filename, graph_title, labels, pruned_data, scoring_method, scoring_type)
         else:
