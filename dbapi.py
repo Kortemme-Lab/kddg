@@ -20,6 +20,16 @@ import datetime
 from io import BytesIO
 import zipfile
 
+try:
+    import matplotlib
+
+    # A non-interactive backend to generate PNGs. matplotlib.use('PS') is used for PS files. If used, this command must be run before importing matplotlib.pyplot.
+    matplotlib.use("AGG")
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt=None
+
+
 import score
 import ddgdbapi
 from tools.bio.pdb import PDB
@@ -504,13 +514,21 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     #### todo: these following functions should be refactored and renamed. In particular, the graphing functions should
     ####       be moved into the tools repository
 
-    def analyze_results(self, PredictionSet, scoring_method, scoring_type, graph_title = None, PredictionIDs = None, graph_filename = None, cached_results = None, num_datapoints = 0):
-        '''The num_datapoints is mainly for debugging - tuning the resolution/DPI to fit the number of datapoints.'''
+    def create_abacus_graph_for_a_single_structure(self, PredictionSet, scoring_method, scoring_type, graph_title = None, PredictionIDs = None, graph_filename = None, cached_results = None, num_datapoints = 0):
+        '''This function is meant to
+            The num_datapoints is mainly for debugging - tuning the resolution/DPI to fit the number of datapoints.'''
         import json
 
         results = cached_results
         if not results:
             results = self.get_flattened_prediction_results(PredictionSet)
+
+        pdb_ids = set()
+        for r in results:
+            pdb_ids.add(r['PDBFileID'])
+
+        if len(pdb_ids) != 1:
+            raise Exception('This function is only meant to be called when the PredictionSet or the set of results contains records for a single structure. The set of results contains %d structures.' % len(pdb_ids))
 
         sortable_results = {}
         for r in results:
@@ -557,91 +575,98 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         graph_title = graph_title or r'$\Delta\Delta$G predictions for %s (%s.%s)' % (PredictionSet, scoring_method.replace(',0A', '.0$\AA$').replace('_', ' '), scoring_type)
 
         pruned_data = pruned_data[0:num_datapoints or len(pruned_data)]
-        
-        if graph_filename:
-            return self.write_graph(graph_filename, graph_title, labels, pruned_data, scoring_method, scoring_type)
-        else:
-            return self.create_graph(graph_title, labels, pruned_data, scoring_method, scoring_type)
+        colortext.message('Creating graph with %d datapoints...' % len(pruned_data))
 
-    def write_graph(self, graph_filename, graph_title, labels, data, scoring_method, scoring_type):
-        byte_stream = self.create_graph(graph_title, labels, data, scoring_method, scoring_type)
+        if graph_filename:
+            return self.write_abacus_graph(graph_filename, graph_title, labels, pruned_data, scoring_method, scoring_type)
+        else:
+            return self.create_abacus_graph(graph_title, labels, pruned_data, scoring_method, scoring_type)
+
+    def write_abacus_graph(self, graph_filename, graph_title, labels, data, scoring_method, scoring_type):
+        byte_stream = self.create_abacus_graph(graph_title, labels, data, scoring_method, scoring_type)
         write_file(graph_filename, byte_stream.getvalue(), 'wb')
 
-    def create_graph(self, graph_title, labels, data, scoring_method, scoring_type):
-        import matplotlib
-        matplotlib.use("AGG")
-        import matplotlib.pyplot as plt
+    def create_abacus_graph(self, graph_title, labels, data, scoring_method, scoring_type):
+        '''Even though this is technically a scatterplot, I call this an abacus graph because it is basically a bunch of beads on lines.'''
 
-        assert(data)
-        data_length = float(len(data))
-        y_offset = (1.75 * data_length) / 128
-        y_offset = 1.75
-        image_dpi = (400 * data_length) / 128
-        image_dpi = 400
-        point_sizes = {1 : 100, 64: 75, 128: 50, 192: 25, 256: 10}
-        index = round(data_length / 64.0) * 64
-        point_size = point_sizes.get(index, 10)
-        point_size = 50
+        if plt:
+            assert(data)
+            data_length = float(len(data))
+            y_offset = (1.75 * data_length) / 128
+            y_offset = 1.75
+            image_dpi = (400 * data_length) / 128
+            image_dpi = 400
+            point_sizes = {1 : 100, 64: 75, 128: 50, 192: 25, 256: 10}
+            index = round(data_length / 64.0) * 64
+            point_size = point_sizes.get(index, 10)
+            point_size = 50
 
-        matplotlib.rc('figure', figsize=(8.27, 20.69))
+            fig = plt.figure(figsize=(8.27, 20.69)) # figsize is specified in inches - w, h
+            #matplotlib.rc('figure', )
 
-        x_values = []
-        y_values = []
-        ddg_values = []
-        y = 0
-        for line in data:
-            x = 0
-            y += 7
-            w = line[0]
-            plt.text(30, y, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=9)
-            for point in line[1]:
+            x_values = []
+            y_values = []
+            ddg_values = []
+            y = 0
+            for line in data:
+                x = 0
+                y += 7
+                w = line[0]
+                plt.text(30, y, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=9)
+                for point in line[1]:
+                    x += 3
+                    if point == 1:
+                        x_values.append(x)
+                        y_values.append(y)
+                        ddg_values.append(line[0])
+
+            plt.scatter(x_values, y_values, c=ddg_values, s=point_size, cmap=matplotlib.cm.jet, edgecolors='none', zorder=99)
+            plt.tight_layout(pad=2.08)
+            plt.axis((0, 27, -5, (7 * len(data)) + 15))
+
+            plt.tick_params(
+                axis='both',          # changes apply to the x-axis
+                which='both',      # both major and minor ticks are affected
+                bottom='off',      # ticks along the bottom edge are off
+                left='off',      # ticks along the left edge are off
+                labelleft='off', # labels along the bottom edge are off
+                top='off',         # ticks along the top edge are off
+                labelbottom='off') # labels along the bottom edge are off
+
+            x = 1.9
+            for l in labels:
+                plt.text(x, -12, l.split()[1], fontdict=None, withdash=True, fontsize=9)
                 x += 3
-                if point == 1:
-                    x_values.append(x)
-                    y_values.append(y)
-                    ddg_values.append(line[0])
 
-        plt.scatter(x_values, y_values, c=ddg_values, s=point_size, cmap=matplotlib.cm.jet, edgecolors='none', zorder=99)
-        plt.tight_layout(pad=2.08)
-        plt.axis((0, 27, -5, (7 * len(data)) + 15))
+            added_zero_line = False
+            last_y_value = 0
+            y = 0
+            for line in data:
+                x = 0
+                y += 7
+                plt.plot([1, 25], [y, y], color='#999999', linestyle='-', linewidth=0.1)
+                if y % 21 == 7:
+                    plt.text(25, y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
+                if not added_zero_line:
+                    if line[0] > 0:
+                        plt.plot([1, 25], [0.5 + ((y + last_y_value) / 2), 0.5 + ((y + last_y_value) / 2)], color='k', linestyle='-', linewidth=1)
+                        added_zero_line = True
+                    else:
+                        last_y_value = y
 
-        plt.tick_params(
-            axis='both',          # changes apply to the x-axis
-            which='both',      # both major and minor ticks are affected
-            bottom='off',      # ticks along the bottom edge are off
-            left='off',      # ticks along the left edge are off
-            labelleft='off', # labels along the bottom edge are off
-            top='off',         # ticks along the top edge are off
-            labelbottom='off') # labels along the bottom edge are off
+            plt.text(25, y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
+            plt.colorbar()
+            plt.title(graph_title, fontdict=None)
 
-        x = 1.9
-        for l in labels:
-            plt.text(x, -12, l.split()[1], fontdict=None, withdash=True, fontsize=9)
-            x += 3
+            byte_stream = BytesIO()
+            plt.savefig(byte_stream, dpi=image_dpi, format="png")
 
-        added_zero_line = False
-        last_y_value = 0
-        y = 0
-        for line in data:
-            x = 0
-            y += 7
-            plt.plot([1, 25], [y, y], color='#999999', linestyle='-', linewidth=0.1)
-            if y % 21 == 7:
-                plt.text(25, y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
-            if not added_zero_line:
-                if line[0] > 0:
-                    plt.plot([1, 25], [0.5 + ((y + last_y_value) / 2), 0.5 + ((y + last_y_value) / 2)], color='k', linestyle='-', linewidth=1)
-                    added_zero_line = True
-                else:
-                    last_y_value = y
+            plt.close(fig)
 
-        plt.text(25, y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
-        plt.colorbar()
-        plt.title(graph_title, fontdict=None)
 
-        byte_stream = BytesIO()
-        plt.savefig(byte_stream, dpi=image_dpi, format="png")
-        return byte_stream
+            return byte_stream
+        else:
+            return None
 
     def extract_data(output_dir, PredictionID):
         assert(os.path.exists(output_dir))
