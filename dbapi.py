@@ -643,7 +643,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             plt.scatter(x_values, y_values, c=ddg_values, s=point_size, cmap=graph_color_scheme, edgecolors='none', zorder=99)
 
             # Use the tight_layout command to tighten up the spaces. The pad, w_pad, and h_pad parameters are specified in fraction of fontsize.
-            plt.tight_layout(pad=5.08)
+            plt.tight_layout(pad=12.08)
 
             # Define the limits of the cartesian coordinates. Add extra space on the right for the DDG values.
             extra_space = 1.3
@@ -691,11 +691,20 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
             #ax = fig.add_subplot(111)
 
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
+            ax = fig.add_subplot(111)
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+
             CS3 = plt.contourf([[0,0],[0,0]], ddg_values, cmap=graph_color_scheme)
             #plt.colorbar(CS3)
-            cbar = fig.colorbar(CS3, format='%.2f')
+            #cbar = fig.colorbar(CS3, format='%.2f')
+            cbar = fig.colorbar(CS3, format='%.2f', cax=cax)
             cbar.set_label('$\Delta\Delta$G',size=6)
             cbar.ax.tick_params(labelsize=5)
+
+
+
             #quadmesh = ax.pcolormesh(theta,phi,data)
             #cb = fig.colorbar(quadmesh,ax=ax, shrink=.5, pad=.2, aspect=10)
             #cax = ax.imshow(ddg_values, interpolation='nearest', cmap=matplotlib.cm.coolwarm)
