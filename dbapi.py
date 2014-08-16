@@ -561,6 +561,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         pruned_data = []
         for k, r in sorted(sortable_results.iteritems()):
             line = []
+            print(json.loads(r['Scores'])['data'][scoring_method][scoring_type]['ddG'], r['FlattenedMutations'])
             for m in sorted(set_of_mutations):
                 if r['FlattenedMutations'].find(m[1]) != -1:
                     line.append(1)
@@ -591,38 +592,60 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
         if plt:
             assert(data)
-            data_length = float(len(data))
-            y_offset = (1.75 * data_length) / 128
-            y_offset = 1.75
-            image_dpi = (400 * data_length) / 128
-            image_dpi = 400
-            point_sizes = {1 : 100, 64: 75, 128: 50, 192: 25, 256: 10}
-            index = round(data_length / 64.0) * 64
-            point_size = point_sizes.get(index, 10)
-            point_size = 50
 
-            fig = plt.figure(figsize=(8.27, 20.69)) # figsize is specified in inches - w, h
-            #matplotlib.rc('figure', )
+            image_dpi = 300.0
+            horizontal_margin = 400.0 # an estimate of the horizontal space not used by the graph
+            horizontal_spacing = 100.0 # an estimate of the horizontal space between points on the same line
+            vertical_margin = 100.0 # an estimate of the vertical space not used by the graph
+            vertical_spacing = 50.0 # the rough amount of pixels between abacus lines
+            point_size = 50 # the size of datapoints in points^2.
+            y_offset = 1.0
 
+            number_of_lines = float(len(data))
+            number_of_labels = float(len(labels))
+            height_in_inches = (vertical_margin + (vertical_spacing * number_of_lines)) / image_dpi
+            width_in_inches = (horizontal_margin + (horizontal_spacing * number_of_labels)) / image_dpi
+
+            #y_offset = (1.75 * data_length) / 128
+            #image_dpi = (400 * data_length) / 128
+            #image_dpi = 400
+            #point_sizes = {1 : 100, 64: 75, 128: 50, 192: 25, 256: 10}
+            #index = round(data_length / 64.0) * 64
+            #point_size = point_sizes.get(index, 10)
+
+
+            fig = plt.figure(figsize=(width_in_inches, height_in_inches)) # figsize is specified in inches - w, h
+            fig.set_dpi(image_dpi)
+
+            # Create three identically-sized lists. Each triple is of an x-coordinate, a y-coordinate, and the DDG value
+            # and corresponds to a 1 in the matrix i.e. we should draw a point/abacus bead at these coordinates.
             x_values = []
             y_values = []
+            x_coordinate_skip = 3 # x-axis distance between two points
+            y_coordinate_skip = 7 # y-axis distance between two points
             ddg_values = []
             y = 0
             for line in data:
                 x = 0
-                y += 7
+                y += y_coordinate_skip
                 w = line[0]
-                plt.text(30, y, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=9)
+                #plt.text(30, y, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=9)
                 for point in line[1]:
-                    x += 3
+                    x += x_coordinate_skip
                     if point == 1:
                         x_values.append(x)
                         y_values.append(y)
                         ddg_values.append(line[0])
 
+            # Draw the scatter plot
             plt.scatter(x_values, y_values, c=ddg_values, s=point_size, cmap=matplotlib.cm.jet, edgecolors='none', zorder=99)
-            plt.tight_layout(pad=2.08)
-            plt.axis((0, 27, -5, (7 * len(data)) + 15))
+
+            # Use the tight_layout command to tighten up the spaces. The pad, w_pad, and h_pad parameters are specified in fraction of fontsize.
+            plt.tight_layout(pad=3.08)
+
+            # Define the limits of the cartesian coordinates. Add extra space on the right for the DDG values.
+            extra_space = 1.3
+            plt.axis((0, (number_of_labels + 1 + extra_space) * x_coordinate_skip, -5, (y_coordinate_skip * number_of_lines) + 15))
 
             plt.tick_params(
                 axis='both',          # changes apply to the x-axis
@@ -633,10 +656,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 top='off',         # ticks along the top edge are off
                 labelbottom='off') # labels along the bottom edge are off
 
+            # Add the mutation labels at the botom of the diagram
             x = 1.9
-            for l in labels:
-                plt.text(x, -12, l.split()[1], fontdict=None, withdash=True, fontsize=9)
-                x += 3
+            for i in range(len(labels)):
+                l = labels[i]
+                plt.text(x, -12 + ((i % 2) * -5), l.split()[1], fontdict=None, withdash=True, fontsize=6)
+                x += x_coordinate_skip
 
             added_zero_line = False
             last_y_value = 0
@@ -645,8 +670,10 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 x = 0
                 y += 7
                 plt.plot([1, 25], [y, y], color='#999999', linestyle='-', linewidth=0.1)
+
+                # Add a DDG value on every third line
                 if y % 21 == 7:
-                    plt.text(25, y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
+                    plt.text(((number_of_labels + 0.6) * x_coordinate_skip) , y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
                 if not added_zero_line:
                     if line[0] > 0:
                         plt.plot([1, 25], [0.5 + ((y + last_y_value) / 2), 0.5 + ((y + last_y_value) / 2)], color='k', linestyle='-', linewidth=1)
@@ -654,9 +681,19 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                     else:
                         last_y_value = y
 
-            plt.text(25, y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
-            plt.colorbar()
-            plt.title(graph_title, fontdict=None)
+            plt.text(((number_of_labels + 0.6) * x_coordinate_skip), y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
+
+            # Set the colorbar font size and then add a colorbar
+            #cbar.ax.tick_params(labelsize=6)
+            plt.colorbar(use_gridspec=True)
+
+            #ax = fig.add_subplot(111)
+            #surf = ax.contourf(X,Y,Z, 8, cmap=cm.jet)
+            #cbar = fig.colorbar(surf, use_gridspec=True, shrink=0.5, aspect=20, fraction=.12,pad=.02)
+            #cbar.set_label('Activation',size=18)
+
+            # Add a title
+            plt.title(graph_title, fontdict={'fontsize' : 6})
 
             byte_stream = BytesIO()
             plt.savefig(byte_stream, dpi=image_dpi, format="png")
