@@ -606,6 +606,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             height_in_inches = (vertical_margin + (vertical_spacing * number_of_lines)) / image_dpi
             width_in_inches = (horizontal_margin + (horizontal_spacing * number_of_labels)) / image_dpi
 
+            graph_color_scheme = matplotlib.cm.jet
+
             #y_offset = (1.75 * data_length) / 128
             #image_dpi = (400 * data_length) / 128
             #image_dpi = 400
@@ -638,10 +640,10 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                         ddg_values.append(line[0])
 
             # Draw the scatter plot
-            plt.scatter(x_values, y_values, c=ddg_values, s=point_size, cmap=matplotlib.cm.jet, edgecolors='none', zorder=99)
+            plt.scatter(x_values, y_values, c=ddg_values, s=point_size, cmap=graph_color_scheme, edgecolors='none', zorder=99)
 
             # Use the tight_layout command to tighten up the spaces. The pad, w_pad, and h_pad parameters are specified in fraction of fontsize.
-            plt.tight_layout(pad=3.08)
+            plt.tight_layout(pad=5.08)
 
             # Define the limits of the cartesian coordinates. Add extra space on the right for the DDG values.
             extra_space = 1.3
@@ -685,9 +687,19 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
             # Set the colorbar font size and then add a colorbar
             #cbar.ax.tick_params(labelsize=6)
-            plt.colorbar(use_gridspec=True)
+            #plt.colorbar(use_gridspec=True)
 
             #ax = fig.add_subplot(111)
+
+            CS3 = plt.contourf([[0,0],[0,0]], ddg_values, cmap=graph_color_scheme)
+            #plt.colorbar(CS3)
+            cbar = fig.colorbar(CS3, format='%.2f')
+            cbar.set_label('$\Delta\Delta$G',size=6)
+            cbar.ax.tick_params(labelsize=5)
+            #quadmesh = ax.pcolormesh(theta,phi,data)
+            #cb = fig.colorbar(quadmesh,ax=ax, shrink=.5, pad=.2, aspect=10)
+            #cax = ax.imshow(ddg_values, interpolation='nearest', cmap=matplotlib.cm.coolwarm)
+            #cbar = fig.colorbar(cax, ticks=[-1, 0, 1])
             #surf = ax.contourf(X,Y,Z, 8, cmap=cm.jet)
             #cbar = fig.colorbar(surf, use_gridspec=True, shrink=0.5, aspect=20, fraction=.12,pad=.02)
             #cbar.set_label('Activation',size=18)
