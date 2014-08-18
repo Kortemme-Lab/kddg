@@ -699,7 +699,10 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             #ax = fig.add_subplot(111)
 
             # Add a title. Note: doing this after the colorbar code below messes up the alignment.
-            graph_title = "\n".join(textwrap.wrap(graph_title, 40))
+            # Adjust the wrap length to the width of the graph
+            wrap_length = 40 + max(0, (points_per_line - 3) * 14)
+            graph_title = "\n".join(textwrap.wrap(graph_title, wrap_length))
+
             plt.title(graph_title, fontdict={'fontsize' : 6})
 
             from mpl_toolkits.axes_grid1 import make_axes_locatable
