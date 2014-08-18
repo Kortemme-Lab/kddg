@@ -718,7 +718,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             cbar.ax.tick_params(labelsize=5)
 
              # Use the tight_layout command to tighten up the spaces. The pad, w_pad, and h_pad parameters are specified in fraction of fontsize.
-            plt.tight_layout(pad=3)
+            plt.tight_layout(pad=0.5)
 
             #quadmesh = ax.pcolormesh(theta,phi,data)
             #cb = fig.colorbar(quadmesh,ax=ax, shrink=.5, pad=.2, aspect=10)
