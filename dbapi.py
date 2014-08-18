@@ -22,10 +22,10 @@ import zipfile
 
 try:
     import matplotlib
-
     # A non-interactive backend to generate PNGs. matplotlib.use('PS') is used for PS files. If used, this command must be run before importing matplotlib.pyplot.
     matplotlib.use("AGG")
     import matplotlib.pyplot as plt
+    import textwrap
 except ImportError:
     plt=None
 
@@ -557,7 +557,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             #    print('%f, %s' % (k[0], r['FlattenedMutations']))
             #    #count += 1
 
-        data = []
         pruned_data = []
         for k, r in sorted(sortable_results.iteritems()):
             line = []
@@ -567,16 +566,22 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                     line.append(1)
                 else:
                     line.append(0)
-            data.append((json.loads(r['Scores'])['data'][scoring_method][scoring_type]['ddG'], line))
-            #if r['FlattenedMutations'].find('A L78Y') == -1:
             pruned_data.append((json.loads(r['Scores'])['data'][scoring_method][scoring_type]['ddG'], line))
 
-        labels = [m[1] for m in sorted(set_of_mutations)]
-
+        labels = [m[1].split()[1] for m in sorted(set_of_mutations)]
         graph_title = graph_title or r'$\Delta\Delta$G predictions for %s (%s.%s)' % (PredictionSet, scoring_method.replace(',0A', '.0$\AA$').replace('_', ' '), scoring_type)
 
         pruned_data = pruned_data[0:num_datapoints or len(pruned_data)]
         colortext.message('Creating graph with %d datapoints...' % len(pruned_data))
+
+        number_of_non_zero_datapoints = 0
+        for p in pruned_data:
+            if 1 in p[1]:
+                number_of_non_zero_datapoints += 1
+                if number_of_non_zero_datapoints > 1:
+                    break
+        if number_of_non_zero_datapoints < 2:
+            raise Exception('The dataset must contain at least two non-zero points.')
 
         if graph_filename:
             return self.write_abacus_graph(graph_filename, graph_title, labels, pruned_data, scoring_method, scoring_type)
@@ -601,10 +606,15 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             point_size = 50 # the size of datapoints in points^2.
             y_offset = 1.0
 
+            points_per_line = set([len(line[1]) for line in data])
+            assert(len(points_per_line) == 1)
+            points_per_line = points_per_line.pop()
+            assert(len(labels) == points_per_line)
+
             number_of_lines = float(len(data))
             number_of_labels = float(len(labels))
-            height_in_inches = (vertical_margin + (vertical_spacing * number_of_lines)) / image_dpi
-            width_in_inches = (horizontal_margin + (horizontal_spacing * number_of_labels)) / image_dpi
+            height_in_inches = max(600/image_dpi, (vertical_margin + (vertical_spacing * number_of_lines)) / image_dpi) # Use a minimum of 600 pixels in height. This avoids graphs with a small number of lines (<=10) not to become squashed.
+            width_in_inches = max(700/image_dpi, (horizontal_margin + (horizontal_spacing * points_per_line)) / image_dpi) # Use a minimum of 600 pixels in width. This avoids graphs with a small number of labels (e.g. 1) not to become squashed.
 
             graph_color_scheme = matplotlib.cm.jet
 
@@ -642,12 +652,9 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             # Draw the scatter plot
             plt.scatter(x_values, y_values, c=ddg_values, s=point_size, cmap=graph_color_scheme, edgecolors='none', zorder=99)
 
-            # Use the tight_layout command to tighten up the spaces. The pad, w_pad, and h_pad parameters are specified in fraction of fontsize.
-            plt.tight_layout(pad=12.08)
-
             # Define the limits of the cartesian coordinates. Add extra space on the right for the DDG values.
             extra_space = 1.3
-            plt.axis((0, (number_of_labels + 1 + extra_space) * x_coordinate_skip, -5, (y_coordinate_skip * number_of_lines) + 15))
+            plt.axis((0, (points_per_line + 1 + extra_space) * x_coordinate_skip, -15, (y_coordinate_skip * number_of_lines) + 15))
 
             plt.tick_params(
                 axis='both',          # changes apply to the x-axis
@@ -662,7 +669,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             x = 1.9
             for i in range(len(labels)):
                 l = labels[i]
-                plt.text(x, -12 + ((i % 2) * -5), l.split()[1], fontdict=None, withdash=True, fontsize=6)
+                plt.text(x, -5 + ((i % 2) * -5), l, fontdict=None, withdash=True, fontsize=6)
                 x += x_coordinate_skip
 
             added_zero_line = False
@@ -675,7 +682,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
                 # Add a DDG value on every third line
                 if y % 21 == 7:
-                    plt.text(((number_of_labels + 0.6) * x_coordinate_skip) , y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
+                    plt.text(((points_per_line + 0.6) * x_coordinate_skip) , y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
                 if not added_zero_line:
                     if line[0] > 0:
                         plt.plot([1, 25], [0.5 + ((y + last_y_value) / 2), 0.5 + ((y + last_y_value) / 2)], color='k', linestyle='-', linewidth=1)
@@ -683,7 +690,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                     else:
                         last_y_value = y
 
-            plt.text(((number_of_labels + 0.6) * x_coordinate_skip), y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
+            plt.text(((points_per_line + 0.6) * x_coordinate_skip), y-y_offset, str('%.3f' % line[0]), fontdict=None, withdash=True, fontsize=6)
 
             # Set the colorbar font size and then add a colorbar
             #cbar.ax.tick_params(labelsize=6)
@@ -691,10 +698,14 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
             #ax = fig.add_subplot(111)
 
+            # Add a title. Note: doing this after the colorbar code below messes up the alignment.
+            graph_title = "\n".join(textwrap.wrap(graph_title, 40))
+            plt.title(graph_title, fontdict={'fontsize' : 6})
+
             from mpl_toolkits.axes_grid1 import make_axes_locatable
             ax = fig.add_subplot(111)
             divider = make_axes_locatable(ax)
-            cax = divider.append_axes("right", size="5%", pad=0.05)
+            cax = divider.append_axes("right", size="5%", pad=0.05) # pad specifies the padding between the right of the graph and the left of the colorbar, size seems to specify the width of the colobar relative to the graph
 
             CS3 = plt.contourf([[0,0],[0,0]], ddg_values, cmap=graph_color_scheme)
             #plt.colorbar(CS3)
@@ -703,7 +714,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             cbar.set_label('$\Delta\Delta$G',size=6)
             cbar.ax.tick_params(labelsize=5)
 
-
+             # Use the tight_layout command to tighten up the spaces. The pad, w_pad, and h_pad parameters are specified in fraction of fontsize.
+            plt.tight_layout(pad=3)
 
             #quadmesh = ax.pcolormesh(theta,phi,data)
             #cb = fig.colorbar(quadmesh,ax=ax, shrink=.5, pad=.2, aspect=10)
@@ -713,14 +725,10 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             #cbar = fig.colorbar(surf, use_gridspec=True, shrink=0.5, aspect=20, fraction=.12,pad=.02)
             #cbar.set_label('Activation',size=18)
 
-            # Add a title
-            plt.title(graph_title, fontdict={'fontsize' : 6})
-
             byte_stream = BytesIO()
             plt.savefig(byte_stream, dpi=image_dpi, format="png")
 
             plt.close(fig)
-
 
             return byte_stream
         else:
