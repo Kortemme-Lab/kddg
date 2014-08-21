@@ -2853,6 +2853,208 @@ class DatabasePrimer(object):
             }
             self.ddGdb.insertDictIfNew('ProtocolParameter', pparam, ['ProtocolID', 'FromStep', 'ToStep', 'ParameterID'])
 
+    def protocol_16_complex(self):
+
+        FieldNames_ = ddGdb.FlatFieldNames
+
+        git_hash = '4858db45b295dcbb1202a6a91128919404c72569'
+        fake_svn_revision = 55534
+
+        score_function = 'talaris2013sc'
+        extra_flags = [
+            [
+                '@/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/score.flags',
+                '-score:weights', '/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/sp2_paper_talaris2013_scaled.wts',
+            ],
+            [
+               '@/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/score.flags',
+                '-ddg:minimization_scorefunction', '/netapp/home/shaneoconner/TalarisTestingFinal/talaris2013/sp2_paper_talaris2013_scaled.wts',
+            ],
+        ]
+
+        assert(len(extra_flags) == 2)
+        assert(len(extra_flags[0]) == 3)
+        assert(len(extra_flags[1]) == 3)
+
+        # Command for protocol 16 preminimization
+        preminCmd = {
+            FieldNames_.Type : "CommandLine",
+            FieldNames_.Command : " ".join([
+                '%(BIN_DIR)s/minimize_with_cst.static.linuxgccrelease',
+                '-in:file:l', '%(in:file:l)s',
+                '-in:file:fullatom',
+                '-ignore_unrecognized_res',
+                '-fa_max_dis', '9.0',
+                '-database', '%(DATABASE_DIR)s',
+                '-ddg::harmonic_ca_tether', '0.5',
+                '-ddg::constraint_weight','1.0',
+                '-ddg::out_pdb_prefix', 'min_cst_0.5', # this plus the original pdb name will be used as a prefix for the output files
+                '-ddg::sc_min_only', 'false',
+                # extra flag for hard-coded params
+                '-in::file::extra_res_fa', '/netapp/home/klabqb3backrub/params/FPP.fa.params',
+                ] + extra_flags[0]),
+            FieldNames_.Description : "Preminimization for Protocol 16 from Kellogg et al.: %s" % score_function,
+        }
+
+        # Command for protocol 16 DDG (high res protocol)
+        commonstr = [
+            '-in:file:s', '%(in:file:s)s',
+            '-ddg::mut_file', '%(mutfile)s',
+            '-constraints::cst_file', '%(constraints::cst_file)s',
+            '-database', '%(DATABASE_DIR)s',
+            # Extra flags Andrew does not explicitly use but which are in the documentation
+            '-ignore_unrecognized_res',
+            '-in:file:fullatom',
+            '-fa_max_dis', '9.0',
+            '-ddg::dump_pdbs', 'true',
+            '-ddg::suppress_checkpointing', 'true',
+        ]
+
+        softrep = []#['-ddg:weight_file', 'soft_rep_design']
+        # use  -ddg:weight_file? hardrep = ['-score:weights standard', '-score:patch score12']
+        # use  -ddg:weight_file? minnohardrep = ['-ddg::minimization_scorefunction', 'standard', '-ddg::minimization_patch', 'score12']
+
+        protocols1617 = [
+            '-ddg:weight_file', 'soft_rep_design',
+            '-ddg::iterations', '50',
+            '-ddg::local_opt_only', 'false',
+            '-ddg::min_cst', 'true',
+            '-ddg::mean', 'false',
+            '-ddg::min', 'true',
+            '-ddg::sc_min_only', 'false', # Backbone and sidechain minimization
+            '-ddg::ramp_repulsive', 'true',
+            # extra flag for hard-coded params
+            '-in::file::extra_res_fa', '/netapp/home/klabqb3backrub/params/FPP.fa.params',
+        ]
+
+        ddGCmd = {
+            FieldNames_.Type : "CommandLine",
+            FieldNames_.Command : " ".join(['%(BIN_DIR)s/ddg_monomer.static.linuxgccrelease'] + commonstr + softrep +  protocols1617 + extra_flags[1]),
+            FieldNames_.Description : "ddG for Protocol 16 from Kellogg et al.: %s" % score_function,
+        }
+
+        alreadyExists = self.ddGdb.locked_execute("SELECT ID FROM Command WHERE Type=%s AND Command=%s", parameters = (preminCmd[FieldNames_.Type], preminCmd[FieldNames_.Command]))
+        if not alreadyExists:
+            self.ddGdb.insertDict('Command', preminCmd)
+            preminCmdID = self.ddGdb.getLastRowID()
+        else:
+            preminCmdID = alreadyExists[0]["ID"]
+
+        alreadyExists = self.ddGdb.locked_execute("SELECT ID FROM Command WHERE Type=%s AND Command=%s", parameters = (ddGCmd[FieldNames_.Type], ddGCmd[FieldNames_.Command]))
+        if not alreadyExists:
+            self.ddGdb.insertDict('Command', ddGCmd)
+            ddGCmdID = self.ddGdb.getLastRowID()
+        else:
+            ddGCmdID = alreadyExists[0]["ID"]
+
+        # Protocol 16
+        protocol_name = "Protocol16 3.5.1 (FPP complex) (%s)" % score_function
+        alreadyExists = self.ddGdb.locked_execute("SELECT ID FROM Protocol WHERE ID=%s", parameters = (protocol_name,))
+
+        ddGTool = None
+        ddGDatabaseToolID = None
+        results = self.ddGdb.locked_execute("SELECT ID FROM Tool WHERE Name=%s and GitHash=%s", parameters = ("Rosetta", git_hash))
+        if results:
+            PreMinTool = results[0]["ID"]
+            ddGTool = PreMinTool
+            ddGDatabaseToolID = PreMinTool
+        else:
+            raise Exception("Cannot add protocol %s." % protocol_name)
+
+        print("Inserting %s." % protocol_name)
+        proto = {
+            FieldNames_.ID : protocol_name,
+            FieldNames_.Description : "Protocol 16 from Kellogg, Leaver-Fay, and Baker (%s). Note: This is a hardcoded version designed to run with FPP for Aditya's project." % score_function,
+            FieldNames_.ClassName : "ddG.protocols.LizKellogg.Protocol16Complex",
+            FieldNames_.Publication : "Protocol:LizKelloggProtocol16",
+        }
+        self.ddGdb.insertDictIfNew('Protocol', proto, ['ID'])
+
+        # Create protocol graph
+        pstep = {
+            FieldNames_.ProtocolID : protocol_name,
+            FieldNames_.StepID : "preminimization",
+            FieldNames_.ToolID : PreMinTool,
+            FieldNames_.CommandID : preminCmdID,
+            FieldNames_.DatabaseToolID : PreMinTool,
+            FieldNames_.DirectoryName : "",
+            FieldNames_.ClassName : 'ddG.protocols.LizKellogg.Protocol16v2Preminimization',
+            FieldNames_.Description : "Preminimization step",
+        }
+        self.ddGdb.insertDictIfNew('ProtocolStep', pstep, ['ProtocolID', 'StepID'])
+
+        pstep = {
+            FieldNames_.ProtocolID : protocol_name,
+            FieldNames_.StepID : "ddG",
+            FieldNames_.ToolID : ddGTool,
+            FieldNames_.CommandID : ddGCmdID,
+            FieldNames_.DatabaseToolID : ddGDatabaseToolID,
+            FieldNames_.DirectoryName : "",
+            FieldNames_.ClassName : 'GenericDDGTask',
+            FieldNames_.Description : "ddG step",
+        }
+        self.ddGdb.insertDictIfNew('ProtocolStep', pstep, ['ProtocolID', 'StepID'])
+        pedge = {
+            FieldNames_.ProtocolID : protocol_name,
+            FieldNames_.FromStep : 'preminimization',
+            FieldNames_.ToStep : 'ddG',
+        }
+        self.ddGdb.insertDictIfNew('ProtocolGraphEdge', pedge, ['ProtocolID', 'FromStep', 'ToStep'])
+
+        # Create protocol cleaners
+        for fmask in ['*.cst', '*.out', '*.pdb', '*.mutfile', '*._traj*']:
+            pcleaner ={
+                FieldNames_.ProtocolID : protocol_name,
+                FieldNames_.StepID: 'ddG',
+                FieldNames_.FileMask: fmask,
+                FieldNames_.Operation: 'keep',
+                FieldNames_.Arguments: None,
+            }
+            self.ddGdb.insertDictIfNew('ProtocolCleaner', pcleaner, ['ProtocolID', 'StepID', 'FileMask'])
+        for fmask in ['*.lst', '*.pdb']:
+            pcleaner ={
+                FieldNames_.ProtocolID : protocol_name,
+                FieldNames_.StepID: 'preminimization',
+                FieldNames_.FileMask: fmask,
+                FieldNames_.Operation: 'keep',
+                FieldNames_.Arguments: None,
+            }
+            self.ddGdb.insertDictIfNew('ProtocolCleaner', pcleaner, ['ProtocolID', 'StepID', 'FileMask'])
+
+        # Create protocol parameters
+        pparam = {
+            FieldNames_.ProtocolID : protocol_name,
+            FieldNames_.FromStep : "",
+            FieldNames_.ToStep : 'ddG',
+            FieldNames_.ParameterID: 'mutfile',
+            FieldNames_.Value: None,
+        }
+        self.ddGdb.insertDictIfNew('ProtocolParameter', pparam, ['ProtocolID', 'FromStep', 'ToStep', 'ParameterID'])
+        pparam = {
+            FieldNames_.ProtocolID : protocol_name,
+            FieldNames_.FromStep : "",
+            FieldNames_.ToStep : 'preminimization',
+            FieldNames_.ParameterID: 'in:file:l',
+            FieldNames_.Value: None,
+        }
+        self.ddGdb.insertDictIfNew('ProtocolParameter', pparam, ['ProtocolID', 'FromStep', 'ToStep', 'ParameterID'])
+        pparam = {
+            FieldNames_.ProtocolID : protocol_name,
+            FieldNames_.FromStep : 'preminimization',
+            FieldNames_.ToStep : 'ddG',
+            FieldNames_.ParameterID: 'constraints::cst_file',
+            FieldNames_.Value: None,
+        }
+        self.ddGdb.insertDictIfNew('ProtocolParameter', pparam, ['ProtocolID', 'FromStep', 'ToStep', 'ParameterID'])
+        pparam = {
+            FieldNames_.ProtocolID : protocol_name,
+            FieldNames_.FromStep : 'preminimization',
+            FieldNames_.ToStep : 'ddG',
+            FieldNames_.ParameterID: 'in:file:s',
+            FieldNames_.Value: None,
+        }
+        self.ddGdb.insertDictIfNew('ProtocolParameter', pparam, ['ProtocolID', 'FromStep', 'ToStep', 'ParameterID'])
+
     def insertKelloggLeaverFayBakerProtocols(self):
 
         protocols = [{} for i in range(0,21)]
@@ -3035,3 +3237,4 @@ if __name__ == "__main__":
     #primer.addPDBSources()
     #primer.updateCommand()
     #primer.insertRosettaCon2013Protocols()
+    primer.protocol_16_complex()
