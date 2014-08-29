@@ -297,9 +297,11 @@ class ddG(object):
             predictions = ddGdb.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
 
     def create_PredictionSet(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40):
-        Status = 'halted'
-        if not halted:
+        if halted:
+            Status = 'halted'
+        else:
             Status = 'active'
+
         d = {
             'ID'        : PredictionSetID,
             'Status'    : Status,
@@ -337,42 +339,41 @@ class ddG(object):
         print("")
         return(True)
 
-    def add_predictions_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5):
+    def add_predictions_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True):
         ''' This function adds predictions for all Experiments corresponding to pdb_ID to the specified prediction set.
             This is useful for custom runs e.g. when we are using the DDG scheduler for design rather than for benchmarking.
         '''
         colortext.printf("\nAdding any mutations for this structure which have not been queued/run in the %s prediction set." % PredictionSet, "lightgreen")
 
-        KeepHETATMLines = False
+        KeepHETATMLines = KeepHETATMLines
 
         d = {
             'ID' : PredictionSet,
-            'Status' : 'active',
+            'Status' : status,
             'Priority' : 9,
             'BatchSize' : 40,
             'EntryDate' : datetime.datetime.now(),
         }
-        DDGdb.insertDictIfNew('PredictionSet', d, ['ID'])
+        self.ddGDB.insertDictIfNew('PredictionSet', d, ['ID'])
 
         # Update the priority and activity if necessary
-        DDGdb.execute('UPDATE PredictionSet SET Status=%s AND Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
+        self.ddGDB.execute('UPDATE PredictionSet SET Status=%s AND Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
 
         # Determine the set of experiments to add
-        ExperimentIDs = set([r['ID'] for r in DDGdb.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
-        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in DDGdb.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
+        ExperimentIDs = set([r['ID'] for r in self.ddGDB.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
+        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in self.ddGDB.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
         experiment_IDs_to_add = sorted(ExperimentIDs.difference(ExperimentIDsInPredictionSet))
 
         if experiment_IDs_to_add:
             colortext.printf("\nAdding %d jobs to the prediction set." % len(experiment_IDs_to_add), "lightgreen")
-
             for experiment_ID in experiment_IDs_to_add:
                 colortext.write('.', "lightgreen")
-                ddG_connection.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True)
+                self.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True, strip_other_chains = strip_other_chains)
         else:
             colortext.printf("\nAll jobs are already in the queue or have been run.", "lightgreen")
         print('')
 
-    def addPrediction(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False):
+    def addPrediction(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True):
         '''This function inserts a prediction into the database.
             The parameters define:
                 the experiment we are running the prediction for;
@@ -429,7 +430,10 @@ class ddG(object):
 
             # Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
             chains = [result['Chain'] for result in self.ddGDB.call_select_proc("GetChains", parameters = parameters)]
-            pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
+            if strip_other_chains:
+                pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
+            else:
+                pdb.stripForDDG(True, KeepHETATMLines, numberOfModels = 1)
 
             # - Post stripping checks -
             # Get the 'Chain ResidueID' PDB-formatted identifier for each mutation mapped to Rosetta numbering
@@ -867,3 +871,4 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def write_pymol_session(download_dir, PredictionID, task_number, keep_files = True):
         PSE_file = create_pymol_session(download_dir, PredictionID, task_number, keep_files = keep_files)
         write_file(output_filepath, PSE_file[0], 'wb')
+
