@@ -17,7 +17,6 @@ import pickle
 import md5
 import random
 import datetime
-from io import BytesIO
 import zipfile
 
 try:
@@ -37,7 +36,7 @@ from tools.bio.basics import residue_type_3to1_map as aa1
 from tools.bio.basics import Mutation
 from tools.bio.alignment import ScaffoldModelChainMapper
 #from Bio.PDB import *
-from tools.fs.io import write_file
+from tools.fs.io import write_file, read_file
 from tools.process import Popen
 from tools import colortext
 #import analysis
@@ -217,6 +216,7 @@ class ddG(object):
     def add_pdb_file(self, filepath, pdb_id):
         #todo: use either this or addPDBtoDatabase but not both
 
+        existing_pdb = self.ddGDB.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))
         if not existing_pdb:
             pdb_contents = read_file(filepath)
             p = PDB(pdb_contents)
@@ -345,8 +345,6 @@ class ddG(object):
         '''
         colortext.printf("\nAdding any mutations for this structure which have not been queued/run in the %s prediction set." % PredictionSet, "lightgreen")
 
-        KeepHETATMLines = KeepHETATMLines
-
         d = {
             'ID' : PredictionSet,
             'Status' : status,
@@ -366,9 +364,13 @@ class ddG(object):
 
         if experiment_IDs_to_add:
             colortext.printf("\nAdding %d jobs to the prediction set." % len(experiment_IDs_to_add), "lightgreen")
+            count = 0
             for experiment_ID in experiment_IDs_to_add:
                 colortext.write('.', "lightgreen")
                 self.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True, strip_other_chains = strip_other_chains)
+                count +=1
+                #if count >= 1:
+                #    sys.exit(0)
         else:
             colortext.printf("\nAll jobs are already in the queue or have been run.", "lightgreen")
         print('')
@@ -428,6 +430,10 @@ class ddG(object):
             #checkPDBAgainstMutations(pdbID, pdb, mutations)
             pdb.validate_mutations(mutation_objects)
 
+            #for mutation in mutations:
+            #    if experimentPDB_ID == "ub_OTU":
+            #        mutation['ResidueID'] = str(int(mutation['ResidueID']) + 172)
+
             # Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
             chains = [result['Chain'] for result in self.ddGDB.call_select_proc("GetChains", parameters = parameters)]
             if strip_other_chains:
@@ -435,6 +441,7 @@ class ddG(object):
             else:
                 pdb.stripForDDG(True, KeepHETATMLines, numberOfModels = 1)
 
+            #print('\n'.join(pdb.lines))
             # - Post stripping checks -
             # Get the 'Chain ResidueID' PDB-formatted identifier for each mutation mapped to Rosetta numbering
             # then check again that the mutated positions exist and that the wild-type matches the PDB
@@ -599,6 +606,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def create_abacus_graph(self, graph_title, labels, data, scoring_method, scoring_type):
         '''Even though this is technically a scatterplot, I call this an abacus graph because it is basically a bunch of beads on lines.'''
 
+        from io import BytesIO
         if plt:
             assert(data)
 
@@ -836,6 +844,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         '''Create a PyMOL session for a pair of structures.
         '''
         # todo: This should replace create_pymol_session since creating a PyMOL session should be a separate task from extracting an archive. write_pymol_session should be changed to use this function
+
+        from io import BytesIO
 
         # Retrieve and unzip results
         archive = self.getData(PredictionID)

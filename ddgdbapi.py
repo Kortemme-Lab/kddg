@@ -865,13 +865,15 @@ class ExperimentDefinition(DBObject):
     def addMutation(self, mutation, ID = None):
         errors = []
         residueID = ("%s" % mutation.ResidueID).strip()
+
         if not mutation.Chain in AllowedChainLetters:
             errors.append("The chain '%s' is invalid." % mutation.Chain)
         if not mutation.WildTypeAA in AllowedAminoAcids:
             errors.append("The wildtype amino acid '%s' is invalid." % mutation.WildTypeAA)
         if not mutation.MutantAA in AllowedAminoAcids:
             errors.append("The mutant amino acid '%s' is invalid." % mutation.MutantAA)
-        residueID = mutation.ResidueID
+
+        #residueID = mutation.ResidueID
         if not residueID.isdigit():
             if not residueID[0:-1].isdigit():
                 errors.append("The residue '%s' is invalid." % residueID)
@@ -910,12 +912,12 @@ class ExperimentDefinition(DBObject):
         ExperimentIDsWithMatchingMutations = {}
         mymutations = []
         for mutation in self.mutations:
-            mymutations.append((mutation.Chain.upper(), mutation.ResidueID.upper(), mutation.WildTypeAA.upper(), mutation.MutantAA.upper()))
+            mymutations.append((mutation.Chain.upper(), mutation.ResidueID.strip().upper(), mutation.WildTypeAA.upper(), mutation.MutantAA.upper()))
         mymutations = sorted(mymutations)
         for r in results:
             ExperimentID = r[FieldNames.Experiment.ID]
             groupedresults[ExperimentID] = groupedresults.get(ExperimentID, [])
-            groupedresults[ExperimentID].append((r['Chain'].upper(), r['ResidueID'].upper(), r['WildTypeAA'].upper(), r['MutantAA'].upper()))
+            groupedresults[ExperimentID].append((r['Chain'].upper(), r['ResidueID'].strip().upper(), r['WildTypeAA'].upper(), r['MutantAA'].upper()))
 
         for ExperimentID, dbmutations in groupedresults.iteritems():
             if sorted(dbmutations) == mymutations:
@@ -1053,7 +1055,7 @@ class ExperimentDefinition(DBObject):
             for resid, wtaa in sorted(wildtype_pdb.get_residue_id_to_type_map().iteritems()):
                 c = resid[0]
                 resnum = resid[1:].strip()
-                if mutation.Chain == c and mutation.ResidueID == resnum:
+                if mutation.Chain == c and mutation.ResidueID.strip() == resnum:
                     if mutation.WildTypeAA == wtaa:
                         foundMatch = True
                     else:
@@ -1072,7 +1074,7 @@ class ExperimentDefinition(DBObject):
                 for resid, mutantaa in sorted(mutant_pdb.get_residue_id_to_type_map().iteritems()):
                     c = resid[0]
                     resnum = resid[1:].strip()
-                    if mutation.Chain == c and mutation.ResidueID == resnum:
+                    if mutation.Chain == c and mutation.ResidueID.strip() == resnum:
                         if mutation.MutantAA == mutantaa:
                             foundMatch = True
                         else:
@@ -1088,7 +1090,7 @@ class ExperimentDefinition(DBObject):
         # Sanity check that the chain information is correct (ProTherm has issues)
         # todo: this was the old code chainsInPDB = WildTypeStructure.chains
         chainsInPDB = wildtype_pdb.atom_chain_order
-
+        print(chainsInPDB)
         if not chainsInPDB:
             raise Exception("The chains for %s were not read in properly." % associatedRecordsStr)
         for c in self.chains:
@@ -1183,7 +1185,7 @@ class ExperimentDefinition(DBObject):
                     d = {
                         emFieldNames.ExperimentID				: ExperimentID,
                         emFieldNames.Chain 						: mutation.Chain,
-                        emFieldNames.ResidueID					: mutation.ResidueID,
+                        emFieldNames.ResidueID					: mutation.ResidueID.strip(),
                         emFieldNames.WildTypeAA					: mutation.WildTypeAA,
                         emFieldNames.MutantAA					: mutation.MutantAA,
                         emFieldNames.SecondaryStructurePosition	: mutation.SecondaryStructurePosition,
