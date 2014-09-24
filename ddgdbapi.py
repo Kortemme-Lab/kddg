@@ -1688,7 +1688,7 @@ class DataSet(DBObject):
         IDfield = FieldNames.DataSet.ID
         DataSetID = None
         try:
-            DataSetID = self.ddGdb.insertDictIfNew(FieldNames.DataSet._name, d, IDfield)[1][IDfield]
+            DataSetID = self.ddGdb.insertDictIfNew(FieldNames.DataSet._name, d, [IDfield])[1][IDfield]
         except Exception, e:
             raise Exception("\nError committing DataSet to database.\n***\n%s\n%s\n***" % (self, str(e)))
 
@@ -1727,9 +1727,97 @@ class DataSet(DBObject):
         return dict_[key]
 
 
+class Publicationv2(DBObject):
+
+    def __init__(self, ddGdb, ris_contents, PubMedID = None, DOI = None, DDGUnit = None, DDGConvention = None, Notes = None, DGNotes = None, DGUnitUsedInProTherm = None, DDGProThermSignNotes = None, DDGValuesNeedToBeChecked = None):
+
+        self.ddGdb = ddGdb
+        if not ddGdb.use_utf:
+            raise Exception("This database was opened without specifying UTF-8 as a connection parameter. A UTF-8 connection should be used when dealing with RIS records. Add 'use_utf = True' to the constructor for %s to enable UTF-8 connection mode." % self.__class__)
+
+        self.PublicationID = None
+        if PubMedID:
+            self.PublicationID = PubMedID
+            if not (self.PublicationID.startswith('PMID:')):
+                self.PublicationID = 'PMID:%s' % PubMedID
+        else:
+            raise Exception('Add cases for other types of ID.')
+
+        self.entry_details = None
+        entry = RISEntry(ris_contents)
+        entry_details = entry.to_dict()
+        self.entry_details = entry_details
+
+        publication_details = {
+            'ID' : self.PublicationID,
+            'DGUnit' : DDGUnit,
+            'DDGConvention' : DDGConvention,
+            'Notes' : Notes,
+            'DGNotes' : DGNotes,
+            'DGUnitUsedInProTherm' : DGUnitUsedInProTherm,
+            'DDGProThermSignNotes' : DDGProThermSignNotes,
+            'DDGValuesNeedToBeChecked' : DDGValuesNeedToBeChecked,
+            'RIS' : ris_contents,
+            'Title' : entry_details['Title'],
+            'Publication' : entry_details['PublicationName'],
+            'Volume' : entry_details['Volume'],
+            'Issue' : entry_details['Issue'],
+            'StartPage' : entry_details['StartPage'],
+            'EndPage' : entry_details['EndPage'],
+            'PublicationYear' : entry_details['PublicationYear'],
+            'PublicationDate' : entry_details['PublicationDate'],
+            'DOI' : entry_details['DOI'],
+            'URL' : entry_details['URL'],
+        }
+        publication_ids = []
+        doi_value = DOI or entry_details['DOI']
+        if doi_value:
+            publication_ids.append({
+                'SourceID' : self.PublicationID,
+                'ID' : doi_value,
+                'Type' : 'DOI'
+            })
+
+        pubmed_id = PubMedID or entry_details['PubMedID']
+        if pubmed_id:
+            publication_ids.append({
+                'SourceID' : self.PublicationID,
+                'ID' : pubmed_id,
+                'Type' : 'PMID'
+            })
+
+        authors = []
+        for a in entry_details['authors']:
+            authors.append({
+                'PublicationID' : self.PublicationID,
+                'AuthorOrder' : a['AuthorOrder'],
+                'FirstName' : a['FirstName'],
+                'MiddleNames' : a['MiddleNames'],
+                'Surname' : a['Surname'],
+            })
+
+        self.publication_details = publication_details
+        self.authors = authors
+        self.publication_ids = publication_ids
+
+
+    def commit(self):
+        ddGdb = self.ddGdb
+        results = ddGdb.execute_select("SELECT * FROM Publication WHERE ID=%s", parameters=(self.PublicationID,))
+        if results:
+            ddGdb.execute('UPDATE Publication SET PublicationDate=%s WHERE ID=%s', parameters=(self.entry_details['PublicationDate'], self.PublicationID,))
+        else:
+            ddGdb.insertDictIfNew('Publication', self.publication_details, ['ID'])
+            for author_details in self.authors:
+                ddGdb.insertDictIfNew('PublicationAuthor', author_details, ['PublicationID', 'AuthorOrder'])
+            for id_details in self.publication_ids:
+                ddGdb.insertDictIfNew('PublicationIdentifier', id_details, ['SourceID', 'ID'])
+
+
 class Publication(DBObject):
 
     def __init__(self, ddGdb, ID, DDGUnit = None, DDGConvention = None, Notes = None, DGNotes = None, DGUnitUsedInProTherm = None, DDGProThermSignNotes = None, DDGValuesNeedToBeChecked = None, RIS = None):
+        raise Exception('deprecated - use Publicationv2 instead')
         self.ddGdb = ddGdb
         FieldNames = ddGdb.FieldNames.Source
         self.dict = {
@@ -2193,43 +2281,8 @@ END
         self._add_protein_residues(UniParcID, False)
 
     def fill_in_publication_information(self, PublicationID):
-        if not self.use_utf:
-            raise Exception("This database was opened without specifying UTF-8 as a connection parameter. A UTF-8 connection should be used when dealing with RIS records. Add 'use_utf = True' to the constructor for %s to enable UTF-8 connection mode." % self.__class__)
-        results = self.execute_select("SELECT * FROM Publication WHERE ID=%s", parameters=(PublicationID,))
-        if results:
-            assert(len(results) == 1)
-            r = results[0]
-            if r['RIS']:
-                #print(r['RIS'])
-                try:
-                    ris = RISEntry(r['RIS'])
-                except Exception, e:
-                    raise DatabaseBadDataException('Publication', '\nRIS parsing failed on Publication with ID "%s". Error: "%s"\nTrace:\n%s\n\nSELECT * FROM Publication WHERE ID="%s"' % (PublicationID, str(e), traceback.format_exc(), PublicationID))
+        raise Exception('This function was folded into the Publication object')
 
-                if ris.errors:
-                    raise Exception("Errors occurred during parsing: %s" % str(ris.errors))
-                assert(ris.format(html=False))
-                self.execute('UPDATE Publication SET Title=%s, Publication=%s, Volume=%s, Issue=%s, StartPage=%s, EndPage=%s, PublicationYear=%s, PublicationDate=%s, DOI=%s, URL=%s WHERE ID=%s',
-                        parameters=(ris.title, ris.journal, ris.volume, ris.issue, ris.startpage, ris.endpage, ris.year, ris.date, ris.doi, ris.url, PublicationID))
-
-                for a in ris.authors:
-                    assert(type(a['MiddleNames']) == type([]))
-                    d = {
-                        'PublicationID' : PublicationID,
-                        'AuthorOrder' : a['AuthorOrder'],
-                        'FirstName' : a['FirstName'],
-                        'MiddleNames' : " ".join(a['MiddleNames']),
-                        'Surname' : a['Surname'],
-                    }
-                    self.insertDictIfNew('PublicationAuthor', d, ['PublicationID', 'AuthorOrder'])
-
-                    # Update the fields e.g. when we fix RISs with bad characters (one which were created before the switch to Unicode)
-                    self.execute('UPDATE PublicationAuthor SET PublicationID=%s, AuthorOrder=%s, FirstName=%s, MiddleNames=%s, Surname=%s WHERE PublicationID=%s',
-                            parameters=(PublicationID, a['AuthorOrder'], a['FirstName'], " ".join(a['MiddleNames']), a['Surname']))
-            else:
-                return False
-        else:
-            raise DatabaseMissingKeyException('ID', Publication)
 
 
 
