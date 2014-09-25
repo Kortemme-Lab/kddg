@@ -187,8 +187,7 @@ class ddG(object):
 
         #score.ddgTestScore
 
-    def addPDBtoDatabase(self, filepath = None, pdbID = None, protein = None, source = None, UniProtAC = None, UniProtID = None, testonly = False):
-        #todo: use either this or add_pdb_file but not both
+    def add_PDB_to_database(self, filepath = None, pdbID = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False):
         if filepath:
             if not os.path.exists(filepath):
                 raise Exception("The file %s does not exist." % filepath)
@@ -200,14 +199,17 @@ class ddG(object):
             rootname = pdbID
 
         try:
-            Structure = ddgdbapi.PDBStructure(self.ddGDB, rootname, protein = protein, source = source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly)
+            dbp = ddgdbapi.PDBStructure(self.ddGDB, rootname, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly)
             #Structure.getPDBContents(self.ddGDB)
-            sql = ("SELECT PDB_ID FROM Structure WHERE %s=" % dbfields.PDB_ID) + "%s"
-            results = self.ddGDB.execute_select(sql, parameters = (rootname,))
+            results = self.ddGDB.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters = (rootname,))
             if results:
                 #ddgdbapi.getUniProtMapping(pdbID, storeInDatabase = True)
-                raise Exception("There is already a structure in the database with the ID %s." % rootname)
-            Structure.commit(self.ddGDB, testonly = testonly)
+                #raise Exception("There is already a structure in the database with the ID %s." % rootname)
+                if force:
+                    dbp.commit(testonly = testonly)
+                return None
+            dbp.commit(testonly = testonly)
+            return rootname
         except Exception, e:
             colortext.error(str(e))
             colortext.error(traceback.format_exc())
@@ -215,7 +217,7 @@ class ddG(object):
 
     def add_pdb_file(self, filepath, pdb_id):
         #todo: use either this or addPDBtoDatabase but not both
-
+        raise Exception('deprecated in favor of addPDBtoDatabase')
         existing_pdb = self.ddGDB.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))
         if not existing_pdb:
             pdb_contents = read_file(filepath)
