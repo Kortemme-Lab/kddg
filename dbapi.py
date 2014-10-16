@@ -10,6 +10,7 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 
 import os
 import string
+import re
 import shutil
 import glob
 import traceback
@@ -38,6 +39,7 @@ from tools.bio.alignment import ScaffoldModelChainMapper
 #from Bio.PDB import *
 from tools.fs.io import write_file, read_file
 from tools.process import Popen
+from tools.constants import rosetta_weights
 from tools import colortext
 #import analysis
 #from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet
@@ -884,6 +886,125 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         except Exception, e:
             zipped_content.close()
             raise Exception(str(e))
+
+
+    def extract_job_stdout_from_archive(self, PredictionID):
+        '''Extract all stdout files from a Prediction. This function returns a dict mapping the type of output file to the contents of the file.'''
+
+        from io import BytesIO
+
+        # Retrieve and unzip results
+        archive = self.getData(PredictionID)
+        zipped_content = zipfile.ZipFile(BytesIO(archive), 'r', zipfile.ZIP_DEFLATED)
+
+        try:
+            stdout_file_names = {}
+            stdout_file_list = [l for l in sorted(zipped_content.namelist()) if (l.find('cmd.o') != -1)]
+            for f in stdout_file_list:
+                tokens = os.path.split(f)
+                assert(tokens[0].isdigit())
+                title = tokens[1].split('_')[0]
+                assert(stdout_file_names.get(title) == None)
+                stdout_file_names[title] = f
+
+            stdout_files = {}
+            for stdout_type, filename in stdout_file_names.iteritems():
+                stdout_files[stdout_type] = zipped_content.open(filename, 'r').read()
+
+            zipped_content.close()
+            return stdout_files
+
+        except Exception, e:
+            zipped_content.close()
+            raise Exception(str(e))
+
+
+    def get_ddg_monomer_scores_per_structure(self, PredictionID):
+        '''Returns a dict mapping the DDG scores from a ddg_monomer run to a list of structure numbers.'''
+
+        import json
+
+        # Get the ddg_monomer output for the prediction
+        stdout = self.extract_job_stdout_from_archive(PredictionID)['ddG']
+
+        # Parse the stdout into two mappings (one for wildtype structures, one for mutant structures) mapping
+        # structure IDs to a dict containing the score components
+        wildtype_scores = {}
+        mutant_scores = {}
+        s1 = 'score before mutation: residue'
+        s1_len = len(s1)
+        s2 = 'score after mutation: residue'
+        s2_len = len(s2)
+        for line in stdout.split('\n'):
+            idx = line.find(s1)
+            if idx != -1:
+                idx += s1_len
+                mtchs = re.match('.*?(\d+) %s' % s1, line)
+                structure_id = int(mtchs.group(1))
+                assert(structure_id not in wildtype_scores)
+                tokens = line[idx:].split()
+                d = {'total' : float(tokens[0])}
+                for x in range(1, len(tokens), 2):
+                    component_name = tokens[x].replace(':', '')
+                    assert(rosetta_weights.get(component_name))
+                    component_value = float(tokens[x + 1])
+                    d[component_name] = component_value
+                wildtype_scores[structure_id] = d
+            else:
+                idx = line.find(s2)
+                if idx != -1:
+                    idx += s2_len
+                    mtchs = re.match('.*?(\d+) %s' % s2, line)
+                    structure_id = int(mtchs.group(1))
+                    assert(structure_id not in mutant_scores)
+                    tokens = line[idx:].split()
+                    d = {'total' : float(tokens[1])}
+                    for x in range(2, len(tokens), 2):
+                        component_name = tokens[x].replace(':', '')
+                        assert(rosetta_weights.get(component_name))
+                        component_value = float(tokens[x + 1])
+                        d[component_name] = component_value
+                    mutant_scores[structure_id] = d
+
+        # Sanity checks
+        num_structures = max(wildtype_scores.keys())
+        expected_keys = set(range(1, num_structures + 1))
+        assert(expected_keys == set(wildtype_scores.keys()))
+        assert(expected_keys == set(mutant_scores.keys()))
+
+        # Create a list of lists - MutantScoreOrder - of structure IDs e.g. [[5,1,34], [23], [12,3], ...] which is ordered
+        # by increasing energy so that each sublist contains structure IDs of equal energy and if structures have the same
+        # energy then their IDs are in the same sublist
+        d = {}
+        for structure_id, scores in sorted(mutant_scores.iteritems()):
+            d[scores['total']] = d.get(scores['total'], [])
+            d[scores['total']].append(structure_id)
+        MutantScoreOrder = []
+        for score, structure_ids in sorted(d.iteritems()):
+            MutantScoreOrder.append(structure_ids)
+
+        # Sanity check - make sure that MutantScoreOrder is really ordered such that each set of structure IDs contains
+        # structures of the same energy and of a lower energy than the following set of structure IDs in the list
+        for x in range(len(MutantScoreOrder) - 1):
+            s1 = set([mutant_scores[n]['total'] for n in MutantScoreOrder[x]])
+            assert(len(s1) == 1)
+            if x + 1 < len(MutantScoreOrder):
+                s2 = set([mutant_scores[n]['total'] for n in MutantScoreOrder[x + 1]])
+                assert(len(s2) == 1)
+                assert(s1.pop() < s2.pop())
+
+        return dict(
+            data = dict(
+                kellogg = dict(
+                    total = dict(
+                        WildType = wildtype_scores,
+                        Mutant = mutant_scores,
+                        MutantScoreOrder = MutantScoreOrder,
+                    )
+                )
+            )
+        )
+
 
     def write_pymol_session(download_dir, PredictionID, task_number, keep_files = True):
         PSE_file = create_pymol_session(download_dir, PredictionID, task_number, keep_files = keep_files)
