@@ -994,16 +994,28 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 assert(s1.pop() < s2.pop())
 
         return dict(
-            data = dict(
-                kellogg = dict(
-                    total = dict(
-                        WildType = wildtype_scores,
-                        Mutant = mutant_scores,
-                        MutantScoreOrder = MutantScoreOrder,
-                    )
-                )
-            )
+            WildType = wildtype_scores,
+            Mutant = mutant_scores,
+            MutantScoreOrder = MutantScoreOrder,
         )
+
+
+    def determine_best_pair(self, PredictionID, ScoreMethodID = 1):
+        # Iterates over the (wildtype, mutant) pairs in the PredictionStructureScore table and returns the structure ID
+        # for the pair with the lowest energy mutant
+        # Note: There are multiple ways to select the best pair. For example, if multiple mutants have the same minimal total
+        # score, we could have multiple wildtype structures to choose from. In this case, we choose a pair where the wildtype
+        # structure has the minimal total score.
+
+        lowest_mutant_score = self.ddGDB.execute_select('SELECT total FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" ORDER BY total LIMIT 1', parameters=(PredictionID, ScoreMethodID))
+        if lowest_mutant_score:
+            lowest_mutant_score = lowest_mutant_score[0]['total']
+            mutant_structure_ids = [r['StructureID'] for r in self.ddGDB.execute_select('SELECT StructureID FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" AND total=%s', parameters=(PredictionID, ScoreMethodID, lowest_mutant_score))]
+            if len(mutant_structure_ids) > 1:
+                return self.ddGDB.execute_select(('SELECT StructureID FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="WildType" AND StructureID IN (' + ','.join(map(str, mutant_structure_ids)) + ') ORDER BY total LIMIT 1'), parameters=(PredictionID, ScoreMethodID ))[0]['StructureID']
+            else:
+                return mutant_structure_ids[0]
+        return None
 
 
     def write_pymol_session(download_dir, PredictionID, task_number, keep_files = True):
