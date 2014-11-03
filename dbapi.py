@@ -63,6 +63,7 @@ class ddG(object):
     def __init__(self, passwd = None, username = 'kortemmelab'):
         self.ddGDB = ddgdbapi.ddGDatabase(passwd = passwd, username = username)
         self.ddGDataDB = ddgdbapi.ddGPredictionDataDatabase(passwd = passwd, username = username)
+        self.prediction_data_path = self.ddGDB.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
 
     def __del__(self):
         pass
@@ -115,15 +116,9 @@ class ddG(object):
             raise Exception("An error occurred creating a mutfile for the ddG job.")
 
     def getData(self, predictionID):
-        results = self.ddGDataDB.execute_select("SELECT * FROM PredictionData WHERE ID=%s", parameters = (predictionID,))
-        if results:
-            assert(len(results) == 1)
-            return results[0]["Data"]
-        else:
-            prediction_data_path = self.ddGDB.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
-            job_data_path = os.path.join(prediction_data_path, '%d.zip' % predictionID)
-            if os.path.exists(job_data_path):
-                return read_file(job_data_path, binary = True)
+        job_data_path = os.path.join(self.prediction_data_path, '%d.zip' % predictionID)
+        if os.path.exists(job_data_path):
+            return read_file(job_data_path, binary = True)
 
     def getPublications(self, result_set):
         if result_set:

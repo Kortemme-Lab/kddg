@@ -1891,30 +1891,6 @@ class Publication(DBObject):
         return dict_[key]
 
 
-class ddGPredictionDataDatabase(DatabaseInterface):
-
-    def __init__(self, passwd = None, username = 'kortemmelab', use_utf=False):
-        if not passwd:
-            if os.path.exists("pw"):
-                F = open("pw")
-                passwd = F.read().strip()
-                F.close()
-            else:
-                passwd = getpass.getpass("Enter password to connect to MySQL database:")
-        self.passwd = passwd
-
-        super(ddGPredictionDataDatabase, self).__init__({},
-            isInnoDB = True,
-            numTries = 32,
-            host = "kortemmelab.ucsf.edu",
-            db = "ddGPredictionData",
-            user = username,
-            passwd = passwd,
-            port = 3306,
-            unix_socket = "/var/lib/mysql/mysql.sock",
-            use_utf = use_utf)
-
-
 class DatabaseMissingKeyException(Exception):
     def __init__(self, key, tbl):
         self.missing_key = key
