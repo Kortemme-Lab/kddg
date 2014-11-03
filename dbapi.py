@@ -187,7 +187,8 @@ class ddG(object):
 
         #score.ddgTestScore
 
-    def add_PDB_to_database(self, filepath = None, pdbID = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False):
+    def add_PDB_to_database(self, filepath = None, pdbID = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False, techniques = None):
+        assert(file_source)
         if filepath:
             if not os.path.exists(filepath):
                 raise Exception("The file %s does not exist." % filepath)
@@ -195,11 +196,11 @@ class ddG(object):
             rootname, extension = os.path.splitext(filename)
             if not extension.lower() == ".pdb":
                 raise Exception("Aborting: The file does not have a .pdb extension.")
-        elif pdbID:
+        if pdbID:
             rootname = pdbID
 
         try:
-            dbp = ddgdbapi.PDBStructure(self.ddGDB, rootname, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly)
+            dbp = ddgdbapi.PDBStructure(self.ddGDB, rootname, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques)
             #Structure.getPDBContents(self.ddGDB)
             results = self.ddGDB.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters = (rootname,))
             if results:
@@ -216,8 +217,8 @@ class ddG(object):
             raise Exception("An exception occurred committing %s to the database." % filepath)
 
     def add_pdb_file(self, filepath, pdb_id):
-        #todo: use either this or addPDBtoDatabase but not both
-        raise Exception('deprecated in favor of addPDBtoDatabase')
+        #todo: use either this or add_PDB_to_database but not both
+        raise Exception('deprecated in favor of add_PDB_to_database')
         existing_pdb = self.ddGDB.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))
         if not existing_pdb:
             pdb_contents = read_file(filepath)
@@ -350,14 +351,14 @@ class ddG(object):
         d = {
             'ID' : PredictionSet,
             'Status' : status,
-            'Priority' : 9,
+            'Priority' : priority,
             'BatchSize' : 40,
             'EntryDate' : datetime.datetime.now(),
         }
         self.ddGDB.insertDictIfNew('PredictionSet', d, ['ID'])
 
         # Update the priority and activity if necessary
-        self.ddGDB.execute('UPDATE PredictionSet SET Status=%s AND Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
+        self.ddGDB.execute('UPDATE PredictionSet SET Status=%s, Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
 
         # Determine the set of experiments to add
         ExperimentIDs = set([r['ID'] for r in self.ddGDB.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])

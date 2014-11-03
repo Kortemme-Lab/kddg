@@ -18,7 +18,7 @@ from tools.db.mysql import DatabaseInterface
 from tools.fs.io import read_file, write_file
 from tools.bio import rcsb
 from tools import colortext
-from tools.bio.pdb import PDB
+from tools.bio.pdb import PDB, MissingRecordsException
 from tools.bio.basics import relaxed_residue_types_1 as relaxed_amino_acid_codes
 from tools.hash import CRC64
 from tools.biblio.ris import RISEntry
@@ -279,7 +279,7 @@ def getUniProtMapping(pdbIDs, storeInDatabase = False, ddGdb = None):
                 colortext.message("success")
                 return (ACtoID_mapping, PDBtoAC_mapping)
             except UPFatalException, e:
-                raise(str(e).strip())
+                raise Exception(str(e).strip())
             except Exception, e:
                 emsg = str(e).strip()
                 if emsg and emsg.startswith("HTTP Error 500"):
@@ -347,9 +347,8 @@ class PDBStructure(DBObject):
     # At the time of writing, these PDB IDs had no JRNL lines
     NoPublicationData = ['2FX5']
 
-    def __init__(self, ddGdb, pdb_id, content = None, protein = None, file_source = None, filepath = None, UniProtAC = None, UniProtID = None, testonly = False):
+    def __init__(self, ddGdb, pdb_id, content = None, protein = None, file_source = None, filepath = None, UniProtAC = None, UniProtID = None, testonly = False, techniques = None):
         '''UniProtACs have forms like 'P62937' whereas UniProtIDs have forms like 'PPIA_HUMAN.'''
-
         super(PDBStructure, self).__init__(ddGdb)
         self.dict = dict(
             ID = pdb_id,
@@ -357,7 +356,7 @@ class PDBStructure(DBObject):
             Content = content,
             FASTA = None,
             Resolution = None,
-            Techniques = None,
+            Techniques = techniques,
             BFactors = None,
             Publication =  None,
         )
@@ -414,12 +413,13 @@ class PDBStructure(DBObject):
         # Resolution
         self.dict['Resolution'] = pdb_object.get_resolution()
         if not self.dict['Resolution']:
-            raise Exception("Could not determine resolution for %s." % filename)
+            colortext.error("Could not determine resolution for %s." % self.filepath)
+            #raise Exception("Could not determine resolution for %s." % filename)
         if self.dict['Resolution'] == "N/A":
             self.dict['Resolution'] = None
 
         # Techniques
-        self.dict['Techniques'] = pdb_object.get_techniques()
+        self.dict['Techniques'] = pdb_object.get_techniques() or self.dict['Techniques']
 
         # FASTA
         self.dict['FASTA'] = pdb_object.create_fasta()
@@ -435,9 +435,13 @@ class PDBStructure(DBObject):
             read_UniProt_map(self.ddGdb)
             if not PDBToUniProt.get(pdb_id):
                 if not (self.UniProtAC and self.UniProtID):
-                    ACtoID_mapping, PDBtoAC_mapping = getUniProtMapping(pdb_id, storeInDatabase = False, ddGdb = self.ddGdb)
-                    if not (PDBtoAC_mapping and ACtoID_mapping):
-                        raise Exception("Could not find a UniProt mapping for %s in %s." % (pdb_id, uniprotmapping))
+                    ACtoID_mapping, PDBtoAC_mapping = None, None
+                    try:
+                        getUniProtMapping(pdb_id, storeInDatabase = False, ddGdb = self.ddGdb)
+                        if not (PDBtoAC_mapping and ACtoID_mapping):
+                            raise Exception("Could not find a UniProt mapping for %s in %s." % (pdb_id, uniprotmapping))
+                    except:
+                        colortext.error("Could not find a UniProt mapping for %s in %s." % (pdb_id, uniprotmapping))
                     self.ACtoID_mapping = ACtoID_mapping
                     self.PDBtoAC_mapping = PDBtoAC_mapping
 
@@ -465,52 +469,53 @@ class PDBStructure(DBObject):
 
         p = PDB(d['Content'].split("\n"))
         j = p.get_journal()
-        pdbID = d['ID'].strip()
+        if j:
+            pdbID = d['ID'].strip()
 
-        # We identify the sources for a PDB identifier with that identifier
-        PublicationID = "PDB:%s" % pdbID
-        sourceExists = self.ddGdb.locked_execute("SELECT ID FROM Publication WHERE ID=%s", parameters=(PublicationID,))
-        if not sourceExists:
-            if not self.testonly:
-                self.ddGdb.insertDict('Publication', {'ID' : PublicationID})
+            # We identify the sources for a PDB identifier with that identifier
+            PublicationID = "PDB:%s" % pdbID
+            sourceExists = self.ddGdb.locked_execute("SELECT ID FROM Publication WHERE ID=%s", parameters=(PublicationID,))
+            if not sourceExists:
+                if not self.testonly:
+                    self.ddGdb.insertDict('Publication', {'ID' : PublicationID})
 
-        d['Publication'] = PublicationID
+            d['Publication'] = PublicationID
 
-        locations = self.ddGdb.locked_execute("SELECT * FROM PublicationIdentifier WHERE SourceID=%s", parameters=(PublicationID,))
-        publocations = [location for location in locations if location['Type'] in PUBTYPES]
-        doilocations = [location for location in locations if location['Type'] == "DOI"]
-        assert(len(publocations) <= 1)
-        assert(len(doilocations) <= 1)
-        if j["published"]:
-            skip = False
-            if publocations:
-                location = publocations[0]
-                if j["REFN"]["type"] == location['Type']:
-                    if j["REFN"]["ID"] != location['ID']:
-                        colortext.warning("REFN: Check that the PublicationIdentifier data ('%s') matches the PDB REFN data ('%s')." % (str(location), j["REFN"]))
-            else:
-                if j.get('REFN'):
-                    assert(j["REFN"]["type"] in PUBTYPES)
-                    source_location_dict = dict(
+            locations = self.ddGdb.locked_execute("SELECT * FROM PublicationIdentifier WHERE SourceID=%s", parameters=(PublicationID,))
+            publocations = [location for location in locations if location['Type'] in PUBTYPES]
+            doilocations = [location for location in locations if location['Type'] == "DOI"]
+            assert(len(publocations) <= 1)
+            assert(len(doilocations) <= 1)
+            if j["published"]:
+                skip = False
+                if publocations:
+                    location = publocations[0]
+                    if j["REFN"]["type"] == location['Type']:
+                        if j["REFN"]["ID"] != location['ID']:
+                            colortext.warning("REFN: Check that the PublicationIdentifier data ('%s') matches the PDB REFN data ('%s')." % (str(location), j["REFN"]))
+                else:
+                    if j.get('REFN'):
+                        assert(j["REFN"]["type"] in PUBTYPES)
+                        source_location_dict = dict(
+                            SourceID	= PublicationID,
+                            ID			= j["REFN"]["ID"],
+                            Type		= j["REFN"]["type"],
+                        )
+                        if not self.testonly:
+                            self.ddGdb.insertDict('PublicationIdentifier', source_location_dict)
+            if j["DOI"]:
+                if doilocations:
+                    location = doilocations[0]
+                    if j["DOI"] != location['ID']:
+                        colortext.warning("DOI: Check that the PublicationIdentifier data ('%s') matches the PDB DOI data ('%s')." % (str(doilocations), j["DOI"]))
+                else:
+                    source_location_dict = dict (
                         SourceID	= PublicationID,
-                        ID			= j["REFN"]["ID"],
-                        Type		= j["REFN"]["type"],
+                        ID			= j["DOI"],
+                        Type		= "DOI",
                     )
                     if not self.testonly:
                         self.ddGdb.insertDict('PublicationIdentifier', source_location_dict)
-        if j["DOI"]:
-            if doilocations:
-                location = doilocations[0]
-                if j["DOI"] != location['ID']:
-                    colortext.warning("DOI: Check that the PublicationIdentifier data ('%s') matches the PDB DOI data ('%s')." % (str(doilocations), j["DOI"]))
-            else:
-                source_location_dict = dict (
-                    SourceID	= PublicationID,
-                    ID			= j["DOI"],
-                    Type		= "DOI",
-                )
-                if not self.testonly:
-                    self.ddGdb.insertDict('PublicationIdentifier', source_location_dict)
 
 
     def parse_FASTA(self):
@@ -575,6 +580,9 @@ class PDBStructure(DBObject):
                             results = self.ddGdb.locked_execute(SQL, parameters = (v, pdbID))
         else:
             if not testonly:
+                if self.dict['FileSource'] == None:
+                    raise Exception('A file source must be specified.')
+
                 self.ddGdb.insertDict('PDBFile', self.dict)
                 self.databaseID = self.ddGdb.getLastRowID()
 
@@ -587,7 +595,11 @@ class PDBStructure(DBObject):
             self.ddGdb.insertDictIfNew('PDBChain', pdbc, ['PDBFileID', 'Chain'])
 
         # Add PDBMolecule and PDBMoleculeChain records
-        for molecule in pdb_object.get_molecules_and_source():
+        try:
+            molecules = pdb_object.get_molecules_and_source()
+        except MissingRecordsException:
+            molecules = []
+        for molecule in molecules:
             chains = molecule['Chains']
             molecule['PDBFileID'] = pdb_id
             molecule['Organism'] = molecule['OrganismScientificName'] or molecule['OrganismCommonName']
@@ -644,10 +656,16 @@ class PDBStructure(DBObject):
         # Store the UniProt mapping in the database
         if d['ID'] not in self.NoUniProtIDs:
             if not (self.ACtoID_mapping and self.PDBtoAC_mapping):
-                self.ACtoID_mapping, self.PDBtoAC_mapping = getUniProtMapping(d['ID'], storeInDatabase = testonly)
-            assert(self.ACtoID_mapping and self.PDBtoAC_mapping)
+                try:
+                    self.ACtoID_mapping, self.PDBtoAC_mapping = getUniProtMapping(d['ID'], storeInDatabase = testonly)
+                except:
+                    if self.dict['Techniques'] != 'Rosetta model':
+                        raise
+            if self.dict['Techniques'] != 'Rosetta model':
+                assert(self.ACtoID_mapping and self.PDBtoAC_mapping)
             if not testonly:
-                commitUniProtMapping(self.ddGdb, self.ACtoID_mapping, self.PDBtoAC_mapping)
+                if self.ACtoID_mapping and self.PDBtoAC_mapping:
+                    commitUniProtMapping(self.ddGdb, self.ACtoID_mapping, self.PDBtoAC_mapping)
 
         if not testonly:
             return self.databaseID
