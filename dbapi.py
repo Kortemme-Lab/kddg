@@ -62,7 +62,6 @@ class ddG(object):
 
     def __init__(self, passwd = None, username = 'kortemmelab'):
         self.ddGDB = ddgdbapi.ddGDatabase(passwd = passwd, username = username)
-        self.ddGDataDB = ddgdbapi.ddGPredictionDataDatabase(passwd = passwd, username = username)
         self.prediction_data_path = self.ddGDB.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
 
     def __del__(self):
