@@ -373,8 +373,6 @@ class ddG(object):
                 colortext.write('.', "lightgreen")
                 self.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True, strip_other_chains = strip_other_chains)
                 count +=1
-                #if count >= 1:
-                #    sys.exit(0)
         else:
             colortext.printf("\nAll jobs are already in the queue or have been run.", "lightgreen")
         print('')
