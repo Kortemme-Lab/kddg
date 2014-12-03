@@ -332,7 +332,13 @@ class ddG(object):
         if showprogress:
             print("|" + ("*" * (int(len(results)/100)-2)) + "|")
         for r in results:
-            self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
+
+            existing_results = self.ddGDB.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
+            if len(existing_results) > 0:
+                #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
+                continue
+
+            PredictionID = self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
             count += 1
             if showprogress:
                 if count > 100:
@@ -506,6 +512,7 @@ class ddG(object):
             cryptID = "%(predictionID)s%(experimentID)s%(PredictionSet)s%(ProtocolID)s%(entryDate)s%(rdmstring)s" % vars()
             cryptID = md5.new(cryptID.encode('utf-8')).hexdigest()
             entryDate = self.ddGDB.execute("UPDATE Prediction SET cryptID=%s WHERE ID=%s", parameters = (cryptID, predictionID))
+            return predictionID
 
     def get_flattened_prediction_results(self, PredictionSet):
         #todo: add this as a stored procedure
