@@ -189,6 +189,7 @@ class ddG(object):
         #score.ddgTestScore
 
     def add_PDB_to_database(self, filepath = None, pdbID = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False, techniques = None):
+        raise Exception('Before using this again, add the functionality from ddgadmin/updatedb/compute_all_dssp.py to add the molecules and DSSP values.')
         assert(file_source)
         if filepath:
             if not os.path.exists(filepath):
