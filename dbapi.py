@@ -19,6 +19,7 @@ import md5
 import random
 import datetime
 import zipfile
+from ddg_cache import pdb_chains
 
 try:
     import matplotlib
@@ -33,7 +34,7 @@ except ImportError:
 import score
 import ddgdbapi
 from tools.bio.pdb import PDB
-from tools.bio.basics import residue_type_3to1_map as aa1
+from tools.bio.basics import residue_type_3to1_map as aa1, dssp_elision
 from tools.bio.basics import Mutation
 from tools.bio.alignment import ScaffoldModelChainMapper
 #from Bio.PDB import *
@@ -1022,4 +1023,250 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def write_pymol_session(download_dir, PredictionID, task_number, keep_files = True):
         PSE_file = create_pymol_session(download_dir, PredictionID, task_number, keep_files = keep_files)
         write_file(output_filepath, PSE_file[0], 'wb')
+
+
+    def get_amino_acids_for_analysis(self):
+        amino_acids = {}
+        polarity_map = {'polar' : 'P', 'charged' : 'C', 'hydrophobic' : 'H'}
+        aromaticity_map = {'aliphatic' : 'L', 'aromatic' : 'R', 'neither' : '-'}
+        results = self.ddGDB.execute_select('SELECT * FROM AminoAcid')
+        for r in results:
+            if r['Code'] != 'X':
+                amino_acids[r['Code']] = dict(
+                    LongCode = r['LongCode'],
+                    Name = r['Name'],
+                    Polarity = polarity_map.get(r['Polarity'], 'H'),
+                    Aromaticity = aromaticity_map[r['Aromaticity']],
+                    Size = r['Size']
+                )
+        amino_acids['Y']['Polarity'] = 'H'
+
+    def get_pdb_details_for_analysis(self, pdb_ids, cached_pdb_details = None):
+        pdb_chain_lengths = {}
+        pdb_os = {}
+        pdbs = {}
+        cached_pdb_ids = []
+        if cached_pdb_details:
+            cached_pdb_ids = cached_pdb_details.keys()
+        for pdb_id in pdb_ids:
+            if pdb_id in cached_pdb_ids:
+                pdbs[pdb_id] = cached_pdb_details[pdb_id]
+            else:
+                record = self.ddGDB.execute_select('SELECT * FROM PDBFile WHERE ID=%s', parameters=(pdb_id))[0]
+                p = PDB(record['Content'])
+                pdb_chain_lengths = {}
+                for chain_id, s in p.atom_sequences.iteritems():
+                    pdb_chain_lengths[chain_id] = len(s)
+                pdbs[pdb_id] = dict(
+                    chains = pdb_chain_lengths,
+                    TM = record['Transmembrane'],
+                    Technique = record['Techniques'],
+                    XRay = record['Techniques'].find('X-RAY') != -1,
+                    Resolution = record['Resolution'],
+                )
+
+        return pdbs
+
+
+    def get_prediction_experiment_chains(self, predictionset):
+        return self.ddGDB.execute_select('''
+            SELECT Prediction.ID, Experiment.PDBFileID, Chain
+            FROM Prediction
+            INNER JOIN Experiment ON Experiment.ID=Prediction.ExperimentID
+            INNER JOIN ExperimentChain ON ExperimentChain.ExperimentID=Prediction.ExperimentID
+            WHERE PredictionSet=%s''', parameters=(predictionset,))
+
+
+    def get_predictionset_data_for_single_mutations(self, predictionset, cached_pdb_details = None):
+        import json
+
+        amino_acids = self.get_amino_acids_for_analysis()
+        prediction_chains = self.get_prediction_experiment_chains(predictionset)
+
+        # Get the list of single mutation predictions
+        single_mutations = self.ddGDB.execute_select('''
+SELECT a.ID AS PredictionID FROM
+(
+SELECT Prediction.ID, Prediction.ExperimentID, UserDataSetExperimentID, COUNT(Prediction.ID) AS NumMutations
+FROM Prediction
+INNER JOIN ExperimentMutation ON ExperimentMutation.ExperimentID=Prediction.ExperimentID
+WHERE PredictionSet = %s
+GROUP BY Prediction.ID
+) AS a
+WHERE a.NumMutations=1''', parameters=(predictionset,))
+        single_mutation_ids = set([m['PredictionID'] for m in single_mutations])
+
+        # Hack - add on the mutations from the datasets which were represented as single mutants (in the original datasets) but which are double mutants
+        # See ExperimentAssays ( 917, 918, 919, 920, 922, 7314, 932, 933, 936, 937, 938, 2076, 7304, 7305, 7307, 7308, 7309, 7310, 7312, 7315, 7316, 7317, 7320 )
+        # or PubMed IDs 7479708, 9079363, and 9878405)
+        badly_entered_experiments = set([111145, 110303, 110284, 110287, 110299, 110300, 110285, 110286, 110289, 114180, 114175, 114177, 114171, 110304, 110305, 114179, 114168, 114170, 114172, 114173, 114178, 114167])
+        badly_entered_predictions = self.ddGDB.execute_select('''
+                    SELECT Prediction.ID AS PredictionID FROM Prediction
+                    INNER JOIN Experiment ON Experiment.ID=Prediction.ExperimentID
+                    WHERE PredictionSet=%s
+                    AND ExperimentID IN (111145, 110303, 110284, 110287, 110299, 110300, 110285, 110286, 110289, 114180, 114175, 114177, 114171, 110304, 110305, 114179, 114168, 114170, 114172, 114173, 114178, 114167)''', parameters=(predictionset,))
+        badly_entered_predictions = set([r['PredictionID'] for r in badly_entered_predictions])
+        single_mutation_ids = single_mutation_ids.union(badly_entered_predictions)
+
+        # Get the Prediction records for the single mutation predictions and the list of PDB IDs
+        num_single_mutations = 0
+        predictions = {}
+        experiment_to_prediction_map = {}
+        prediction_ids = set()
+        pdb_ids = set()
+        failures = 0
+        prediction_results = self.ddGDB.execute_select('''
+            SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, UserDataSetExperimentID, Experiment.PDBFileID AS ePDB, UserDataSetExperiment.PDBFileID AS pPDB, Scores
+            FROM Prediction
+            INNER JOIN Experiment ON Experiment.ID=Prediction.ExperimentID
+            INNER JOIN UserDataSetExperiment ON UserDataSetExperiment.ID=Prediction.UserDataSetExperimentID
+            WHERE PredictionSet=%s''', parameters=(predictionset,))
+        for p in prediction_results:
+            id = p['PredictionID']
+            experiment_id = p['ExperimentID']
+            if id not in single_mutation_ids:
+                continue
+            num_single_mutations += 1
+            experiment_to_prediction_map[(experiment_id, p['pPDB'])] = id
+            assert(id not in predictions)
+            prediction_ids.add(id)
+            pdb_ids.add(p['ePDB'])
+            pdb_ids.add(p['pPDB'])
+            if p['Scores']:
+                scores = json.loads(p['Scores'])
+                p['Kellogg'] = scores['data']['kellogg']['total']['ddG']
+                if scores['data'].get('noah_8,0A'):
+                    p['Noah'] = scores['data']['noah_8,0A']['positional']['ddG']
+            else:
+                p['Kellogg'] = None
+                p['Noah'] = None
+                failures += 1
+
+            del p['PredictionID']
+            del p['Scores']
+            predictions[id] = p
+        assert(len(experiment_to_prediction_map) == num_single_mutations)
+
+        # Get the PDB chain for each prediction
+        pdbs = pdb_chains
+        missing_count = 0
+        for pc in prediction_chains:
+            if pc['ID'] not in single_mutation_ids:
+                continue
+            prediction = predictions.get(pc['ID'])
+            if prediction:
+                assert(None == prediction.get('Chain'))
+                prediction['Chain'] = pc['Chain']
+            else:
+                raise Exception('Missing chain data')
+
+        # Get the mutation details for each prediction
+        mutation_details_1 = self.ddGDB.execute_select('''
+SELECT a.ID AS PredictionID, UserDataSetExperiment.PDBFileID as pPDB, ExperimentMutation.Chain, ExperimentMutation.ResidueID, ExperimentMutation.WildTypeAA, ExperimentMutation.MutantAA,
+PDBResidue.MonomericExposure, PDBResidue.MonomericDSSP
+FROM
+(
+SELECT Prediction.ID, Prediction.ExperimentID, UserDataSetExperimentID, COUNT(Prediction.ID) AS NumMutations
+FROM Prediction
+INNER JOIN ExperimentMutation ON ExperimentMutation.ExperimentID=Prediction.ExperimentID
+WHERE PredictionSet = %s
+GROUP BY Prediction.ID
+) AS a
+INNER JOIN ExperimentMutation ON a.ExperimentID=ExperimentMutation.ExperimentID
+INNER JOIN UserDataSetExperiment ON UserDataSetExperiment.ID=a.UserDataSetExperimentID
+INNER JOIN PDBResidue
+  ON (PDBResidue.PDBFileID=UserDataSetExperiment.PDBFileID
+  AND PDBResidue.Chain=ExperimentMutation.Chain
+  AND TRIM(PDBResidue.ResidueID)=TRIM(ExperimentMutation.ResidueID))
+WHERE a.NumMutations=1''', parameters=(predictionset,))
+        # Hack for 1U5P. Note: TRIM removes warnings e.g. "Warning: Truncated incorrect INTEGER value: '1722 '".
+        mutation_details_2 = self.ddGDB.execute_select('''
+SELECT a.ID AS PredictionID, UserDataSetExperiment.PDBFileID as pPDB, ExperimentMutation.Chain, ExperimentMutation.ResidueID, ExperimentMutation.WildTypeAA, ExperimentMutation.MutantAA,
+PDBResidue.MonomericExposure, PDBResidue.MonomericDSSP
+FROM
+(
+SELECT Prediction.ID, Prediction.ExperimentID, UserDataSetExperimentID, COUNT(Prediction.ID) AS NumMutations
+FROM Prediction
+INNER JOIN ExperimentMutation ON ExperimentMutation.ExperimentID=Prediction.ExperimentID
+WHERE PredictionSet = %s
+GROUP BY Prediction.ID
+) AS a
+INNER JOIN ExperimentMutation ON a.ExperimentID=ExperimentMutation.ExperimentID
+INNER JOIN UserDataSetExperiment ON UserDataSetExperiment.ID=a.UserDataSetExperimentID
+INNER JOIN PDBResidue
+  ON (PDBResidue.PDBFileID=UserDataSetExperiment.PDBFileID
+  AND PDBResidue.Chain=ExperimentMutation.Chain
+  AND CAST(TRIM(PDBResidue.ResidueID) AS UNSIGNED) - 1762 = CAST(TRIM(ExperimentMutation.ResidueID) AS UNSIGNED))
+WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameters=(predictionset,), quiet=True)
+        mutation_details = mutation_details_1 + mutation_details_2
+        all_prediction_ids = set([m['PredictionID'] for m in single_mutations])
+        found_prediction_ids = set([m['PredictionID'] for m in mutation_details])
+        assert(len(found_prediction_ids) == len(all_prediction_ids))
+        for m in mutation_details:
+            prediction = predictions[m['PredictionID']]
+            prediction['DSSP'] = dssp_elision.get(m['MonomericDSSP'])
+            prediction['Exposure'] = m['MonomericExposure']
+            prediction['WTAA'] = m['WildTypeAA']
+            prediction['MutantAA'] = m['MutantAA']
+
+        # Add missing fields for the set of badly_entered_predictions
+        for prediction_id, d in sorted(predictions.iteritems()):
+            if 'DSSP' not in d.keys():
+                prediction['DSSP'] = None
+                prediction['Exposure'] = None
+                prediction['WTAA'] = None
+                prediction['MutantAA'] = None
+
+        # We can derive the following data:
+        #   TM, Resolution, XRay per PDB
+        #   for prediction_id, d in predictions.iteritems():
+        #     assoc_pdb = pdb_details[d['pPDB']]
+        #     d['TM'] = assoc_pdb['TM'] == 1
+        #     d['XRay'] = assoc_pdb['XRay']
+        #     d['Resolution'] = assoc_pdb['Resolution']
+        # Derive GP (if wt or mutant is glycine or proline)
+        # Derive WTPolarity, WTAromaticity, MutantPolarity, MutantAromaticity
+        # Derive SL, LS, SS, LL
+        # Derive ChainLength: prediction['ChainLength'] = pdbs[pc['PDBFileID']]['chains'][pc['Chain']]
+
+        # AnalysisSets are defined on UserDataSets. The main 'datasets' are defined in the Subset field of the AnalysisSet records associated
+        # with the UserDataSet i.e. AnalysisSets for a UserDataSet := "SELECT DISTINCT Subset FROM UserAnalysisSet WHERE UserDataSetID=x".
+        from analysis import UserDataSetExperimentalScores
+
+        analysis_data = {}
+        for analysis_subset in ['Kellogg', 'Potapov', 'Guerois', 'CuratedProTherm', 'AlaScan-GPK', 'TransmembraneProteins']:
+            data_points = []
+            analysis_data[analysis_subset] = {}
+            adata = analysis_data[analysis_subset]
+            adata['Missing'] = []
+
+            UDS_scores = UserDataSetExperimentalScores(self.ddGDB, 1, analysis_subset)
+            count = 0
+            missing = []
+            for section, sectiondata in sorted(UDS_scores.iteritems()):
+                for recordnumber, record_data in sorted(sectiondata.iteritems()):
+                    PDB_ID = record_data["PDB_ID"]
+                    ExperimentID = record_data["ExperimentID"]
+                    ExperimentalDDG = record_data["ExperimentalDDG"]
+                    prediction_id = experiment_to_prediction_map.get((record_data['ExperimentID'], record_data['PDB_ID']))
+                    if prediction_id != None:
+                        adata[prediction_id] = record_data
+                        predicted_score = predictions[prediction_id]
+                        predicted_score = predictions[prediction_id]['Kellogg']
+                        if predicted_score != None:
+                            data_points.append((ExperimentalDDG, predicted_score))
+                    else:
+                        adata['Missing'].append((record_data['ExperimentID'], record_data['PDB_ID']))
+                    count += 1
+
+        return dict(
+            amino_acids = amino_acids,
+            pdb_details = self.get_pdb_details_for_analysis(pdb_ids, cached_pdb_details = cached_pdb_details),
+            predictions = predictions,
+            analysis_datasets = analysis_data,
+        )
+
+
+
+
 
