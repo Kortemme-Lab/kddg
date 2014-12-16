@@ -1076,39 +1076,50 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             WHERE PredictionSet=%s''', parameters=(predictionset,))
 
 
-    def get_predictionset_data_for_single_mutations(self, predictionset, cached_pdb_details = None):
+    def get_predictionset_data(self, predictionset, cached_pdb_details = None, only_single = False):
         import json
 
         amino_acids = self.get_amino_acids_for_analysis()
         prediction_chains = self.get_prediction_experiment_chains(predictionset)
 
-        # Get the list of single mutation predictions
-        single_mutations = self.ddGDB.execute_select('''
-SELECT a.ID AS PredictionID FROM
-(
-SELECT Prediction.ID, Prediction.ExperimentID, UserDataSetExperimentID, COUNT(Prediction.ID) AS NumMutations
-FROM Prediction
-INNER JOIN ExperimentMutation ON ExperimentMutation.ExperimentID=Prediction.ExperimentID
-WHERE PredictionSet = %s
-GROUP BY Prediction.ID
-) AS a
-WHERE a.NumMutations=1''', parameters=(predictionset,))
-        single_mutation_ids = set([m['PredictionID'] for m in single_mutations])
+        # Get the list of mutation predictions
+        if only_single:
+            prediction_records = self.ddGDB.execute_select('''
+                SELECT a.ID AS PredictionID FROM
+                (
+                SELECT Prediction.ID, Prediction.ExperimentID, UserDataSetExperimentID, COUNT(Prediction.ID) AS NumMutations
+                FROM Prediction
+                INNER JOIN ExperimentMutation ON ExperimentMutation.ExperimentID=Prediction.ExperimentID
+                WHERE PredictionSet = %s
+                GROUP BY Prediction.ID
+                ) AS a
+                WHERE a.NumMutations=1''', parameters=(predictionset,))
+        else:
+            prediction_records = self.ddGDB.execute_select('''
+                SELECT a.ID AS PredictionID FROM
+                (
+                SELECT Prediction.ID, Prediction.ExperimentID, UserDataSetExperimentID, COUNT(Prediction.ID) AS NumMutations
+                FROM Prediction
+                INNER JOIN ExperimentMutation ON ExperimentMutation.ExperimentID=Prediction.ExperimentID
+                WHERE PredictionSet = %s
+                GROUP BY Prediction.ID
+                ) AS a''', parameters=(predictionset,))
+        allowed_prediction_ids = set([m['PredictionID'] for m in prediction_records])
 
         # Hack - add on the mutations from the datasets which were represented as single mutants (in the original datasets) but which are double mutants
         # See ExperimentAssays ( 917, 918, 919, 920, 922, 7314, 932, 933, 936, 937, 938, 2076, 7304, 7305, 7307, 7308, 7309, 7310, 7312, 7315, 7316, 7317, 7320 )
+        # or Experiments (111145, 110303, 110284, 110287, 110299, 110300, 110285, 110286, 110289, 114180, 114175, 114177, 114171, 110304, 110305, 114179, 114168, 114170, 114172, 114173, 114178, 114167)
         # or PubMed IDs 7479708, 9079363, and 9878405)
-        badly_entered_experiments = set([111145, 110303, 110284, 110287, 110299, 110300, 110285, 110286, 110289, 114180, 114175, 114177, 114171, 110304, 110305, 114179, 114168, 114170, 114172, 114173, 114178, 114167])
         badly_entered_predictions = self.ddGDB.execute_select('''
                     SELECT Prediction.ID AS PredictionID FROM Prediction
                     INNER JOIN Experiment ON Experiment.ID=Prediction.ExperimentID
                     WHERE PredictionSet=%s
                     AND ExperimentID IN (111145, 110303, 110284, 110287, 110299, 110300, 110285, 110286, 110289, 114180, 114175, 114177, 114171, 110304, 110305, 114179, 114168, 114170, 114172, 114173, 114178, 114167)''', parameters=(predictionset,))
         badly_entered_predictions = set([r['PredictionID'] for r in badly_entered_predictions])
-        single_mutation_ids = single_mutation_ids.union(badly_entered_predictions)
+        allowed_prediction_ids = allowed_prediction_ids.union(badly_entered_predictions)
 
-        # Get the Prediction records for the single mutation predictions and the list of PDB IDs
-        num_single_mutations = 0
+        # Get the Prediction records for the mutation predictions and the list of PDB IDs
+        num_predictions = 0
         predictions = {}
         experiment_to_prediction_map = {}
         prediction_ids = set()
@@ -1123,9 +1134,9 @@ WHERE a.NumMutations=1''', parameters=(predictionset,))
         for p in prediction_results:
             id = p['PredictionID']
             experiment_id = p['ExperimentID']
-            if id not in single_mutation_ids:
+            if id not in allowed_prediction_ids:
                 continue
-            num_single_mutations += 1
+            num_predictions += 1
             experiment_to_prediction_map[(experiment_id, p['pPDB'])] = id
             assert(id not in predictions)
             prediction_ids.add(id)
@@ -1140,16 +1151,16 @@ WHERE a.NumMutations=1''', parameters=(predictionset,))
                 p['Kellogg'] = None
                 p['Noah'] = None
                 failures += 1
-
             del p['PredictionID']
             del p['Scores']
             predictions[id] = p
-        assert(len(experiment_to_prediction_map) == num_single_mutations)
+        assert(len(experiment_to_prediction_map) == num_predictions)
+
 
         # Get the PDB chain for each prediction
         missing_count = 0
         for pc in prediction_chains:
-            if pc['ID'] not in single_mutation_ids:
+            if pc['ID'] not in allowed_prediction_ids:
                 continue
             prediction = predictions.get(pc['ID'])
             if prediction:
@@ -1158,7 +1169,8 @@ WHERE a.NumMutations=1''', parameters=(predictionset,))
             else:
                 raise Exception('Missing chain data')
 
-        # Get the mutation details for each prediction
+
+        # Get the mutation details for each single mutation prediction
         mutation_details_1 = self.ddGDB.execute_select('''
 SELECT a.ID AS PredictionID, UserDataSetExperiment.PDBFileID as pPDB, ExperimentMutation.Chain, ExperimentMutation.ResidueID, ExperimentMutation.WildTypeAA, ExperimentMutation.MutantAA,
 PDBResidue.MonomericExposure, PDBResidue.MonomericDSSP
@@ -1197,9 +1209,9 @@ INNER JOIN PDBResidue
   AND CAST(TRIM(PDBResidue.ResidueID) AS UNSIGNED) - 1762 = CAST(TRIM(ExperimentMutation.ResidueID) AS UNSIGNED))
 WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameters=(predictionset,), quiet=True)
         mutation_details = mutation_details_1 + mutation_details_2
-        all_prediction_ids = set([m['PredictionID'] for m in single_mutations])
+        all_prediction_ids = set([m['PredictionID'] for m in prediction_records])
         found_prediction_ids = set([m['PredictionID'] for m in mutation_details])
-        assert(len(found_prediction_ids) == len(all_prediction_ids))
+        #assert(len(found_prediction_ids) == len(all_prediction_ids))
         for m in mutation_details:
             prediction = predictions[m['PredictionID']]
             prediction['DSSP'] = dssp_elision.get(m['MonomericDSSP'])
@@ -1207,7 +1219,8 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
             prediction['WTAA'] = m['WildTypeAA']
             prediction['MutantAA'] = m['MutantAA']
 
-        # Add missing fields for the set of badly_entered_predictions
+
+        # Add missing fields for the set of badly_entered_predictions and multiple mutations
         for prediction_id, d in sorted(predictions.iteritems()):
             if 'DSSP' not in d.keys():
                 prediction['DSSP'] = None
@@ -1241,6 +1254,9 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
             UDS_scores = UserDataSetExperimentalScores(self.ddGDB, 1, analysis_subset)
             count = 0
             missing = []
+            xvalues = []
+            yvalues = []
+            pub_ids = set()
             for section, sectiondata in sorted(UDS_scores.iteritems()):
                 for recordnumber, record_data in sorted(sectiondata.iteritems()):
                     PDB_ID = record_data["PDB_ID"]
@@ -1251,12 +1267,133 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
                         adata[prediction_id] = record_data
                         predicted_score = predictions[prediction_id]
                         predicted_score = predictions[prediction_id]['Kellogg']
+                        predicted_score_2 = predictions[prediction_id]['Noah']
                         if predicted_score != None:
-                            data_points.append((ExperimentalDDG, predicted_score))
+                            if PDB_ID in ['1B5M', '1CYO', '1DPM', '1W99']:
+                                data_points.append((ExperimentalDDG, predicted_score))
+                            mutation_details = self.ddGDB.execute_select("SELECT * FROM ExperimentMutation WHERE ExperimentID=%s", parameters=(record_data['ExperimentID'],))
+                            mutation_details = '.'.join(['%(Chain)s_%(WildTypeAA)s%(ResidueID)s%(MutantAA)s' % m for m in mutation_details])
+
+                            pub_details = self.ddGDB.execute_select("SELECT Publication FROM ExperimentAssay WHERE ExperimentID=%s", parameters=(record_data['ExperimentID'],))
+                            for m in pub_details:
+                                if PDB_ID in ['1B5M', '1CYO', '1DPM', '1W99']:
+                                    pub_ids.add(m['Publication'])
+                            pub_details = '_'.join(['%(Publication)s' % m for m in pub_details])
+                            if PDB_ID in ['1B5M', '1CYO', '1DPM', '1W99']:
+                                print(','.join(map(str, [prediction_id, record_data['ExperimentID'], record_data['PDB_ID'], mutation_details, ExperimentalDDG, predicted_score, predicted_score_2, pub_details])))
+                                xvalues.append(ExperimentalDDG)
+                                yvalues.append(predicted_score)
+
                     else:
                         adata['Missing'].append((record_data['ExperimentID'], record_data['PDB_ID']))
                     count += 1
+            from tools.stats.misc import get_xy_dataset_correlations
+            data = '''73449,111164,1CYO,A_V61E,1.05162523901,0.140072,0.685229,PMID:10508399
+72831,110590,1CYO,A_F35Y,-0.788718929254,-0.42082,-1.23108,PMID:9215576
+72832,110591,1CYO,A_F35L,1.86424474187,3.14403,2.56166,PMID:9215576
+73449,111164,1CYO,A_V61E,1.09942638623,0.140072,0.685229,PMID:10508399
+73450,111165,1CYO,A_V61Y,1.33843212237,-2.44868,-0.76616,PMID:10508399
+73451,111166,1CYO,A_V61H,1.62523900574,0.932665,0.427919,PMID:10508399
+73452,111167,1CYO,A_V61K,2.39005736138,-0.840766,0.283676,PMID:10508399
+73716,111430,1CYO,A_V45T,0.956022944551,-1.33235,0.84767,PMID:10631476
+73717,111431,1CYO,A_V45H,1.3862332696,-2.94966,-0.37202,PMID:10631476
+73718,111432,1CYO,A_V45G,1.9120458891,-1.0926,1.052319,PMID:10631476
+74870,112549,1CYO,A_F35H,2.82026768642,2.89067,3.12973,PMID:9215576
+75062,112722,1CYO,A_V45Y,1.52963671128,-1.29769,1.132781,PMID:10631476
+75063,112723,1CYO,A_V45E,2.05544933078,-1.05724,0.78626,PMID:10631476
+75256,112916,1B5M,A_A18S.A_I32L.A_L47R,0.3,-0.854164,-1.08277,PMID:12269800
+75393,113055,1W99,A_I189L,0.32,-1.38888,0.01212,PMID:14529489
+75394,113056,1W99,A_L175V,10.49,2.29142,3.3468,PMID:14529489
+75467,113129,1B5M,A_P81A,1.14722753346,3.08715,2.0785,PMID:15379561
+75468,113130,1B5M,A_D60R,-0.334608030593,-0.665926,-1.1605631,PMID:15379561
+75910,113511,1CYO,A_S71L,-0.8,-1.87052,-2.28944,PMID:16246823
+75911,113512,1CYO,A_L32I.A_S71L,-0.5,0.162601,-0.8141,PMID:16246823
+76296,113894,1B5M,A_R15H.A_E20S,-1.1,-4.04025,-2.57092,PMID:17962223
+76341,113939,1DPM,A_H254R.A_H257L,5.7,1.52252,-0.29234,PMID:18434422
+76342,113940,1DPM,A_H257L,2.5,0.931318,1.29572,PMID:18434422'''
+            data = '''73711,111425,1FEP,A_G252C,-7.93,-1.4472,-0.78227,PMID:9655352
+73709,111423,1FEP,A_Q256C,-2.28,3.46453,3.15878,PMID:9655352
+73710,111424,1FEP,A_S254C,-5.94,2.2617,0.81088,PMID:9655352
+76476,114074,1QJP,A_Y55A,2.5,1.73346,3.7889,PMID:17564441
+76487,114085,1QJP,A_F123A.A_Y141A,5.3,6.65373,6.96037,PMID:17564441
+76477,114075,1QJP,A_Y129A,2.7,2.60371,3.18119,PMID:17564441
+76488,114086,1QJP,A_Y141A.A_W143A,5.7,8.77136,8.40044,PMID:17564441
+76478,114076,1QJP,A_Y141A,3.3,3.68392,3.31046,PMID:17564441
+76489,114087,1QJP,A_F123A.A_Y141A.A_W143A,6.8,11.3448,11.30749,PMID:17564441
+76479,114077,1QJP,A_Y168A,0.2,4.613,4.39833,PMID:17564441
+76480,114078,1QJP,A_F51A,1.2,2.56268,2.63285,PMID:17564441
+76481,114079,1QJP,A_F123A,2.1,2.86888,3.57788,PMID:17564441
+76471,114069,1QJP,A_W7A,3.6,3.58679,3.21932,PMID:17564441
+76482,114080,1QJP,A_F170A,2.4,2.56603,2.48223,PMID:17564441
+76472,114070,1QJP,A_W15A,2.0,1.21373,2.69336,PMID:17564441
+76483,114081,1QJP,A_Y43A.A_W7A,6.4,5.28117,6.08101,PMID:17564441
+76473,114071,1QJP,A_W57A,2.0,3.66522,3.80961,PMID:17564441
+76484,114082,1QJP,A_Y55A.A_W57A,4.2,5.34794,7.33826,PMID:17564441
+76474,114072,1QJP,A_W143A,3.1,6.00473,6.16116,PMID:17564441
+76485,114083,1QJP,A_Y168A.A_F170A,1.2,5.32101,5.40873,PMID:17564441
+76475,114073,1QJP,A_Y43A,3.8,4.51207,5.18609,PMID:17564441
+76486,114084,1QJP,A_F123A.A_W143A,3.9,7.70765,9.11946,PMID:17564441
+76508,114106,1THQ,A_Q160A,-0.181644359465,3.40987,3.50875,PMID:20133664
+76498,114096,1THQ,A_Y153A,0.554493307839,4.66851,5.19701,PMID:20133664
+76499,114097,1THQ,A_D24N,0.604684512428,-2.11086,0.35171,PMID:20133664
+76500,114098,1THQ,A_S58A,1.25717017208,2.77058,1.8066,PMID:20133664
+76490,114088,1THQ,A_F55A,1.04684512428,1.43067,1.21124,PMID:20133664
+76501,114099,1THQ,A_M72A,0.341778202677,2.84301,3.181,PMID:20133664
+76491,114089,1THQ,A_A85G,0.865200764818,1.26421,1.42274,PMID:20133664
+76502,114100,1THQ,A_E90A,0.662045889101,1.14755,2.42936,PMID:20133664
+76492,114090,1THQ,A_Y87F,1.36950286807,-0.0719206,0.99333,PMID:20133664
+76503,114101,1THQ,A_R94A,1.53202676864,0.307137,0.80075,PMID:20133664
+76493,114091,1THQ,A_L105A,0.762428298279,1.33521,0.88712,PMID:20133664
+76504,114102,1THQ,A_T108A,0.403919694073,1.75425,1.1566,PMID:20133664
+76494,114092,1THQ,A_M157A,0.767208413002,2.1312,1.72865,PMID:20133664
+76505,114103,1THQ,A_S130A,1.27151051625,1.31197,0.96164,PMID:20133664
+76495,114093,1THQ,A_W17A,0.984703632887,1.94366,0.12003,PMID:20133664
+76506,114104,1THQ,A_T137A,0.509082217973,0.187073,1.50304,PMID:20133664
+76496,114094,1THQ,A_Y23A,0.905831739962,4.69118,3.32404,PMID:20133664
+76507,114105,1THQ,A_Q139A,0.967973231358,2.13747,3.83865,PMID:20133664
+76497,114095,1THQ,A_W51A,0.446940726577,1.06958,1.01592,PMID:20133664
+75493,113155,2BRD,A_T47A,1.0,0.717288,-0.24693,PMID:14659758
+75504,113166,2BRD,A_M60A,0.8,1.73926,1.07222,PMID:14659758
+75483,113145,2BRD,A_S35A,0.3,-2.08309,-1.250203,PMID:14659758
+75494,113156,2BRD,A_L48A,0.1,1.32914,0.59625,PMID:14659758
+75505,113167,2BRD,A_L61A,-0.7,2.27377,2.78853,PMID:14659758
+75484,113146,2BRD,A_D36A,0.9,-5.7016,-3.35813,PMID:14659758
+75495,113157,2BRD,A_V49A,-0.7,4.98325,2.827481,PMID:14659758
+75506,113168,2BRD,A_L62A,-0.5,-0.0644343,1.36829,PMID:14659758
+75485,113147,2BRD,A_P37A,0.2,-5.13458,-3.82847,PMID:14659758
+75496,113158,2BRD,A_P50A,-0.1,-4.77073,0.19235,PMID:14659758
+75486,113148,2BRD,A_D38A,0.5,-0.20639,1.029,PMID:14659758
+75497,113159,2BRD,A_I52A,1.4,4.11633,2.81456,PMID:14659758
+75487,113149,2BRD,A_K40A,0.3,0.580476,0.31457,PMID:14659758
+75498,113160,2BRD,A_F54A,1.0,0.954666,1.28514,PMID:14659758
+75488,113150,2BRD,A_K41A,1.6,1.05943,0.92023,PMID:14659758
+75499,113161,2BRD,A_T55A,0.1,-0.645943,-0.84785,PMID:14659758
+75489,113151,2BRD,A_F42A,1.6,1.44634,3.82644,PMID:14659758
+75500,113162,2BRD,A_M56A,-1.4,2.53374,0.88326,PMID:14659758
+75490,113152,2BRD,A_Y43A,1.3,3.40121,3.81942,PMID:14659758
+75501,113163,2BRD,A_Y57A,3.7,5.4053,4.1726,PMID:14659758
+75491,113153,2BRD,A_I45A,1.9,-0.243389,3.41265,PMID:14659758
+75502,113164,2BRD,A_L58A,-0.3,3.50341,1.47704,PMID:14659758
+75492,113154,2BRD,A_T46A,2.2,-2.63543,-0.65407,PMID:14659758
+75503,113165,2BRD,A_S59A,-0.1,-0.436558,-1.21388,PMID:14659758'''
 
+            colortext.message('here')
+            print(data)
+            xvalues = [float(d.split(',')[4]) for d in data.split('\n')]
+            yvalues = [float(d.split(',')[5]) for d in data.split('\n')]
+            print(len(xvalues))
+            for k, v in sorted(get_xy_dataset_correlations(xvalues, yvalues).iteritems()):
+                print('%s: %s' % (str(k), str(v)))
+
+            yvalues = [float(d.split(',')[6]) for d in data.split('\n')]
+            print(len(xvalues))
+            for k, v in sorted(get_xy_dataset_correlations(xvalues, yvalues).iteritems()):
+                print('%s: %s' % (str(k), str(v)))
+
+            print(sorted(pub_ids))
+
+
+        return
         return dict(
             amino_acids = amino_acids,
             pdb_details = self.get_pdb_details_for_analysis(pdb_ids, cached_pdb_details = cached_pdb_details),
