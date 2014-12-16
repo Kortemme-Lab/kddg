@@ -19,7 +19,6 @@ import md5
 import random
 import datetime
 import zipfile
-from ddg_cache import pdb_chains
 
 try:
     import matplotlib
@@ -1148,7 +1147,6 @@ WHERE a.NumMutations=1''', parameters=(predictionset,))
         assert(len(experiment_to_prediction_map) == num_single_mutations)
 
         # Get the PDB chain for each prediction
-        pdbs = pdb_chains
         missing_count = 0
         for pc in prediction_chains:
             if pc['ID'] not in single_mutation_ids:
