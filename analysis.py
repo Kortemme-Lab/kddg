@@ -6,6 +6,7 @@ import subprocess
 from string import join
 import time
 import inspect
+import json
 from tempfile import mkstemp
 
 import tools.colortext as colortext
@@ -20,6 +21,7 @@ script_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfra
 def _id(x): pass
 delete_file = [os.remove, _id][0]
 RESTRICT_TO_SINGLE_MUTATIONS_HACK = True # hack for RosettaCon2013
+RESTRICT_TO_SINGLE_MUTATIONS_HACK = False # hack for RosettaCon2013
 
 class RInterface(object):
 
@@ -200,8 +202,10 @@ WHERE UserDataSetID=%s AND Subset=%s ORDER BY Section, RecordNumber''', paramete
 
 class PredictionScores(object):
 
-    def __init__(self, ddGdb, PredictionSet, ddG_score_type = 'kellogg.total'):
+    def __init__(self, ddGdb, PredictionSet, ddG_score_type = 'kellogg.total', score_cap = None):
         import pickle
+
+        self.score_cap = score_cap
 
         # Get the UserDataSet ID and the list of AnalysisSets associated with the Prediction set
         UserDataSetID = ddGdb.execute("SELECT DISTINCT UserDataSetID FROM Prediction INNER JOIN UserDataSetExperiment ON UserDataSetExperiment.ID=UserDataSetExperimentID WHERE PredictionSet=%s AND Status='done'", parameters=(PredictionSet,))
@@ -221,17 +225,17 @@ class PredictionScores(object):
         AnalysisSets = sorted([r["Subset"] for r in AnalysisSets])
 
         # Get list of Kellogg record IDs for which we have predictions and experimental DDG values
-        dbpredictions = ddGdb.execute("SELECT Prediction.ID as PredictionID, Prediction.ExperimentID AS PExperimentID, UserDataSetExperiment.ExperimentID AS UDSEExperimentID, UserDataSetExperiment.PDBFileID, UserDataSetExperiment.ID AS UserDataSetExperimentID, ddG FROM Prediction INNER JOIN UserDataSetExperiment ON UserDataSetExperiment.ID=UserDataSetExperimentID WHERE PredictionSet=%s AND Status='done'", parameters=(PredictionSet,))
+        dbpredictions = ddGdb.execute("SELECT Prediction.ID as PredictionID, Prediction.ExperimentID AS PExperimentID, UserDataSetExperiment.ExperimentID AS UDSEExperimentID, UserDataSetExperiment.PDBFileID, UserDataSetExperiment.ID AS UserDataSetExperimentID, Scores FROM Prediction INNER JOIN UserDataSetExperiment ON UserDataSetExperiment.ID=UserDataSetExperimentID WHERE PredictionSet=%s AND Status='done'", parameters=(PredictionSet,))
         Predictions = {}
 
         known_bad_IDs = set()
-        if RESTRICT_TO_SINGLE_MUTATIONS_HACK:
+        if True or RESTRICT_TO_SINGLE_MUTATIONS_HACK:
             known_bad_IDs = set([43502,43580]) # score12prime: ExperimentID, UserDataSetExperimentIDs are: (114153, 4892) and (114231, 4970)
             known_bad_IDs = known_bad_IDs.union(set([48643])) # talaris2013: ExperimentID, UserDataSetExperimentIDs are: (114231, 4970)
             known_bad_IDs = known_bad_IDs.union(set([53711])) # talaris2013sc: ExperimentID, UserDataSetExperimentIDs are: (114231, 4970)
+            known_bad_IDs = known_bad_IDs.union(set([76633])) # r57471. Experiment ID #114231. UserDataSetExperimentID #4970.
 
         for p in dbpredictions:
-
             if RESTRICT_TO_SINGLE_MUTATIONS_HACK:
                 # NOTE: RESTRICTING TO SINGLE MUTATIONS HERE
                 num_mutations = len(ddGdb.execute("SELECT * FROM ExperimentMutation WHERE ExperimentID=%s", parameters=(p['PExperimentID'],)))
@@ -247,7 +251,8 @@ class PredictionScores(object):
             #Predictions[p["PExperimentID"]][PDB_ID] = Predictions[p["PExperimentID"]].get(PDB_ID, {})
 
             assert(p["PExperimentID"] == p["UDSEExperimentID"])
-            ddG = pickle.loads(p["ddG"])
+            #ddG = pickle.loads(p["ddG"])
+            ddG = json.loads(p["Scores"])
 
             if (ddG['version'] == '0.1'):
                 pass
@@ -256,15 +261,25 @@ class PredictionScores(object):
 
             # Traverse the score hierarchy
             PredictedDDG = ddG["data"]
-            #try:
 
+            #try:
             for score_path in ddG_score_type.split("."):
-                PredictedDDG = PredictedDDG[score_path]
+                try:
+                    PredictedDDG = PredictedDDG[score_path]
+                except:
+                    raise colortext.Exception('Missing score for %s in prediction #%d (experiment #%d, %s).' % (ddG_score_type, p['PredictionID'], p["PExperimentID"], PDB_ID))
             PredictedDDG = PredictedDDG['ddG']
+
+            if self.score_cap:
+                if PredictedDDG < -self.score_cap:
+                    PredictedDDG = -self.score_cap
+                elif PredictedDDG > self.score_cap:
+                    PredictedDDG = self.score_cap
+
             if PredictedDDG > 30:
                 print(p["PExperimentID"], p['UserDataSetExperimentID'], PredictedDDG)
             #except:
-            #	continue
+            #   continue
 
             Predictions[p["PExperimentID"]][PDB_ID] = {
                 #"ExperimentID" : p["PExperimentID"],
@@ -376,10 +391,13 @@ class AnalysisObject(object):
 
 class Analyzer(object):
 
-    def __init__(self, PredictionSet, quiet_level = 1, ddG_score_type = 'kellogg.total'):
+    def __init__(self, PredictionSet, quiet_level = 1, ddG_score_type = 'kellogg.total', score_cap = None):
         self.PredictionSet = PredictionSet
         self.quiet_level = quiet_level
         self.ddG_score_type = ddG_score_type
+        self.score_cap = score_cap
+        if self.score_cap:
+            self.score_cap = float(score_cap)
 
         self.analysis_tables = None
         self.ddGdb = ddgdbapi.ddGDatabase()
@@ -389,11 +407,14 @@ class Analyzer(object):
     def CreateAnalysisTables(self):
         ddGdb = self.ddGdb
         PredictionSet = self.PredictionSet
-        predictions = PredictionScores(ddGdb, PredictionSet, self.ddG_score_type)
+        predictions = PredictionScores(ddGdb, PredictionSet, self.ddG_score_type, score_cap = self.score_cap)
         predicted_scores = predictions.Predictions
 
         s = "Analyzing %d predictions in PredictionSet '%s' for UserDataSet '%s'. " % (predictions.NumberOfPredictions, predictions.PredictionSet.replace("_", "\_"), predictions.UserDataSetName)
-        s += "Running analysis over the following analysis sets: '%s'." % (join(predictions.AnalysisSets, "', '"))
+        if self.score_cap:
+            s += "Running analysis over the following analysis sets: '%s' with predicted scores capped at +-%0.2f." % (join(predictions.AnalysisSets, "', '"), self.score_cap)
+        else:
+            s += "Running analysis over the following analysis sets: '%s'." % (join(predictions.AnalysisSets, "', '"))
         self.description.append(("black", s))
         if self.quiet_level >= 1:
             colortext.message("Analyzing %d predictions in PredictionSet '%s' for UserDataSet '%s'." % (predictions.NumberOfPredictions, predictions.PredictionSet, predictions.UserDataSetName))
