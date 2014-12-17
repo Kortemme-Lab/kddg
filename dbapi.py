@@ -1039,6 +1039,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                     Size = r['Size']
                 )
         amino_acids['Y']['Polarity'] = 'H'
+        return amino_acids
+
 
     def get_pdb_details_for_analysis(self, pdb_ids, cached_pdb_details = None):
         pdb_chain_lengths = {}
@@ -1076,7 +1078,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             WHERE PredictionSet=%s''', parameters=(predictionset,))
 
 
-    def get_predictionset_data(self, predictionset, cached_pdb_details = None, only_single = False):
+    def get_predictionset_data(self, predictionset, userdataset_textid, cached_pdb_details = None, only_single = False):
         '''
             A helper function for analysis / generating graphs.
             Arguments:
@@ -1090,6 +1092,10 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 analysis_datasets - a mapping: analysis subset (e.g. "Guerois") -> Prediction IDs -> (prediction) PDB_ID, ExperimentID, ExperimentDDG (mean of experimental values)
         '''
         import json
+
+        UserDataSetID = self.ddGDB.execute_select("SELECT ID FROM UserDataSet WHERE TextID=%s", parameters=(userdataset_textid,))
+        assert(UserDataSetID)
+        UserDataSetID = UserDataSetID[0]['ID']
 
         amino_acids = self.get_amino_acids_for_analysis()
         prediction_chains = self.get_prediction_experiment_chains(predictionset)
@@ -1159,6 +1165,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 p['Kellogg'] = scores['data']['kellogg']['total']['ddG']
                 if scores['data'].get('noah_8,0A'):
                     p['Noah'] = scores['data']['noah_8,0A']['positional']['ddG']
+                else:
+                    p['Noah'] = None
             else:
                 p['Kellogg'] = None
                 p['Noah'] = None
@@ -1257,9 +1265,9 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
         # AnalysisSets are defined on UserDataSets. The main 'datasets' are defined in the Subset field of the AnalysisSet records associated
         # with the UserDataSet i.e. AnalysisSets for a UserDataSet := "SELECT DISTINCT Subset FROM UserAnalysisSet WHERE UserDataSetID=x".
         from analysis import UserDataSetExperimentalScores
-
         analysis_data = {}
-        for analysis_subset in ['Kellogg', 'Potapov', 'Guerois', 'CuratedProTherm', 'AlaScan-GPK', 'TransmembraneProteins']:
+        analysis_subsets = [r['Subset'] for r in self.ddGDB.execute_select("SELECT DISTINCT Subset FROM UserAnalysisSet WHERE UserDataSetID=%s", parameters=(UserDataSetID,))]
+        for analysis_subset in analysis_subsets:
             analysis_data[analysis_subset] = {}
             adata = analysis_data[analysis_subset]
             adata['Missing'] = []
@@ -1278,16 +1286,149 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
                         adata['Missing'].append((record_data['ExperimentID'], record_data['PDB_ID']))
                     count += 1
 
-        return dict(
-            amino_acids = amino_acids,
-            pdb_details = self.get_pdb_details_for_analysis(pdb_ids, cached_pdb_details = cached_pdb_details),
-            predictions = predictions,
-            analysis_datasets = analysis_data, # a mapping: analysis subset (e.g. "Guerois") -> Prediction IDs -> (prediction) PDB_ID, ExperimentID, ExperimentDDG (mean of experimental values)
+        return AnalysisBreakdown(
+            amino_acids,
+            self.get_pdb_details_for_analysis(pdb_ids, cached_pdb_details = cached_pdb_details),
+            predictions,
+            analysis_data, # a mapping: analysis subset (e.g. "Guerois") -> Prediction IDs -> (prediction) PDB_ID, ExperimentID, ExperimentDDG (mean of experimental values)
         )
 
 
+import pprint
+from tools.stats.misc import get_xy_dataset_correlations
+class AnalysisBreakdown(object):
+
+    def __init__(self, amino_acids, pdb_details, predictions, analysis_datasets):
+        self.amino_acids = amino_acids
+        self.pdb_details = pdb_details
+        self.predictions = predictions
+        self.analysis_datasets = analysis_datasets
 
 
+    def analyze_subset_all(self, analysis_subset, scoring_method):
+        'Analyzes a subset using all datapoints.'
+
+        analysis_dataset = self.analysis_datasets[analysis_subset]
+        xvalues = []
+        yvalues = []
+        for prediction_id, details in sorted(self.predictions.iteritems()):
+            if prediction_id in analysis_dataset:
+                ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                predicted_score = details[scoring_method]
+                if predicted_score != None:
+                    xvalues.append(ExperimentalDDG)
+                    yvalues.append(predicted_score)
+        colortext.message('Analyzing %d values for dataset %s using scoring method %s.' % (len(xvalues), analysis_subset, scoring_method))
+        pprint.pprint(get_xy_dataset_correlations(xvalues, yvalues))
+        return get_xy_dataset_correlations(xvalues, yvalues)
 
 
+    def analyze_subset_by_specific_resolutions(self, analysis_subset, scoring_method, bins = [1.5, 2.0, 2.5]):
+        ''' Analyzes a subset using specific PDB resolution bins.
+            The bins argument defines the resolution bins.
+            The first bin is <x where x is the smallest value in bins.
+            The last bin is >x where x is the largest value in bins.
+        '''
 
+        bins = sorted(set(bins))
+        assert(bins[0] > 0)
+        limits = [0] + bins + [max(bins[-1], 100)]
+        xvalues = {None : []}
+        yvalues = {None : []}
+        for x in range(0, len(limits) - 1):
+            xvalues[(limits[x], limits[x + 1])] = []
+            yvalues[(limits[x], limits[x + 1])] = []
+
+        analysis_dataset = self.analysis_datasets[analysis_subset]
+        for prediction_id, details in sorted(self.predictions.iteritems()):
+            if prediction_id in analysis_dataset:
+                predicted_score = details[scoring_method]
+                if predicted_score != None:
+                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                    resolution = self.pdb_details[details['pPDB']]['Resolution']
+                    if resolution:
+                        for x in range(0, len(limits) - 1):
+                            if limits[x] <= resolution < limits[x + 1]:
+                                xvalues[(limits[x], limits[x + 1])].append(ExperimentalDDG)
+                                yvalues[(limits[x], limits[x + 1])].append(predicted_score)
+                                break
+                    else:
+                        xvalues[None].append(ExperimentalDDG)
+                        yvalues[None].append(predicted_score)
+
+        results = {}
+        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
+        for k in sorted(xvalues.keys()):
+            if len(xvalues[k]) >= 8:
+                colortext.warning('Analyzing %d values for bin %s.' % (len(xvalues[k]), str(k)))
+                results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
+                pprint.pprint(results[k])
+            else:
+                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+        return results
+
+    def analyze_subset_by_binned_resolutions(self, analysis_subset, scoring_method, num_bins = 9):
+        ''' Analyzes a subset using PDB resolution bins. This function attempts to break up the result set into num_bins
+            bins of somewhat equal size.
+            Additionally, there is a special bin for PDB files with null resolution.
+        '''
+
+        assert(num_bins > 1)
+
+        count = 0
+        xyvalues = {None: []}
+        analysis_dataset = self.analysis_datasets[analysis_subset]
+        for prediction_id, details in sorted(self.predictions.iteritems()):
+            if prediction_id in analysis_dataset:
+                predicted_score = details[scoring_method]
+                if predicted_score != None:
+                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                    resolution = self.pdb_details[details['pPDB']]['Resolution']
+                    xyvalues[resolution] = xyvalues.get(resolution, [])
+                    xyvalues[resolution].append((ExperimentalDDG, predicted_score))
+                    count += 1
+
+        # determine the ideal number per bin, ignoring the bin with null resolution
+        ideal_per_bin = (count - len(xyvalues.get(None))) / num_bins
+
+        xvalues = {None : [p[0] for p in xyvalues[None]]}
+        yvalues = {None : [p[1] for p in xyvalues[None]]}
+        current_bin = []
+        bin_start = 0
+        for bin_end in sorted(xyvalues.keys()):
+            if bin_end != None:
+                current_bin += xyvalues[bin_end]
+                if (len(current_bin) > ideal_per_bin) or (bin_end == sorted(xyvalues.keys())[-1]):
+                    colortext.warning('hit')
+                    xvalues[(bin_start, bin_end)] = [p[0] for p in current_bin]
+                    yvalues[(bin_start, bin_end)] = [p[1] for p in current_bin]
+                    bin_start = bin_end
+                    current_bin = []
+        assert(sum([len(xvalues[k]) for k in xvalues]) == count)
+
+        results = {}
+        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
+        for k in sorted(xvalues.keys()):
+            if len(xvalues[k]) >= 8:
+                colortext.warning('Analyzing %d values for bin %s.' % (len(xvalues[k]), str(k)))
+                pprint.pprint(get_xy_dataset_correlations(xvalues[k], yvalues[k]))
+            else:
+                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+        return results
+
+
+        # We can derive the following data:
+        #   TM, Resolution, XRay per PDB
+        #   for prediction_id, d in predictions.iteritems():
+        #     assoc_pdb = pdb_details[d['pPDB']]
+        #     d['TM'] = assoc_pdb['TM'] == 1
+        #     d['XRay'] = assoc_pdb['XRay']
+        #     d['Resolution'] = assoc_pdb['Resolution']
+        # Derive GP (if wt or mutant is glycine or proline)
+        # Derive WTPolarity, WTAromaticity, MutantPolarity, MutantAromaticity
+        # Derive SL, LS, SS, LL
+        # Derive ChainLength: prediction['ChainLength'] = pdbs[pc['PDBFileID']]['chains'][pc['Chain']]
+
+        #print(self.pdb_details[details['pPDB']])
+        #        print(self.pdb_details[details['pPDB']]['chains'][details['Chain']])
+        #        #{u'XRay': True, u'chains': {u'A': 680}, u'Technique': u'X-RAY DIFFRACTION', u'Resolution': 2.4, u'TM': 1}
