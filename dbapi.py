@@ -1244,6 +1244,8 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
         # Add missing fields for the set of badly_entered_predictions and multiple mutations
         for prediction_id, d in sorted(predictions.iteritems()):
             if 'DSSP' not in d.keys():
+                # todo: if there is a G or P in any mutation, mark this record ["GP"] = True
+                # use this below to separate the GP mutations, rather than checking the wtaa and mutaa there
                 prediction['DSSP'] = None
                 prediction['Exposure'] = None
                 prediction['WTAA'] = None
@@ -1301,17 +1303,37 @@ class AnalysisBreakdown(object):
     def __init__(self, amino_acids, pdb_details, predictions, analysis_datasets):
         self.amino_acids = amino_acids
         self.pdb_details = pdb_details
-        self.predictions = predictions
+
+        # split the predictions over mutations to/from glycine and proline and other predictions
+        GP = set(['G', 'P'])
+        GP_predictions = {}
+        main_predictions = {}
+        for p, details in predictions.iteritems():
+            if not details.get('WTAA'):
+                continue
+            elif details['WTAA'] in GP or details['MutantAA'] in GP:
+                GP_predictions[p] = details
+            else:
+                main_predictions[p] = details
+
+        self.GP_predictions = GP_predictions
+        self.main_predictions = main_predictions
         self.analysis_datasets = analysis_datasets
 
 
-    def analyze_subset_all(self, analysis_subset, scoring_method):
-        'Analyzes a subset using all datapoints.'
+    def analyze_subset_main(self, analysis_subset, scoring_method):
+        return self._analyze_subset_sub(analysis_subset, scoring_method, self.main_predictions)
+
+    def analyze_subset_GP(self, analysis_subset, scoring_method):
+        return self._analyze_subset_sub(analysis_subset, scoring_method, self.GP_predictions)
+
+    def _analyze_subset_sub(self, analysis_subset, scoring_method, predictions):
+        'Analyzes a subset using the main datapoints.'
 
         analysis_dataset = self.analysis_datasets[analysis_subset]
         xvalues = []
         yvalues = []
-        for prediction_id, details in sorted(self.predictions.iteritems()):
+        for prediction_id, details in sorted(predictions.iteritems()):
             if prediction_id in analysis_dataset:
                 ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
                 predicted_score = details[scoring_method]
@@ -1340,7 +1362,7 @@ class AnalysisBreakdown(object):
             yvalues[(limits[x], limits[x + 1])] = []
 
         analysis_dataset = self.analysis_datasets[analysis_subset]
-        for prediction_id, details in sorted(self.predictions.iteritems()):
+        for prediction_id, details in sorted(self.main_predictions.iteritems()):
             if prediction_id in analysis_dataset:
                 predicted_score = details[scoring_method]
                 if predicted_score != None:
@@ -1370,15 +1392,14 @@ class AnalysisBreakdown(object):
     def analyze_subset_by_binned_resolutions(self, analysis_subset, scoring_method, num_bins = 9):
         ''' Analyzes a subset using PDB resolution bins. This function attempts to break up the result set into num_bins
             bins of somewhat equal size.
-            Additionally, there is a special bin for PDB files with null resolution.
-        '''
+            Additionally, there is a special bin for PDB files with null resolution.'''
 
         assert(num_bins > 1)
 
         count = 0
         xyvalues = {None: []}
         analysis_dataset = self.analysis_datasets[analysis_subset]
-        for prediction_id, details in sorted(self.predictions.iteritems()):
+        for prediction_id, details in sorted(self.main_predictions.iteritems()):
             if prediction_id in analysis_dataset:
                 predicted_score = details[scoring_method]
                 if predicted_score != None:
@@ -1399,7 +1420,6 @@ class AnalysisBreakdown(object):
             if bin_end != None:
                 current_bin += xyvalues[bin_end]
                 if (len(current_bin) > ideal_per_bin) or (bin_end == sorted(xyvalues.keys())[-1]):
-                    colortext.warning('hit')
                     xvalues[(bin_start, bin_end)] = [p[0] for p in current_bin]
                     yvalues[(bin_start, bin_end)] = [p[1] for p in current_bin]
                     bin_start = bin_end
@@ -1417,6 +1437,58 @@ class AnalysisBreakdown(object):
         return results
 
 
+    def analyze_subset_by_binned_chain_length(self, analysis_subset, scoring_method, num_bins = 9):
+        ''' Analyzes a subset using PDB resolution bins. This function attempts to break up the result set into num_bins
+            bins of somewhat equal size.
+            Additionally, there is a special bin for PDB files with null resolution.'''
+
+        assert(num_bins > 1)
+
+        pdb_details = self.pdb_details
+        count = 0
+        xyvalues = {}
+        analysis_dataset = self.analysis_datasets[analysis_subset]
+        for prediction_id, details in sorted(self.main_predictions.iteritems()):
+            if prediction_id in analysis_dataset:
+                predicted_score = details[scoring_method]
+                if predicted_score != None:
+                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                    chain = details['Chain']
+                    ppdb = details['pPDB']
+                    chain_length = pdb_details[ppdb]['chains'][chain]
+                    xyvalues[chain_length] = xyvalues.get(chain_length, [])
+                    xyvalues[chain_length].append((ExperimentalDDG, predicted_score))
+                    count += 1
+
+        # determine the ideal number per bin, ignoring the bin with null resolution
+        ideal_per_bin = (count) / num_bins
+
+        xvalues = {}#None : [p[0] for p in xyvalues[None]]}
+        yvalues = {}#sNone : [p[1] for p in xyvalues[None]]}
+        current_bin = []
+        bin_start = max(xyvalues.keys())
+        print(sorted(xyvalues.keys()))
+        print(sorted(xyvalues.keys(), reverse = True))
+        for bin_end in sorted(xyvalues.keys(), reverse = True):
+            current_bin += xyvalues[bin_end]
+            if (len(current_bin) > ideal_per_bin) or (bin_end == sorted(xyvalues.keys(), reverse = True)[-1]):
+                xvalues[(bin_start, bin_end)] = [p[0] for p in current_bin]
+                yvalues[(bin_start, bin_end)] = [p[1] for p in current_bin]
+                bin_start = bin_end
+                current_bin = []
+        print(sum([len(xvalues[k]) for k in xvalues]), count)
+        assert(sum([len(xvalues[k]) for k in xvalues]) == count)
+
+        results = {}
+        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
+        for k in sorted(xvalues.keys()):
+            if len(xvalues[k]) >= 8:
+                colortext.warning('Analyzing %d values for bin %s.' % (len(xvalues[k]), str(k)))
+                pprint.pprint(get_xy_dataset_correlations(xvalues[k], yvalues[k]))
+            else:
+                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+        return results
+
         # We can derive the following data:
         #   TM, Resolution, XRay per PDB
         #   for prediction_id, d in predictions.iteritems():
@@ -1432,3 +1504,191 @@ class AnalysisBreakdown(object):
         #print(self.pdb_details[details['pPDB']])
         #        print(self.pdb_details[details['pPDB']]['chains'][details['Chain']])
         #        #{u'XRay': True, u'chains': {u'A': 680}, u'Technique': u'X-RAY DIFFRACTION', u'Resolution': 2.4, u'TM': 1}
+
+
+    def analyze_subset_by_exposure(self, analysis_subset, scoring_method, cut_off = 0.25):
+        ''' Analyzes a subset using exposure of the wildtype residue as calculated by DSSP.
+            The cut_off argument defines the definition of burial - wildtype positions with an exposure <= cut_off are
+            considered buried.
+        '''
+
+        assert(0 <= cut_off <= 1.0)
+        xvalues = {None : [], 'B' : [], 'E' : []}
+        yvalues = {None : [], 'B' : [], 'E' : []}
+
+        analysis_dataset = self.analysis_datasets[analysis_subset]
+        for prediction_id, details in sorted(self.main_predictions.iteritems()):
+            if prediction_id in analysis_dataset:
+                predicted_score = details[scoring_method]
+                if predicted_score != None:
+                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                    exposure = details.get('Exposure')
+                    if exposure:
+                        if exposure <= cut_off:
+                            xvalues['B'].append(ExperimentalDDG)
+                            yvalues['B'].append(predicted_score)
+                        else:
+                            xvalues['E'].append(ExperimentalDDG)
+                            yvalues['E'].append(predicted_score)
+                    else:
+                        xvalues[None].append(ExperimentalDDG)
+                        yvalues[None].append(predicted_score)
+
+        results = {}
+        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
+        for k in sorted(xvalues.keys()):
+            if len(xvalues[k]) >= 8:
+                colortext.warning('Analyzing %d values for exposure type %s.' % (len(xvalues[k]), str(k)))
+                results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
+                pprint.pprint(results[k])
+            else:
+                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+        return results
+
+
+    def analyze_subset_by_wildtype_charge(self, analysis_subset, scoring_method):
+        ''' Analyzes subsets partitioned by residue charge - charged, polar, or hydrophobic.
+            The cut_off argument defines the definition of burial - wildtype positions with an exposure <= cut_off are
+            considered buried.'''
+
+        xvalues = {None : [], 'C' : [], 'P' : [], 'H' : []}
+        yvalues = {None : [], 'C' : [], 'P' : [], 'H' : []}
+
+        amino_acids = self.amino_acids
+        analysis_dataset = self.analysis_datasets[analysis_subset]
+        for prediction_id, details in sorted(self.main_predictions.iteritems()):
+            if prediction_id in analysis_dataset:
+                predicted_score = details[scoring_method]
+                if predicted_score != None:
+                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                    wtaa = details.get('WTAA')
+                    if wtaa:
+                        polarity = amino_acids[wtaa]['Polarity']
+                        xvalues[polarity].append(ExperimentalDDG)
+                        yvalues[polarity].append(predicted_score)
+                    else:
+                        xvalues[None].append(ExperimentalDDG)
+                        yvalues[None].append(predicted_score)
+
+        results = {}
+        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
+        for k in sorted(xvalues.keys()):
+            if len(xvalues[k]) >= 8:
+                colortext.warning('Analyzing %d values for polarity type %s.' % (len(xvalues[k]), str(k)))
+                results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
+                pprint.pprint(results[k])
+            else:
+                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+        return results
+
+
+    def analyze_subset_by_aromaticity(self, analysis_subset, scoring_method):
+        ''' Analyzes subsets partitioned by residue charge - charged, polar, or hydrophobic.
+            The cut_off argument defines the definition of burial - wildtype positions with an exposure <= cut_off are
+            considered buried.'''
+
+        xvalues = {None : [], '-' : [], 'L' : [], 'R' : []}
+        yvalues = {None : [], '-' : [], 'L' : [], 'R' : []}
+
+        amino_acids = self.amino_acids
+        analysis_dataset = self.analysis_datasets[analysis_subset]
+        for prediction_id, details in sorted(self.main_predictions.iteritems()):
+            if prediction_id in analysis_dataset:
+                predicted_score = details[scoring_method]
+                if predicted_score != None:
+                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                    wtaa = details.get('WTAA')
+                    if wtaa:
+                        aromaticity = amino_acids[wtaa]['Aromaticity']
+                        xvalues[aromaticity].append(ExperimentalDDG)
+                        yvalues[aromaticity].append(predicted_score)
+                    else:
+                        xvalues[None].append(ExperimentalDDG)
+                        yvalues[None].append(predicted_score)
+
+        results = {}
+        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
+        for k in sorted(xvalues.keys()):
+            if len(xvalues[k]) >= 8:
+                colortext.warning('Analyzing %d values for aromaticity type %s.' % (len(xvalues[k]), str(k)))
+                results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
+                pprint.pprint(results[k])
+            else:
+                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+        return results
+
+
+    def analyze_subset_by_mutation_size(self, analysis_subset, scoring_method):
+        ''' Analyzes subsets partitioned by residue charge - charged, polar, or hydrophobic.
+            The cut_off argument defines the definition of burial - wildtype positions with an exposure <= cut_off are
+            considered buried.'''
+
+        xvalues = {None : [], 'XX' : [], 'SL' : [], 'LS' : []}
+        yvalues = {None : [], 'XX' : [], 'SL' : [], 'LS' : []}
+
+        amino_acids = self.amino_acids
+        SAA = [aa for aa in amino_acids if amino_acids[aa]['Size'] == 'small']
+        LAA = [aa for aa in amino_acids if amino_acids[aa]['Size'] == 'large']
+
+        analysis_dataset = self.analysis_datasets[analysis_subset]
+        for prediction_id, details in sorted(self.main_predictions.iteritems()):
+            if prediction_id in analysis_dataset:
+                predicted_score = details[scoring_method]
+                if predicted_score != None:
+                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                    wtaa = details.get('WTAA')
+                    if wtaa:
+                        mutaa = details.get('MutantAA')
+                        if wtaa in SAA and mutaa in LAA:
+                            xvalues['SL'].append(ExperimentalDDG)
+                            yvalues['SL'].append(predicted_score)
+                        elif wtaa in LAA and mutaa in SAA:
+                            xvalues['LS'].append(ExperimentalDDG)
+                            yvalues['LS'].append(predicted_score)
+                        else:
+                            xvalues['XX'].append(ExperimentalDDG)
+                            yvalues['XX'].append(predicted_score)
+                    else:
+                        xvalues[None].append(ExperimentalDDG)
+                        yvalues[None].append(predicted_score)
+
+        results = {}
+        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
+        for k in sorted(xvalues.keys()):
+            if len(xvalues[k]) >= 8:
+                colortext.warning('Analyzing %d values for aromaticity type %s.' % (len(xvalues[k]), str(k)))
+                results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
+                pprint.pprint(results[k])
+            else:
+                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+        return results
+
+
+    def analyze_subset_by_secondary_structure(self, analysis_subset, scoring_method):
+        ''' Analyzes subsets partitioned by residue charge - charged, polar, or hydrophobic.
+            The cut_off argument defines the definition of burial - wildtype positions with an exposure <= cut_off are
+            considered buried.'''
+
+        xvalues = {None : [], 'S' : [], 'H' : [], 'O' : []}
+        yvalues = {None : [], 'S' : [], 'H' : [], 'O' : []}
+
+        analysis_dataset = self.analysis_datasets[analysis_subset]
+        for prediction_id, details in sorted(self.main_predictions.iteritems()):
+            if prediction_id in analysis_dataset:
+                predicted_score = details[scoring_method]
+                if predicted_score != None:
+                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                    dssp = details.get('DSSP')
+                    xvalues[dssp].append(ExperimentalDDG)
+                    yvalues[dssp].append(predicted_score)
+
+        results = {}
+        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
+        for k in sorted(xvalues.keys()):
+            if len(xvalues[k]) >= 8:
+                colortext.warning('Analyzing %d values for aromaticity type %s.' % (len(xvalues[k]), str(k)))
+                results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
+                pprint.pprint(results[k])
+            else:
+                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+        return results
