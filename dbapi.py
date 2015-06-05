@@ -19,6 +19,7 @@ import md5
 import random
 import datetime
 import zipfile
+import pprint
 
 try:
     import matplotlib
@@ -37,10 +38,11 @@ from tools.bio.basics import residue_type_3to1_map as aa1, dssp_elision
 from tools.bio.basics import Mutation
 from tools.bio.alignment import ScaffoldModelChainMapper
 #from Bio.PDB import *
-from tools.fs.io import write_file, read_file
+from tools.fs.fsio import write_file, read_file
 from tools.process import Popen
 from tools.constants import rosetta_weights
 from tools import colortext
+from tools.stats.misc import get_xy_dataset_correlations
 #import analysis
 #from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet
 
@@ -188,8 +190,7 @@ class ddG(object):
 
         #score.ddgTestScore
 
-    def add_PDB_to_database(self, filepath = None, pdbID = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False, techniques = None):
-        raise Exception('Before using this again, add the functionality from ddgadmin/updatedb/compute_all_dssp.py to add the molecules and DSSP values.')
+    def add_PDB_to_database(self, filepath = None, pdbID = None, contains_membrane_protein = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False, techniques = None):
         assert(file_source)
         if filepath:
             if not os.path.exists(filepath):
@@ -202,7 +203,7 @@ class ddG(object):
             rootname = pdbID
 
         try:
-            dbp = ddgdbapi.PDBStructure(self.ddGDB, rootname, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques)
+            dbp = ddgdbapi.PDBStructure(self.ddGDB, rootname, contains_membrane_protein = contains_membrane_protein, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques)
             #Structure.getPDBContents(self.ddGDB)
             results = self.ddGDB.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters = (rootname,))
             if results:
@@ -314,6 +315,7 @@ class ddG(object):
             'BatchSize' : BatchSize,
         }
         self.ddGDB.insertDictIfNew("PredictionSet", d, ['ID'])
+
 
     def createPredictionsFromUserDataSet(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
 
@@ -1036,7 +1038,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                     Name = r['Name'],
                     Polarity = polarity_map.get(r['Polarity'], 'H'),
                     Aromaticity = aromaticity_map[r['Aromaticity']],
-                    Size = r['Size']
+                    Size = r['Size'],
+                    van_der_Waals_volume = r['Volume']
                 )
         amino_acids['Y']['Polarity'] = 'H'
         return amino_acids
@@ -1053,7 +1056,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             if pdb_id in cached_pdb_ids:
                 pdbs[pdb_id] = cached_pdb_details[pdb_id]
             else:
-                record = self.ddGDB.execute_select('SELECT * FROM PDBFile WHERE ID=%s', parameters=(pdb_id))[0]
+                record = self.ddGDB.execute_select('SELECT * FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))[0]
                 p = PDB(record['Content'])
                 pdb_chain_lengths = {}
                 for chain_id, s in p.atom_sequences.iteritems():
@@ -1124,6 +1127,14 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 ) AS a''', parameters=(predictionset,))
         allowed_prediction_ids = set([m['PredictionID'] for m in prediction_records])
 
+        kellogg_score_method_id = self.ddGDB.execute_select('''SELECT ID FROM ScoreMethod WHERE MethodName='Global' AND MethodType='Protocol 16' ''')
+        assert(len(kellogg_score_method_id) == 1)
+        kellogg_score_method_id = kellogg_score_method_id[0]['ID']
+
+        noah_8A_positional_score_method_id = self.ddGDB.execute_select('''SELECT ID FROM ScoreMethod WHERE MethodName='Local' AND MethodType='Position' ''')
+        assert(len(noah_8A_positional_score_method_id) == 1)
+        noah_8A_positional_score_method_id = noah_8A_positional_score_method_id[0]['ID']
+
         # Hack - add on the mutations from the datasets which were represented as single mutants (in the original datasets) but which are double mutants
         # See ExperimentAssays ( 917, 918, 919, 920, 922, 7314, 932, 933, 936, 937, 938, 2076, 7304, 7305, 7307, 7308, 7309, 7310, 7312, 7315, 7316, 7317, 7320 )
         # or Experiments (111145, 110303, 110284, 110287, 110299, 110300, 110285, 110286, 110289, 114180, 114175, 114177, 114171, 110304, 110305, 114179, 114168, 114170, 114172, 114173, 114178, 114167)
@@ -1135,6 +1146,21 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                     AND ExperimentID IN (111145, 110303, 110284, 110287, 110299, 110300, 110285, 110286, 110289, 114180, 114175, 114177, 114171, 110304, 110305, 114179, 114168, 114170, 114172, 114173, 114178, 114167)''', parameters=(predictionset,))
         badly_entered_predictions = set([r['PredictionID'] for r in badly_entered_predictions])
         allowed_prediction_ids = allowed_prediction_ids.union(badly_entered_predictions)
+
+
+        # Read in the PredictionStructureScore records
+        kellogg_structure_score_query = self.ddGDB.execute_select('''
+            SELECT PredictionID, ScoreType, StructureID, total FROM PredictionStructureScore
+            WHERE PredictionID >=%s
+            AND PredictionID <=%s
+            AND (ScoreType = 'Mutant' OR ScoreType = 'WildType')
+            AND ScoreMethodID=%s
+            ''', parameters=(min(allowed_prediction_ids), max(allowed_prediction_ids), kellogg_score_method_id))
+        kellogg_structure_scores = {}
+        for kss in kellogg_structure_score_query:
+            PredictionID = kss['PredictionID']
+            kellogg_structure_scores[PredictionID] = kellogg_structure_scores.get(PredictionID, {'WildType' : {}, 'Mutant' : {}})
+            kellogg_structure_scores[PredictionID][kss['ScoreType']][kss['StructureID']] = kss['total']
 
         # Get the Prediction records for the mutation predictions and the list of PDB IDs
         num_predictions = 0
@@ -1162,13 +1188,36 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             pdb_ids.add(p['pPDB'])
             if p['Scores']:
                 scores = json.loads(p['Scores'])
-                p['Kellogg'] = scores['data']['kellogg']['total']['ddG']
+
+                # Retrieve the scores from the PredictionStructureScore records
+                # todo: this is only done for the Kellogg scores at present
+                kellogg_output_score = scores['data']['kellogg']['total']['ddG']
+                individual_scores = kellogg_structure_scores.get(id)
+                assert(individual_scores)
+                assert(len(individual_scores['Mutant']) == 50) # todo: parameterize
+                assert(len(individual_scores['WildType']) == 50) # todo: parameterize
+                sorted_mutant_scores = sorted(individual_scores['Mutant'].values())
+                sorted_wildtype_scores = sorted(individual_scores['WildType'].values())
+
+                # Compute three scores - the best pair, the average of the best 3 pairs, and the average of the best 5 pairs.
+                kellogg_top1 = sorted_mutant_scores[0] - sorted_wildtype_scores[0]
+                kellogg_top3 = (sum(sorted_mutant_scores[:3]) - sum(sorted_wildtype_scores[:3]))/3.0
+                kellogg_top5 = (sum(sorted_mutant_scores[:5]) - sum(sorted_wildtype_scores[:5]))/5.0
+
+                print(kellogg_output_score, kellogg_top1, kellogg_top3, kellogg_top5)
+                assert(abs(kellogg_output_score - kellogg_top1) < 0.01)
+                p['Kellogg_top1'] = kellogg_top1
+                p['Kellogg_top3'] = kellogg_top3
+                p['Kellogg_top5'] = kellogg_top5
+
                 if scores['data'].get('noah_8,0A'):
                     p['Noah'] = scores['data']['noah_8,0A']['positional']['ddG']
                 else:
                     p['Noah'] = None
             else:
-                p['Kellogg'] = None
+                p['Kellogg_top1'] = None
+                p['Kellogg_top3'] = None
+                p['Kellogg_top5'] = None
                 p['Noah'] = None
                 failures += 1
             del p['PredictionID']
@@ -1240,7 +1289,6 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
             prediction['MutantAA'] = m['MutantAA']
             prediction['ResidueID'] = m['ResidueID']
 
-
         # Add missing fields for the set of badly_entered_predictions and multiple mutations
         for prediction_id, d in sorted(predictions.iteritems()):
             if 'DSSP' not in d.keys():
@@ -1295,9 +1343,128 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
             analysis_data, # a mapping: analysis subset (e.g. "Guerois") -> Prediction IDs -> (prediction) PDB_ID, ExperimentID, ExperimentDDG (mean of experimental values)
         )
 
+    ### Dataset stats functions
 
-import pprint
-from tools.stats.misc import get_xy_dataset_correlations
+    def get_analysis_set_overlap_by_Experiment(self, restrict_to_subsets = set(), UserDataSetID = 1):
+        ''' Returns the overlap between analysis sets of a UserDataSet where overlap is determined by the set of ExperimentIDs.
+            Caveat: This assumes that the Experiments do not overlap. While this is mostly true at present, there are probably
+                    still some duplicates.
+            Returns a symmetric matrix (as a pandas dataframe) with the pairwise overlaps.
+            Usage: self.get_dataset_overlap_by_Experiment(restrict_to_subsets = ['CuratedProTherm', 'Guerois', 'Kellogg', 'Potapov']).'''
+
+        import numpy
+        import pandas as pd
+
+        # Read the list of experiments from the database
+        analysis_set_experiments = {}
+        results = self.ddGDB.execute_select('SELECT * FROM UserAnalysisSet WHERE UserDataSetID=%s', parameters=(UserDataSetID,))
+        for r in results:
+            subset = r['Subset']
+            if (len(restrict_to_subsets) == 0) or (subset in restrict_to_subsets):
+                analysis_set_experiments[subset] = analysis_set_experiments.get(subset, set())
+                analysis_set_experiments[subset].add(r['ExperimentID'])
+
+        analysis_sets = sorted(analysis_set_experiments.keys())
+        m = []
+        for x in analysis_sets:
+            mx = []
+            for y in analysis_sets:
+                mx.append(len(analysis_set_experiments[x].intersection(analysis_set_experiments[y])))
+            m.append(mx)
+        df = pd.DataFrame(m, index = analysis_sets, columns = analysis_sets)
+        return df
+
+
+    def get_analysis_set_disjoint_by_Experiment(self, primary_subset, other_subsets = set(), UserDataSetID = 1):
+        ''' Returns the overlap between analysis sets of a UserDataSet where overlap is determined by the set of ExperimentIDs.
+            Caveat: This assumes that the Experiments do not overlap. While this is mostly true at present, there are probably
+                    still some duplicates.
+            Returns a symmetric matrix (as a pandas dataframe) with the pairwise overlaps.
+            Usage: self.get_dataset_overlap_by_Experiment(other_subsets = ['CuratedProTherm', 'Guerois', 'Kellogg', 'Potapov']).'''
+
+        import numpy
+        import pandas as pd
+
+        # Read the list of experiments from the database
+        analysis_set_experiments = {}
+        primary_analysis_set_experiments = set()
+        results = self.ddGDB.execute_select('SELECT * FROM UserAnalysisSet WHERE UserDataSetID=%s', parameters=(UserDataSetID,))
+        for r in results:
+            subset = r['Subset']
+            if subset != primary_subset:
+                if (len(other_subsets) == 0) or (subset in other_subsets):
+                    analysis_set_experiments[subset] = analysis_set_experiments.get(subset, set())
+                    analysis_set_experiments[subset].add(r['ExperimentID'])
+            else:
+                primary_analysis_set_experiments.add(r['ExperimentID'])
+
+        # Create the subsets
+        analysis_set_common_experiments = {}
+        analysis_set_disjoint_experiments = {}
+        analysis_sets = sorted(analysis_set_experiments.keys())
+        m = []
+        for x in analysis_sets:
+            analysis_set_common_experiments[x] = analysis_set_experiments[x].intersection(primary_analysis_set_experiments)
+            analysis_set_disjoint_experiments[x] = analysis_set_experiments[x].difference(primary_analysis_set_experiments)
+            assert(len(analysis_set_common_experiments[x]) + len(analysis_set_disjoint_experiments[x]) == len(analysis_set_experiments[x]))
+
+        assert(primary_subset not in analysis_set_experiments.keys())
+        all_common_analysis_set_experiments = {}
+        for x in analysis_set_experiments.keys():
+            all_common_analysis_set_experiments[x] = analysis_set_common_experiments[x]
+        all_common_analysis_set_experiments[primary_subset] = primary_analysis_set_experiments
+        all_common_analysis_sets = sorted(all_common_analysis_set_experiments.keys())
+        m = []
+        for x in all_common_analysis_sets:
+            mx = []
+            for y in all_common_analysis_sets:
+                mx.append(len(all_common_analysis_set_experiments[x].intersection(all_common_analysis_set_experiments[y])))
+            m.append(mx)
+        df = pd.DataFrame(m, index = all_common_analysis_sets, columns = all_common_analysis_sets)
+
+        other_sets = analysis_set_experiments.keys()
+        if len(other_sets) == 3:
+            print(other_sets)
+            print('Common to all three other sets in the intersection: %d' % len(analysis_set_common_experiments[other_sets[0]].intersection(analysis_set_common_experiments[other_sets[1]]).intersection(analysis_set_common_experiments[other_sets[2]])))
+            print('Common to all three other sets in the disjoint set: %d' % len(analysis_set_disjoint_experiments[other_sets[0]].intersection(analysis_set_disjoint_experiments[other_sets[1]]).intersection(analysis_set_disjoint_experiments[other_sets[2]])))
+            print('ere')
+
+        print('\nCommon to primary set\n')
+        print(df)
+
+
+        all_disjoint_analysis_sets = sorted(analysis_set_disjoint_experiments.keys())
+        m = []
+        for x in all_disjoint_analysis_sets:
+            mx = []
+            for y in all_disjoint_analysis_sets:
+                mx.append(len(analysis_set_disjoint_experiments[x].intersection(analysis_set_disjoint_experiments[y])))
+            m.append(mx)
+        df = pd.DataFrame(m, index = all_disjoint_analysis_sets, columns = all_disjoint_analysis_sets)
+        print('\nDisjoint from primary set\n')
+        print(df)
+
+
+        return df
+
+
+    def get_analysis_set_overlap_by_Experiment_as_radii(self, max_radius, restrict_to_subsets = set(), UserDataSetID = 1):
+        import numpy
+        df = self.get_analysis_set_overlap_by_Experiment(restrict_to_subsets = restrict_to_subsets, UserDataSetID = UserDataSetID)
+
+        # Determine the relative sizes for the radii (a = pi.r^2 so pi cancels out).
+        radii_ratios = df.apply(lambda x: numpy.sqrt(x))
+
+        # Get the max value and determine the scalar
+        max_value = max(numpy.hstack(radii_ratios.values))
+        scalar = float(max_radius) / max_value
+
+        # Returned the scaled matrix
+        return radii_ratios.apply(lambda x: x * scalar)
+
+
+
+
 class AnalysisBreakdown(object):
 
     def __init__(self, amino_acids, pdb_details, predictions, analysis_datasets):
@@ -1306,43 +1473,97 @@ class AnalysisBreakdown(object):
 
         # split the predictions over mutations to/from glycine and proline and other predictions
         GP = set(['G', 'P'])
-        GP_predictions = {}
-        main_predictions = {}
+        single_mutation_GP_predictions = {}
+        single_mutation_no_GP_predictions = {}
+        multiple_mutation_predictions = {}
         for p, details in predictions.iteritems():
             if not details.get('WTAA'):
-                continue
-            elif details['WTAA'] in GP or details['MutantAA'] in GP:
-                GP_predictions[p] = details
+                multiple_mutation_predictions[p] = details
+            elif (details['WTAA'] in GP or details['MutantAA'] in GP):
+                single_mutation_GP_predictions[p] = details
             else:
-                main_predictions[p] = details
+                single_mutation_no_GP_predictions[p] = details
 
-        self.GP_predictions = GP_predictions
-        self.main_predictions = main_predictions
+        self.predictions = predictions
+        self.single_mutation_GP_predictions = single_mutation_GP_predictions
+        self.single_mutation_no_GP_predictions = single_mutation_no_GP_predictions
+        self.multiple_mutation_predictions = multiple_mutation_predictions
+        print('%d total predictions: %d Single No GP, %d Single GP, %d multiple' % (len(predictions), len(single_mutation_no_GP_predictions), len(single_mutation_GP_predictions), len(multiple_mutation_predictions)))
         self.analysis_datasets = analysis_datasets
 
 
-    def analyze_subset_main(self, analysis_subset, scoring_method):
-        return self._analyze_subset_sub(analysis_subset, scoring_method, self.main_predictions)
+    def analyze_subset_all(self, analysis_subset, scoring_method, prediction_details_map = {}):
+        colortext.message('ANALYZING SUBSET analyze_subset_all of %s' % analysis_subset)
+        return self._analyze_subset_sub(analysis_subset, scoring_method, self.predictions, prediction_details_map)
 
-    def analyze_subset_GP(self, analysis_subset, scoring_method):
-        return self._analyze_subset_sub(analysis_subset, scoring_method, self.GP_predictions)
+    def analyze_subset_single_no_GP(self, analysis_subset, scoring_method):
+        colortext.message('ANALYZING SUBSET single_mutation_no_GP_predictions of %s' % analysis_subset)
+        return self._analyze_subset_sub(analysis_subset, scoring_method, self.single_mutation_no_GP_predictions)
 
-    def _analyze_subset_sub(self, analysis_subset, scoring_method, predictions):
+    def analyze_subset_single_GP(self, analysis_subset, scoring_method):
+        colortext.message('ANALYZING SUBSET single_mutation_GP_predictions of %s' % analysis_subset)
+        return self._analyze_subset_sub(analysis_subset, scoring_method, self.single_mutation_GP_predictions)
+
+    def analyze_subset_multiple(self, analysis_subset, scoring_method):
+        colortext.message('ANALYZING SUBSET multiple_mutation_predictions of %s' % analysis_subset)
+        return self._analyze_subset_sub(analysis_subset, scoring_method, self.multiple_mutation_predictions)
+
+    def _analyze_subset_sub(self, analysis_subset, scoring_method, predictions, prediction_details_map = {}):
         'Analyzes a subset using the main datapoints.'
 
         analysis_dataset = self.analysis_datasets[analysis_subset]
         xvalues = []
         yvalues = []
+        print('ID,Experimental,Predicted')
+
+        # for benchmarks paper
+        ddgapio = ddG().ddGDB
+
         for prediction_id, details in sorted(predictions.iteritems()):
             if prediction_id in analysis_dataset:
                 ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
                 predicted_score = details[scoring_method]
                 if predicted_score != None:
+
+                    # for the Benchmarks paper...
+                    if False:
+                        mutations = ddgapio.execute_select('''
+SELECT ExperimentMutation.*
+FROM Prediction
+INNER JOIN ExperimentMutation ON ExperimentMutation.ExperimentID=Prediction.ExperimentID
+WHERE Prediction.ID = %s''', parameters=(prediction_id,))
+                        if len(mutations) == 1:
+                            if abs(ExperimentalDDG - predicted_score) < 0.5:
+                                if abs(ExperimentalDDG) > 2:
+                                    if (mutations[0]['WildTypeAA'] == 'D'):
+                                        print(mutations[0]['WildTypeAA'], mutations[0]['MutantAA'], ExperimentalDDG, predicted_score, prediction_id)
+
+
                     xvalues.append(ExperimentalDDG)
                     yvalues.append(predicted_score)
+                    if prediction_details_map:
+                        assert(prediction_details_map.get(int(prediction_id)))
+                        #print('%f,%f,%s,%s' % (ExperimentalDDG, predicted_score, prediction_id, ','.join(map(str, prediction_details_map[int(prediction_id)]))))
+                    else:
+                        pass
+                        #print('%f,%f,%s,%s' % (ExperimentalDDG, predicted_score, prediction_id))
+
+        print('*' * 30)
+        print(min(xvalues), max(xvalues), min(yvalues), max(yvalues))
         colortext.message('Analyzing %d values for dataset %s using scoring method %s.' % (len(xvalues), analysis_subset, scoring_method))
-        pprint.pprint(get_xy_dataset_correlations(xvalues, yvalues))
-        return get_xy_dataset_correlations(xvalues, yvalues)
+        stats = None
+        if (len(xvalues) >= 8):
+            stats = get_xy_dataset_correlations(xvalues, yvalues)
+            #colortext.warning('%d, %0.2f, %0.2f, %0.2f, %0.2f' % (len(xvalues), stats['pearsonr'][0], stats['gammaCC'], stats['MAE'], stats['fraction_correct']))
+            colortext.warning('%d, %0.2f, %0.2f, %0.2f' % (len(xvalues), stats['pearsonr'][0], stats['fraction_correct'], stats['MAE'], ))
+            colortext.warning('''
+                              <span class="DDG_correlation_score ">%0.2f</span> /
+                              <span class="DDG_stability_classification_score ">%0.2f</span> /
+                              <span class="DDG_MAE_score">%0.2f</span>''' % (stats['pearsonr'][0], stats['fraction_correct'], stats['MAE']))
+            pprint.pprint(stats)
+        else:
+            colortext.warning('Not enough data.')
+        return stats
 
 
     def analyze_subset_by_specific_resolutions(self, analysis_subset, scoring_method, bins = [1.5, 2.0, 2.5]):
@@ -1362,7 +1583,7 @@ class AnalysisBreakdown(object):
             yvalues[(limits[x], limits[x + 1])] = []
 
         analysis_dataset = self.analysis_datasets[analysis_subset]
-        for prediction_id, details in sorted(self.main_predictions.iteritems()):
+        for prediction_id, details in sorted(self.single_mutation_no_GP_predictions.iteritems()):
             if prediction_id in analysis_dataset:
                 predicted_score = details[scoring_method]
                 if predicted_score != None:
@@ -1384,7 +1605,7 @@ class AnalysisBreakdown(object):
             if len(xvalues[k]) >= 8:
                 colortext.warning('Analyzing %d values for bin %s.' % (len(xvalues[k]), str(k)))
                 results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
-                pprint.pprint(results[k])
+                #pprint.pprint(results[k])
             else:
                 colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
         return results
@@ -1399,7 +1620,7 @@ class AnalysisBreakdown(object):
         count = 0
         xyvalues = {None: []}
         analysis_dataset = self.analysis_datasets[analysis_subset]
-        for prediction_id, details in sorted(self.main_predictions.iteritems()):
+        for prediction_id, details in sorted(self.single_mutation_no_GP_predictions.iteritems()):
             if prediction_id in analysis_dataset:
                 predicted_score = details[scoring_method]
                 if predicted_score != None:
@@ -1448,7 +1669,7 @@ class AnalysisBreakdown(object):
         count = 0
         xyvalues = {}
         analysis_dataset = self.analysis_datasets[analysis_subset]
-        for prediction_id, details in sorted(self.main_predictions.iteritems()):
+        for prediction_id, details in sorted(self.single_mutation_no_GP_predictions.iteritems()):
             if prediction_id in analysis_dataset:
                 predicted_score = details[scoring_method]
                 if predicted_score != None:
@@ -1516,34 +1737,49 @@ class AnalysisBreakdown(object):
         xvalues = {None : [], 'B' : [], 'E' : []}
         yvalues = {None : [], 'B' : [], 'E' : []}
 
-        analysis_dataset = self.analysis_datasets[analysis_subset]
-        for prediction_id, details in sorted(self.main_predictions.iteritems()):
-            if prediction_id in analysis_dataset:
-                predicted_score = details[scoring_method]
-                if predicted_score != None:
-                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
-                    exposure = details.get('Exposure')
-                    if exposure:
-                        if exposure <= cut_off:
-                            xvalues['B'].append(ExperimentalDDG)
-                            yvalues['B'].append(predicted_score)
-                        else:
-                            xvalues['E'].append(ExperimentalDDG)
-                            yvalues['E'].append(predicted_score)
-                    else:
-                        xvalues[None].append(ExperimentalDDG)
-                        yvalues[None].append(predicted_score)
+        main_subsets = [self.single_mutation_no_GP_predictions, self.single_mutation_GP_predictions, self.multiple_mutation_predictions]
+        main_subset_names = ['single_mutation_no_GP_predictions', 'single_mutation_GP_predictions', 'multiple_mutation_predictions']
+        all_results = dict.fromkeys(main_subset_names)
+        for subid in range(len(main_subsets)):
+            main_subset = main_subsets[subid]
+            if main_subset != self.multiple_mutation_predictions:
+                xvalues = {'B' : [], 'E' : []}
+                yvalues = {'B' : [], 'E' : []}
 
-        results = {}
-        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
-        for k in sorted(xvalues.keys()):
-            if len(xvalues[k]) >= 8:
-                colortext.warning('Analyzing %d values for exposure type %s.' % (len(xvalues[k]), str(k)))
-                results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
-                pprint.pprint(results[k])
-            else:
-                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
-        return results
+                colortext.message('ANALYZING SUBSET %s of %s' % (main_subset_names[subid], analysis_subset))
+                analysis_dataset = self.analysis_datasets[analysis_subset]
+                for prediction_id, details in sorted(main_subset.iteritems()):
+                    if prediction_id in analysis_dataset:
+                        predicted_score = details[scoring_method]
+                        if predicted_score != None:
+                            ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                            exposure = details.get('Exposure')
+                            if exposure != None:
+                                if exposure <= cut_off:
+                                    xvalues['B'].append(ExperimentalDDG)
+                                    yvalues['B'].append(predicted_score)
+                                else:
+                                    xvalues['E'].append(ExperimentalDDG)
+                                    yvalues['E'].append(predicted_score)
+                            else:
+                                print(details)
+                                xvalues[None].append(ExperimentalDDG)
+                                yvalues[None].append(predicted_score)
+
+                results = {}
+                colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
+                for k in sorted(xvalues.keys()):
+                    if len(xvalues[k]) >= 8:
+                        colortext.warning('Analyzing %d values for exposure type %s.' % (len(xvalues[k]), str(k)))
+                        stats = get_xy_dataset_correlations(xvalues[k], yvalues[k])
+                        results[k] = stats
+                        #colortext.warning('%d, %0.2f, %0.2f, %0.2f, %0.2f' % (len(xvalues[k]), stats['pearsonr'][0], stats['gammaCC'], stats['MAE'], stats['fraction_correct']))
+                        colortext.warning('%d, %0.2f, %0.2f, %0.2f' % (len(xvalues[k]), stats['pearsonr'][0], stats['fraction_correct'], stats['MAE'], ))
+                        #pprint.pprint(results[k])
+                    else:
+                        colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+                all_results[main_subset_names[subid]] = results
+        return all_results
 
 
     def analyze_subset_by_wildtype_charge(self, analysis_subset, scoring_method):
@@ -1555,31 +1791,57 @@ class AnalysisBreakdown(object):
         yvalues = {None : [], 'C' : [], 'P' : [], 'H' : []}
 
         amino_acids = self.amino_acids
-        analysis_dataset = self.analysis_datasets[analysis_subset]
-        for prediction_id, details in sorted(self.main_predictions.iteritems()):
-            if prediction_id in analysis_dataset:
-                predicted_score = details[scoring_method]
-                if predicted_score != None:
-                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
-                    wtaa = details.get('WTAA')
-                    if wtaa:
-                        polarity = amino_acids[wtaa]['Polarity']
-                        xvalues[polarity].append(ExperimentalDDG)
-                        yvalues[polarity].append(predicted_score)
-                    else:
-                        xvalues[None].append(ExperimentalDDG)
-                        yvalues[None].append(predicted_score)
+        CAA = [aa for aa in amino_acids if amino_acids[aa]['Polarity'] == 'C']
+        PAA = [aa for aa in amino_acids if amino_acids[aa]['Polarity'] == 'P']
+        HAA = [aa for aa in amino_acids if amino_acids[aa]['Polarity'] == 'H']
 
-        results = {}
-        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
-        for k in sorted(xvalues.keys()):
-            if len(xvalues[k]) >= 8:
-                colortext.warning('Analyzing %d values for polarity type %s.' % (len(xvalues[k]), str(k)))
-                results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
-                pprint.pprint(results[k])
-            else:
-                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
-        return results
+        main_subsets = [self.single_mutation_no_GP_predictions, self.single_mutation_GP_predictions, self.multiple_mutation_predictions]
+        main_subset_names = ['single_mutation_no_GP_predictions', 'single_mutation_GP_predictions', 'multiple_mutation_predictions']
+        all_results = dict.fromkeys(main_subset_names)
+        for subid in range(len(main_subsets)):
+            main_subset = main_subsets[subid]
+            if main_subset != self.multiple_mutation_predictions:
+                xvalues = {'Change' : [], 'Polar/Charged' : [], 'Hydrophobic/Non-polar' : []}
+                yvalues = {'Change' : [], 'Polar/Charged' : [], 'Hydrophobic/Non-polar' : []}
+
+                colortext.message('ANALYZING SUBSET %s of %s' % (main_subset_names[subid], analysis_subset))
+                analysis_dataset = self.analysis_datasets[analysis_subset]
+                for prediction_id, details in sorted(main_subset.iteritems()):
+
+                    if prediction_id in analysis_dataset:
+                        predicted_score = details[scoring_method]
+                        if predicted_score != None:
+                            ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                            wtaa = details.get('WTAA')
+                            if wtaa:
+                                mutaa = details.get('MutantAA')
+                                if ((wtaa in CAA or wtaa in PAA) and (mutaa in HAA)) or ((mutaa in CAA or mutaa in PAA) and (wtaa in HAA)):
+                                    # change in charge
+                                    xvalues['Change'].append(ExperimentalDDG)
+                                    yvalues['Change'].append(predicted_score)
+                                elif (wtaa in CAA or wtaa in PAA) and (mutaa in CAA or mutaa in PAA):
+                                    xvalues['Polar/Charged'].append(ExperimentalDDG)
+                                    yvalues['Polar/Charged'].append(predicted_score)
+                                elif (wtaa in HAA) and (mutaa in HAA):
+                                    xvalues['Hydrophobic/Non-polar'].append(ExperimentalDDG)
+                                    yvalues['Hydrophobic/Non-polar'].append(predicted_score)
+                                else:
+                                     raise Exception('Should not reach here.')
+
+                results = {}
+                colortext.message('Analyzing %s=%d values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), sum([len(xvalues[k]) for k in sorted(xvalues.keys())]), analysis_subset, scoring_method))
+                for k in sorted(xvalues.keys()):
+                    if len(xvalues[k]) >= 8:
+                        colortext.warning('Analyzing %d values for polarity type %s.' % (len(xvalues[k]), str(k)))
+                        stats = get_xy_dataset_correlations(xvalues[k], yvalues[k])
+                        results[k] = stats
+                        #colortext.warning('%d, %0.2f, %0.2f, %0.2f, %0.2f' % (len(xvalues[k]), stats['pearsonr'][0], stats['gammaCC'], stats['MAE'], stats['fraction_correct']))
+                        colortext.warning('%d, %0.2f, %0.2f, %0.2f' % (len(xvalues[k]), stats['pearsonr'][0], stats['fraction_correct'], stats['MAE'], ))
+                        #pprint.pprint(results[k])
+                    else:
+                        colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+                all_results[main_subset_names[subid]] = results
+        return all_results
 
 
     def analyze_subset_by_aromaticity(self, analysis_subset, scoring_method):
@@ -1592,7 +1854,7 @@ class AnalysisBreakdown(object):
 
         amino_acids = self.amino_acids
         analysis_dataset = self.analysis_datasets[analysis_subset]
-        for prediction_id, details in sorted(self.main_predictions.iteritems()):
+        for prediction_id, details in sorted(self.single_mutation_no_GP_predictions.iteritems()):
             if prediction_id in analysis_dataset:
                 predicted_score = details[scoring_method]
                 if predicted_score != None:
@@ -1612,7 +1874,7 @@ class AnalysisBreakdown(object):
             if len(xvalues[k]) >= 8:
                 colortext.warning('Analyzing %d values for aromaticity type %s.' % (len(xvalues[k]), str(k)))
                 results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
-                pprint.pprint(results[k])
+                #pprint.pprint(results[k])
             else:
                 colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
         return results
@@ -1623,45 +1885,101 @@ class AnalysisBreakdown(object):
             The cut_off argument defines the definition of burial - wildtype positions with an exposure <= cut_off are
             considered buried.'''
 
-        xvalues = {None : [], 'XX' : [], 'SL' : [], 'LS' : []}
-        yvalues = {None : [], 'XX' : [], 'SL' : [], 'LS' : []}
+        #xvalues = {None : [], 'XX' : [], 'SL' : [], 'LS' : []}
+        #yvalues = {None : [], 'XX' : [], 'SL' : [], 'LS' : []}
 
         amino_acids = self.amino_acids
         SAA = [aa for aa in amino_acids if amino_acids[aa]['Size'] == 'small']
         LAA = [aa for aa in amino_acids if amino_acids[aa]['Size'] == 'large']
 
-        analysis_dataset = self.analysis_datasets[analysis_subset]
-        for prediction_id, details in sorted(self.main_predictions.iteritems()):
-            if prediction_id in analysis_dataset:
-                predicted_score = details[scoring_method]
-                if predicted_score != None:
-                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
-                    wtaa = details.get('WTAA')
-                    if wtaa:
-                        mutaa = details.get('MutantAA')
-                        if wtaa in SAA and mutaa in LAA:
-                            xvalues['SL'].append(ExperimentalDDG)
-                            yvalues['SL'].append(predicted_score)
-                        elif wtaa in LAA and mutaa in SAA:
-                            xvalues['LS'].append(ExperimentalDDG)
-                            yvalues['LS'].append(predicted_score)
-                        else:
-                            xvalues['XX'].append(ExperimentalDDG)
-                            yvalues['XX'].append(predicted_score)
-                    else:
-                        xvalues[None].append(ExperimentalDDG)
-                        yvalues[None].append(predicted_score)
+        amino_acid_volumes = {}
+        for aa, details in amino_acids.iteritems():
+            amino_acid_volumes[aa] = details['van_der_Waals_volume']
+        assert(len(amino_acid_volumes) == 20)
 
-        results = {}
-        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
-        for k in sorted(xvalues.keys()):
-            if len(xvalues[k]) >= 8:
-                colortext.warning('Analyzing %d values for aromaticity type %s.' % (len(xvalues[k]), str(k)))
-                results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
-                pprint.pprint(results[k])
-            else:
-                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
-        return results
+        main_subsets = [self.predictions, self.single_mutation_no_GP_predictions, self.single_mutation_GP_predictions, self.multiple_mutation_predictions]
+        main_subset_names = ['all_mutations', 'single_mutation_no_GP_predictions', 'single_mutation_GP_predictions', 'multiple_mutation_predictions']
+        main_subsets = [self.predictions]
+        main_subset_names = ['all_mutations']
+        all_results = dict.fromkeys(main_subset_names)
+        failed_cases = 0
+        non_cases = set()
+        for subid in range(len(main_subsets)):
+            main_subset = main_subsets[subid]
+            if main_subset != self.multiple_mutation_predictions:
+                xvalues = {'XX' : [], 'SL' : [], 'LS' : [], 'Failed' : []}
+                yvalues = {'XX' : [], 'SL' : [], 'LS' : [], 'Failed' : []}
+
+                colortext.message('ANALYZING SUBSET %s of %s' % (main_subset_names[subid], analysis_subset))
+                analysis_dataset = self.analysis_datasets[analysis_subset]
+                for prediction_id, details in sorted(main_subset.iteritems()):
+                    if prediction_id in analysis_dataset:
+                        predicted_score = details[scoring_method]
+                        if predicted_score != None:
+                            ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                            wtaa = details.get('WTAA')
+                            if wtaa:
+                                mutaa = details.get('MutantAA')
+
+                                if details.get('MutationIsReversed') != None:
+                                    # todo: this is not currently an issue but it will be once we include reverse mutations
+                                    if details['MutationIsReversed']:
+                                        # Note: For reverse mutations, we need to switch the order since we only store the forward mutation
+                                        wtaa, mutaa = mutaa, wtaa
+
+                                if wtaa == mutaa:
+                                    colortext.warning('Error in analysis: Record mutating %s to %s in Prediction #%s.' % (wtaa, mutaa, prediction_id))
+                                    error = True
+                                elif amino_acid_volumes[wtaa] < amino_acid_volumes[mutaa]:
+                                    xvalues['SL'].append(ExperimentalDDG)
+                                    yvalues['SL'].append(predicted_score)
+                                elif amino_acid_volumes[wtaa] > amino_acid_volumes[mutaa]:
+                                    xvalues['LS'].append(ExperimentalDDG)
+                                    yvalues['LS'].append(predicted_score)
+                                else:
+                                    assert(amino_acid_volumes[wtaa] == amino_acid_volumes[mutaa])
+                                    xvalues['XX'].append(ExperimentalDDG)
+                                    yvalues['XX'].append(predicted_score)
+
+                                if False:
+                                    if wtaa in SAA and mutaa in LAA:
+                                        xvalues['SL'].append(ExperimentalDDG)
+                                        yvalues['SL'].append(predicted_score)
+                                    elif wtaa in LAA and mutaa in SAA:
+                                        xvalues['LS'].append(ExperimentalDDG)
+                                        yvalues['LS'].append(predicted_score)
+                                    else:
+                                        non_cases.add('%s->%s' % (wtaa, mutaa))
+                                        xvalues['XX'].append(ExperimentalDDG)
+                                        yvalues['XX'].append(predicted_score)
+                            else:
+                                failed_cases += 1
+                                #raise Exception('Should not reach here.')
+                                xvalues['Failed'].append(ExperimentalDDG)
+                                yvalues['Failed'].append(predicted_score)
+
+                results = {}
+                colortext.message('Analyzing %s=%d values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), sum([len(xvalues[k]) for k in sorted(xvalues.keys())]), analysis_subset, scoring_method))
+                for k in sorted(xvalues.keys()):
+                    if len(xvalues[k]) >= 8:
+                        colortext.warning('Analyzing %d values for mutation size type %s.' % (len(xvalues[k]), str(k)))
+                        stats = get_xy_dataset_correlations(xvalues[k], yvalues[k])
+                        results[k] = stats
+                        #colortext.warning('%d, %0.2f, %0.2f, %0.2f, %0.2f' % (len(xvalues[k]), stats['pearsonr'][0], stats['gammaCC'], stats['MAE'], stats['fraction_correct']))
+                        colortext.warning('%d, %0.2f, %0.2f, %0.2f' % (len(xvalues[k]), stats['pearsonr'][0], stats['fraction_correct'], stats['MAE']))
+
+                        colortext.warning('''
+                                          <span class="DDG_correlation_score ">%0.2f</span> /
+                                          <span class="DDG_stability_classification_score ">%0.2f</span> /
+                                          <span class="DDG_MAE_score">%0.2f</span>''' % (stats['pearsonr'][0], stats['fraction_correct'], stats['MAE']))
+
+                        pprint.pprint(results[k])
+                    else:
+                        colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+                all_results[main_subset_names[subid]] = results
+
+        print(sorted(non_cases))
+        return all_results
 
 
     def analyze_subset_by_secondary_structure(self, analysis_subset, scoring_method):
@@ -1672,23 +1990,40 @@ class AnalysisBreakdown(object):
         xvalues = {None : [], 'S' : [], 'H' : [], 'O' : []}
         yvalues = {None : [], 'S' : [], 'H' : [], 'O' : []}
 
-        analysis_dataset = self.analysis_datasets[analysis_subset]
-        for prediction_id, details in sorted(self.main_predictions.iteritems()):
-            if prediction_id in analysis_dataset:
-                predicted_score = details[scoring_method]
-                if predicted_score != None:
-                    ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
-                    dssp = details.get('DSSP')
-                    xvalues[dssp].append(ExperimentalDDG)
-                    yvalues[dssp].append(predicted_score)
+        main_subsets = [self.single_mutation_no_GP_predictions, self.single_mutation_GP_predictions, self.multiple_mutation_predictions]
+        main_subset_names = ['single_mutation_no_GP_predictions', 'single_mutation_GP_predictions', 'multiple_mutation_predictions']
+        all_results = dict.fromkeys(main_subset_names)
+        for subid in range(len(main_subsets)):
+            main_subset = main_subsets[subid]
+            if main_subset != self.multiple_mutation_predictions:
+                xvalues = {None : [], 'S' : [], 'H' : [], 'O' : []}
+                yvalues = {None : [], 'S' : [], 'H' : [], 'O' : []}
+                colortext.message('ANALYZING SUBSET %s of %s' % (main_subset_names[subid], analysis_subset))
+                analysis_dataset = self.analysis_datasets[analysis_subset]
+                for prediction_id, details in sorted(main_subset.iteritems()):
+                    if prediction_id in analysis_dataset:
+                        predicted_score = details[scoring_method]
+                        if predicted_score != None:
+                            ExperimentalDDG = analysis_dataset[prediction_id]['ExperimentalDDG']
+                            dssp = details.get('DSSP')
+                            xvalues[dssp].append(ExperimentalDDG)
+                            yvalues[dssp].append(predicted_score)
 
-        results = {}
-        colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
-        for k in sorted(xvalues.keys()):
-            if len(xvalues[k]) >= 8:
-                colortext.warning('Analyzing %d values for aromaticity type %s.' % (len(xvalues[k]), str(k)))
-                results[k] = get_xy_dataset_correlations(xvalues[k], yvalues[k])
-                pprint.pprint(results[k])
-            else:
-                colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
-        return results
+                results = {}
+                colortext.message('Analyzing %s values for dataset %s using scoring method %s.' % ('+'.join(map(str, [len(xvalues[k]) for k in sorted(xvalues.keys())])), analysis_subset, scoring_method))
+                for k in sorted(xvalues.keys()):
+                    if len(xvalues[k]) >= 8:
+                        colortext.warning('Analyzing %d values for secondary structure type %s.' % (len(xvalues[k]), str(k)))
+                        stats = get_xy_dataset_correlations(xvalues[k], yvalues[k])
+                        results[k] = stats
+                        #colortext.warning('%d, %0.2f, %0.2f, %0.2f, %0.2f' % (len(xvalues[k]), stats['pearsonr'][0], stats['gammaCC'], stats['MAE'], stats['fraction_correct']))
+                        colortext.warning('%d, %0.2f, %0.2f, %0.2f' % (len(xvalues[k]), stats['pearsonr'][0], stats['fraction_correct'], stats['MAE'], ))
+                        #pprint.pprint(results[k])
+                    else:
+                        colortext.warning('Could not analyze range %s - not enough datapoints.' % (str(k)))
+                all_results[main_subset_names[subid]] = results
+        return all_results
+
+
+
+

@@ -15,8 +15,9 @@ import itertools
 if __name__ == "__main__":
     sys.path.insert(0, "../../")
 from tools.db.mysql import DatabaseInterface
-from tools.fs.io import read_file, write_file
+from tools.fs.fsio import read_file, write_file
 from tools.bio import rcsb
+from tools.bio.dssp import MonomerDSSP, ComplexDSSP, MissingAtomException
 from tools import colortext
 from tools.bio.pdb import PDB, MissingRecordsException
 from tools.bio.basics import relaxed_residue_types_1 as relaxed_amino_acid_codes
@@ -347,7 +348,7 @@ class PDBStructure(DBObject):
     # At the time of writing, these PDB IDs had no JRNL lines
     NoPublicationData = ['2FX5']
 
-    def __init__(self, ddGdb, pdb_id, content = None, protein = None, file_source = None, filepath = None, UniProtAC = None, UniProtID = None, testonly = False, techniques = None):
+    def __init__(self, ddGdb, pdb_id, content = None, protein = None, contains_membrane_protein = None, file_source = None, filepath = None, UniProtAC = None, UniProtID = None, testonly = False, techniques = None):
         '''UniProtACs have forms like 'P62937' whereas UniProtIDs have forms like 'PPIA_HUMAN.'''
         super(PDBStructure, self).__init__(ddGdb)
         self.dict = dict(
@@ -359,6 +360,7 @@ class PDBStructure(DBObject):
             Techniques = techniques,
             BFactors = None,
             Publication =  None,
+            Transmembrane = contains_membrane_protein,
         )
         self.testonly = testonly
         self.filepath = filepath
@@ -635,6 +637,10 @@ class PDBStructure(DBObject):
                     BFactorDeviation = None,
                     SecondaryStructurePosition = None,
                     AccessibleSurfaceArea = None,
+                    MonomericExposure = None,
+                    MonomericDSSP = None,
+                    ComplexExposure = None,
+                    ComplexDSSP = None,
                 )
                 self.ddGdb.insertDictIfNew('PDBResidue', db_res, ['PDBFileID', 'Chain', 'ResidueID'])
                 count += 1
@@ -659,18 +665,78 @@ class PDBStructure(DBObject):
                 try:
                     self.ACtoID_mapping, self.PDBtoAC_mapping = getUniProtMapping(d['ID'], storeInDatabase = testonly)
                 except:
-                    if self.dict['Techniques'] != 'Rosetta model':
+                    if False and self.dict['Techniques'] != 'Rosetta model':
                         raise
-            if self.dict['Techniques'] != 'Rosetta model':
+            if False and self.dict['Techniques'] != 'Rosetta model':
                 assert(self.ACtoID_mapping and self.PDBtoAC_mapping)
             if not testonly:
                 if self.ACtoID_mapping and self.PDBtoAC_mapping:
                     commitUniProtMapping(self.ddGdb, self.ACtoID_mapping, self.PDBtoAC_mapping)
 
+        # Run DSSP
+        dssp_complex_d, dssp_monomer_d = None, None
+        try:
+            # This fails for some PDB e.g. if they only have CA atoms
+            dssp_complex_d = ComplexDSSP(self.pdb_object)
+        except MissingAtomException, e:
+            print('DSSP (complex) failed for this case.')
+        try:
+            # This fails for some PDB e.g. if they only have CA atoms
+            dssp_monomer_d = MonomerDSSP(self.pdb_object)
+        except MissingAtomException, e:
+            print('DSSP (monomer) failed for this case.')
+
+        # Make sure that the residue records exist for all results of DSSP
+        if dssp_monomer_d:
+            for chain_id in self.pdb_object.atom_sequences.keys():
+                if self.pdb_object.chain_types[chain_id] == 'Protein':
+                    for chain_id, mapping in dssp_monomer_d:
+                        for residue_id, residue_details in sorted(mapping.iteritems()):
+                            residue_record = ddGdb.execute_select('SELECT ID FROM PDBResidue WHERE PDBFileID=%s AND Chain=%s AND ResidueID=%s', parameters=(pdb_id, chain_id, residue_id))
+                            assert(len(residue_record) == 1)
+
+            # Add the monomeric DSSP results
+            for chain_id in self.pdb_object.atom_sequences.keys():
+                if self.pdb_object.chain_types[chain_id] == 'Protein':
+                    colortext.warning('\tRunning DSSP on chain %s' % chain_id)
+                    for chain_id, mapping in dssp_monomer_d:
+                        for residue_id, residue_details in sorted(mapping.iteritems()):
+                            residue_record = ddGdb.execute_select('SELECT ID, MonomericExposure, MonomericDSSP FROM PDBResidue WHERE PDBFileID=%s AND Chain=%s AND ResidueID=%s', parameters=(pdb_id, chain_id, residue_id))
+                            assert(len(residue_record) == 1)
+                            PDBResidueID = residue_record[0]['ID']
+                            if residue_record[0]['MonomericDSSP'] == None:
+                                ddGdb.execute('UPDATE PDBResidue SET MonomericDSSP=%s WHERE ID=%s', parameters=(residue_details['ss'], PDBResidueID))
+                            if residue_record[0]['MonomericExposure'] == None:
+                                ddGdb.execute('UPDATE PDBResidue SET MonomericExposure=%s WHERE ID=%s', parameters=(residue_details['exposure'], PDBResidueID))
+        # Make sure that the residue records exist for all results of DSSP
+        if dssp_complex_d:
+            for chain_id in self.pdb_object.atom_sequences.keys():
+                if self.pdb_object.chain_types[chain_id] == 'Protein':
+                    for chain_id, mapping in dssp_complex_d:
+                        for residue_id, residue_details in sorted(mapping.iteritems()):
+                            residue_record = ddGdb.execute_select('SELECT ID FROM PDBResidue WHERE PDBFileID=%s AND Chain=%s AND ResidueID=%s', parameters=(pdb_id, chain_id, residue_id))
+                            assert(len(residue_record) == 1)
+
+            # Add the complex DSSP results
+            for chain_id in self.pdb_object.atom_sequences.keys():
+                if self.pdb_object.chain_types[chain_id] == 'Protein':
+                    colortext.warning('\tRunning DSSP on chain %s' % chain_id)
+                    for chain_id, mapping in dssp_complex_d:
+                        for residue_id, residue_details in sorted(mapping.iteritems()):
+                            residue_record = ddGdb.execute_select('SELECT ID, ComplexExposure, ComplexDSSP FROM PDBResidue WHERE PDBFileID=%s AND Chain=%s AND ResidueID=%s', parameters=(pdb_id, chain_id, residue_id))
+                            assert(len(residue_record) == 1)
+                            PDBResidueID = residue_record[0]['ID']
+                            if residue_record[0]['ComplexDSSP'] == None:
+                                ddGdb.execute('UPDATE PDBResidue SET ComplexDSSP=%s WHERE ID=%s', parameters=(residue_details['ss'], PDBResidueID))
+                            if residue_record[0]['ComplexExposure'] == None:
+                                ddGdb.execute('UPDATE PDBResidue SET ComplexExposure=%s WHERE ID=%s', parameters=(residue_details['exposure'], PDBResidueID))
+
         if not testonly:
             return self.databaseID
         else:
             return None
+
+        #raise Exception('Before using this again, add the functionality from ddgadmin/updatedb/compute_all_dssp.py to add the molecules and DSSP values.')
 
         return self.databaseID
 
@@ -1704,6 +1770,115 @@ class DataSet(DBObject):
 
     def __getitem__(self, key):
         return dict_[key]
+
+
+
+import pprint
+def extract_details_from_RIS_records(ddGdb, PublicationIDs = [], overwrite = False):
+
+    if not ddGdb.use_utf:
+        raise Exception("This database was opened without specifying UTF-8 as a connection parameter. A UTF-8 connection should be used when dealing with RIS records. Add 'use_utf = True' to the constructor for %s to enable UTF-8 connection mode." % self.__class__)
+
+    if not PublicationIDs:
+        PublicationIDs = [r['ID'] for r in ddGdb.execute_select('SELECT * FROM Publication WHERE RIS IS NOT NULL AND Title IS NULL')]
+
+    colortext.message('%d publication records to update.' % len(PublicationIDs))
+
+    # Test the RIS records
+    fail_count = 0
+    for PublicationID in sorted(PublicationIDs):
+        record = ddGdb.execute_select('SELECT RIS FROM Publication WHERE ID=%s', parameters=(PublicationID))
+        assert(len(record) == 1)
+        ris_contents = record[0]['RIS']
+        try:
+            entry = RISEntry(ris_contents)
+            entry_details = entry.to_dict()
+        except Exception, e:
+            colortext.error('An error occurred parsing the RIS record for Publication %s: %s' % (PublicationID, str(e)))
+            colortext.error('SELECT * FROM Publication WHERE ID="%s";' % PublicationID)
+            colortext.warning(ris_contents)
+            print('\n')
+            fail_count += 1
+    if fail_count > 0 :
+        print('\n')
+        raise colortext.Exception('%d errors in RIS records.\n' % fail_count)
+
+    # Collect all of the data
+    pub_data = {}
+    for PublicationID in sorted(PublicationIDs):
+        record = ddGdb.execute_select('SELECT RIS FROM Publication WHERE ID=%s', parameters=(PublicationID))
+        assert(len(record) == 1)
+        ris_contents = record[0]['RIS']
+        entry = RISEntry(ris_contents)
+        entry_details = entry.to_dict()
+
+        update_dict = {
+            'Title' : entry_details['Title'],
+            'Publication' : entry_details['PublicationName'],
+            'Volume' : entry_details['Volume'],
+            'Issue' : entry_details['Issue'],
+            'StartPage' : entry_details['StartPage'],
+            'EndPage' : entry_details['EndPage'],
+            'PublicationYear' : entry_details['PublicationYear'],
+            'PublicationDate' : entry_details['PublicationDate'],
+            'DOI' : entry_details['DOI'],
+            'URL' : entry_details['URL'],
+        }
+        publication_ids = []
+        doi_value = entry_details['DOI']
+        if doi_value:
+            publication_ids.append({
+                'SourceID' : PublicationID,
+                'ID' : doi_value,
+                'Type' : 'DOI'
+            })
+
+        pubmed_id = entry_details['PubMedID']
+        if pubmed_id:
+            publication_ids.append({
+                'SourceID' : PublicationID,
+                'ID' : pubmed_id,
+                'Type' : 'PMID'
+            })
+
+        authors = []
+        for a in entry_details['authors']:
+            authors.append({
+                'PublicationID' : PublicationID,
+                'AuthorOrder' : a['AuthorOrder'],
+                'FirstName' : a['FirstName'],
+                'MiddleNames' : a['MiddleNames'],
+                'Surname' : a['Surname'],
+            })
+
+        pub_data[PublicationID] = dict(
+            main = update_dict,
+            publication_ids = publication_ids,
+            authors = authors,
+        )
+
+    # Add all of the records
+    for PublicationID, pdata in sorted(pub_data.iteritems()):
+
+        # We use Title to filter for records which need to be updated so fill that field in last
+        for author_details in pdata['authors']:
+            ddGdb.insertDictIfNew('PublicationAuthor', author_details, ['PublicationID', 'AuthorOrder'])
+        for id_details in pdata['publication_ids']:
+            ddGdb.insertDictIfNew('PublicationIdentifier', id_details, ['SourceID', 'ID'])
+
+        # Add Title to the end of the field list
+        record_keys = pdata['main'].keys()
+        record_keys.remove('Title')
+        record_keys.append('Title')
+        for k in record_keys:
+            v = pdata['main'][k]
+            if not overwrite:
+                qstring = 'SELECT %s FROM Publication' % k
+                existing_details = ddGdb.execute_select(qstring + ' WHERE ID=%s', parameters=(PublicationID,))
+                if not(existing_details[0][k] == None or existing_details[0][k] == ''):
+                    continue
+            qstring = 'UPDATE Publication SET %s' % k
+            existing_details = ddGdb.execute(qstring + '=%s WHERE ID=%s', parameters=(v, PublicationID))
 
 
 class Publicationv2(DBObject):
