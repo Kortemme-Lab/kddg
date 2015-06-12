@@ -20,6 +20,8 @@ import random
 import datetime
 import zipfile
 import pprint
+import magic
+import json
 
 try:
     import matplotlib
@@ -29,7 +31,6 @@ try:
     import textwrap
 except ImportError:
     plt=None
-
 
 import score
 import ddgdbapi
@@ -43,6 +44,11 @@ from tools.process import Popen
 from tools.constants import rosetta_weights
 from tools import colortext
 from tools.stats.misc import get_xy_dataset_correlations
+
+from tools.general.strutil import remove_trailing_line_whitespace
+from tools.hash.md5 import get_hexdigest
+from tools.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
+
 #import analysis
 #from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet
 
@@ -275,248 +281,6 @@ class ddG(object):
         self.createDummyExperiment_ankyrin_repeat(pdb_ID, mutant_mutations, chains.pop())
 
 
-    def charge_PredictionSet_by_number_of_residues(self, PredictionSet):
-        '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
-        from tools.bio.rcsb import parseFASTAs
-
-        ddGdb = self.ddGDB
-        predictions = ddGdb.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
-
-        PDB_chain_lengths ={}
-        for prediction in predictions:
-            chain_records = ddGdb.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
-            num_residues = 0
-            for chain_record in chain_records:
-                key = (chain_record['PDBFileID'], chain_record['Chain'])
-
-                if PDB_chain_lengths.get(key) == None:
-                    fasta = ddGdb.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
-                    assert(len(fasta) == 1)
-                    fasta = fasta[0]['FASTA']
-                    f = parseFASTAs(fasta)
-                    PDB_chain_lengths[key] = len(f[chain_record['PDBFileID']][chain_record['Chain']])
-                chain_length = PDB_chain_lengths[key]
-                num_residues += chain_length
-
-            print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
-
-            predictions = ddGdb.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
-
-    def create_PredictionSet(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40):
-        if halted:
-            Status = 'halted'
-        else:
-            Status = 'active'
-
-        d = {
-            'ID'        : PredictionSetID,
-            'Status'    : Status,
-            'Priority'  : Priority,
-            'BatchSize' : BatchSize,
-        }
-        self.ddGDB.insertDictIfNew("PredictionSet", d, ['ID'])
-
-
-    def createPredictionsFromUserDataSet(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
-
-        assert(self.ddGDB.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
-
-        #results = self.ddGDB.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
-        results = self.ddGDB.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
-        if not results:
-            return False
-
-        if not(quiet):
-            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, ProtocolID))
-            colortext.message("%d records found in the UserDataSet" % len(results))
-
-        count = 0
-        showprogress = not(quiet) and len(results) > 300
-        if showprogress:
-            print("|" + ("*" * (int(len(results)/100)-2)) + "|")
-        for r in results:
-
-            existing_results = self.ddGDB.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
-            if len(existing_results) > 0:
-                #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
-                continue
-
-            PredictionID = self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
-            count += 1
-            if showprogress:
-                if count > 100:
-                    colortext.write(".", "cyan", flush = True)
-                    count = 0
-            if shortrun and count > 4:
-                break
-        print("")
-        return(True)
-
-    def add_predictions_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True):
-        ''' This function adds predictions for all Experiments corresponding to pdb_ID to the specified prediction set.
-            This is useful for custom runs e.g. when we are using the DDG scheduler for design rather than for benchmarking.
-        '''
-        colortext.printf("\nAdding any mutations for this structure which have not been queued/run in the %s prediction set." % PredictionSet, "lightgreen")
-
-        d = {
-            'ID' : PredictionSet,
-            'Status' : status,
-            'Priority' : priority,
-            'BatchSize' : 40,
-            'EntryDate' : datetime.datetime.now(),
-        }
-        self.ddGDB.insertDictIfNew('PredictionSet', d, ['ID'])
-
-        # Update the priority and activity if necessary
-        self.ddGDB.execute('UPDATE PredictionSet SET Status=%s, Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
-
-        # Determine the set of experiments to add
-        ExperimentIDs = set([r['ID'] for r in self.ddGDB.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
-        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in self.ddGDB.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
-        experiment_IDs_to_add = sorted(ExperimentIDs.difference(ExperimentIDsInPredictionSet))
-
-        if experiment_IDs_to_add:
-            colortext.printf("\nAdding %d jobs to the prediction set." % len(experiment_IDs_to_add), "lightgreen")
-            count = 0
-            for experiment_ID in experiment_IDs_to_add:
-                colortext.write('.', "lightgreen")
-                self.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True, strip_other_chains = strip_other_chains)
-                count +=1
-        else:
-            colortext.printf("\nAll jobs are already in the queue or have been run.", "lightgreen")
-        print('')
-
-    def addPrediction(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True):
-        '''This function inserts a prediction into the database.
-            The parameters define:
-                the experiment we are running the prediction for;
-                the name of the set of predictions for later grouping;
-                the short description of the Command to be used for prediction;
-                whether HETATM lines are to be kept or not.
-            We strip the PDB based on the chains used for the experiment and KeepHETATMLines.
-            We then add the prediction record, including the stripped PDB and the inverse mapping
-            from Rosetta residue numbering to PDB residue numbering.'''
-
-        parameters = (experimentID,)
-        assert(ReverseMutation == False) # todo: allow this later
-        try:
-            predictionPDB_ID = None
-
-            sql = "SELECT PDBFileID, Content FROM Experiment INNER JOIN PDBFile WHERE Experiment.PDBFileID=PDBFile.ID AND Experiment.ID=%s"
-            results = self.ddGDB.execute_select(sql, parameters = parameters)
-            if len(results) != 1:
-                raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
-            experimentPDB_ID = results[0]["PDBFileID"]
-            pdbID = results[0]["PDBFileID"]
-
-            if PDB_ID:
-                #sql = "SELECT ID, Content FROM PDBFile WHERE ID=%s"
-                results = self.ddGDB.execute_select("SELECT ID, Content FROM PDBFile WHERE ID=%s", parameters=(PDB_ID))
-                if len(results) != 1:
-                    raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
-                predictionPDB_ID = results[0]["ID"]
-                pdbID = results[0]["ID"]
-            else:
-                predictionPDB_ID = experimentPDB_ID
-
-            # Get the related PDB ID and file
-            assert(len(results) == 1)
-            result = results[0]
-            contents = result["Content"]
-
-            pdb = PDB(contents.split("\n"))
-
-            # Check that the mutated positions exist and that the wild-type matches the PDB
-            mutations = self.ddGDB.call_select_proc("GetMutations", parameters = parameters)
-
-            # todo: Hack. This should be removed when PDB homologs are dealt with properly.
-            mutation_objects = []
-            for mutation in mutations:
-                if experimentPDB_ID == "1AJ3" and predictionPDB_ID == "1U5P":
-                    assert(int(mutation['ResidueID']) < 1000)
-                    mutation['ResidueID'] = str(int(mutation['ResidueID']) + 1762)
-                mutation_objects.append(Mutation(mutation['WildTypeAA'], mutation['ResidueID'], mutation['MutantAA'], mutation['Chain']))
-
-            #todo: a
-            #checkPDBAgainstMutations(pdbID, pdb, mutations)
-            pdb.validate_mutations(mutation_objects)
-
-            #for mutation in mutations:
-            #    if experimentPDB_ID == "ub_OTU":
-            #        mutation['ResidueID'] = str(int(mutation['ResidueID']) + 172)
-
-            # Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
-            chains = [result['Chain'] for result in self.ddGDB.call_select_proc("GetChains", parameters = parameters)]
-            if strip_other_chains:
-                pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
-            else:
-                pdb.stripForDDG(True, KeepHETATMLines, numberOfModels = 1)
-
-            #print('\n'.join(pdb.lines))
-            # - Post stripping checks -
-            # Get the 'Chain ResidueID' PDB-formatted identifier for each mutation mapped to Rosetta numbering
-            # then check again that the mutated positions exist and that the wild-type matches the PDB
-            colortext.warning('mutations %s' % (str(mutations)))
-
-            remappedMutations = pdb.remapMutations(mutations, pdbID)
-
-            #resfile = self._createResfile(pdb, remappedMutations)
-            mutfile = self._createMutfile(pdb, remappedMutations)
-
-            # Check to make sure that we haven't stripped all the ATOM lines
-            if not pdb.GetAllATOMLines():
-                raise colortext.Exception("No ATOM lines remain in the stripped PDB file of %s." % pdbID)
-
-            # Check to make sure that CSE and MSE are not present in the PDB
-            badresidues = pdb.CheckForPresenceOf(["CSE", "MSE"])
-            if badresidues:
-                raise colortext.Exception("Found residues [%s] in the stripped PDB file of %s. These should be changed to run this job under Rosetta." % (', '.join(badresidues), pdbID))
-
-            # Turn the lines array back into a valid PDB file
-            strippedPDB = '\n'.join(pdb.lines)
-        except Exception, e:
-            colortext.error("Error in %s, %s: .\n%s" % (experimentID, UserDataSetExperimentID, traceback.format_exc()))
-            colortext.warning(str(e))
-            return
-            colortext.error("\nError: '%s'.\n" % (str(e)))
-            colortext.error(traceback.format_exc())
-            raise colortext.Exception("An exception occurred retrieving the experimental data for Experiment ID #%s." % experimentID)
-
-        #InputFiles["RESFILE"] = resfile
-        InputFiles["MUTFILE"] = mutfile
-
-        ExtraParameters = {}
-        InputFiles = pickle.dumps(InputFiles)
-        Description = pickle.dumps(Description)
-        ExtraParameters = pickle.dumps(ExtraParameters)
-
-        PredictionFieldNames = self.ddGDB.FieldNames.Prediction
-        params = {
-            PredictionFieldNames.ExperimentID		: experimentID,
-            PredictionFieldNames.UserDataSetExperimentID : UserDataSetExperimentID,
-            PredictionFieldNames.PredictionSet		: PredictionSet,
-            PredictionFieldNames.ProtocolID			: ProtocolID,
-            PredictionFieldNames.KeptHETATMLines	: KeepHETATMLines,
-            PredictionFieldNames.StrippedPDB		: strippedPDB,
-            PredictionFieldNames.ResidueMapping		: pickle.dumps(pdb.get_ddGInverseResmap()),
-            PredictionFieldNames.InputFiles			: InputFiles,
-            PredictionFieldNames.Description		: Description,
-            PredictionFieldNames.Status 			: "queued",
-            PredictionFieldNames.ExtraParameters	: ExtraParameters,
-            PredictionFieldNames.StoreOutput		: StoreOutput,
-        }
-        if not testonly:
-            self.ddGDB.insertDict('Prediction', params)
-
-            # Add cryptID string
-            predictionID = self.ddGDB.getLastRowID()
-            entryDate = self.ddGDB.execute_select("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]
-            rdmstring = ''.join(random.sample('0123456789abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 16))
-            cryptID = "%(predictionID)s%(experimentID)s%(PredictionSet)s%(ProtocolID)s%(entryDate)s%(rdmstring)s" % vars()
-            cryptID = md5.new(cryptID.encode('utf-8')).hexdigest()
-            entryDate = self.ddGDB.execute("UPDATE Prediction SET cryptID=%s WHERE ID=%s", parameters = (cryptID, predictionID))
-            return predictionID
-
     def get_flattened_prediction_results(self, PredictionSet):
         #todo: add this as a stored procedure
         return self.ddGDB.execute_select('''
@@ -540,7 +304,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def create_abacus_graph_for_a_single_structure(self, PredictionSet, scoring_method, scoring_type, graph_title = None, PredictionIDs = None, graph_filename = None, cached_results = None, num_datapoints = 0):
         '''This function is meant to
             The num_datapoints is mainly for debugging - tuning the resolution/DPI to fit the number of datapoints.'''
-        import json
 
         results = cached_results
         if not results:
@@ -925,8 +688,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def get_ddg_monomer_scores_per_structure(self, PredictionID):
         '''Returns a dict mapping the DDG scores from a ddg_monomer run to a list of structure numbers.'''
 
-        import json
-
         # Get the ddg_monomer output for the prediction
         stdout = self.extract_job_stdout_from_archive(PredictionID)['ddG']
 
@@ -1081,6 +842,409 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             WHERE PredictionSet=%s''', parameters=(predictionset,))
 
 
+
+##### Private API: Job insertion helper functions
+
+
+
+    def charge_PredictionSet_by_number_of_residues(self, PredictionSet): raise Exception('This function has been deprecated. Use _charge_prediction_set_by_residue_count instead.')
+    def _charge_prediction_set_by_residue_count(self, PredictionSet):
+        '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
+        raise Exception('This function needs to be rewritten.')
+        from tools.bio.rcsb import parseFASTAs
+
+        ddGdb = self.ddGDB
+        predictions = ddGdb.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
+
+        PDB_chain_lengths ={}
+        for prediction in predictions:
+            chain_records = ddGdb.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
+            num_residues = 0
+            for chain_record in chain_records:
+                key = (chain_record['PDBFileID'], chain_record['Chain'])
+
+                if PDB_chain_lengths.get(key) == None:
+                    fasta = ddGdb.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
+                    assert(len(fasta) == 1)
+                    fasta = fasta[0]['FASTA']
+                    f = parseFASTAs(fasta)
+                    PDB_chain_lengths[key] = len(f[chain_record['PDBFileID']][chain_record['Chain']])
+                chain_length = PDB_chain_lengths[key]
+                num_residues += chain_length
+
+            print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
+
+            predictions = ddGdb.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
+
+
+
+##### Public API: Job insertion functions
+
+
+
+    def create_PredictionSet(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False): raise Exception('This function has been deprecated. Use add_prediction_set instead.')
+    def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False):
+        raise Exception('This function needs to be rewritten.')
+
+        if halted:
+            Status = 'halted'
+        else:
+            Status = 'active'
+
+        if allow_existing_prediction_set == False and len(self.ddGdb.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(PredictionSetID,))) > 0:
+            raise Exception('The PredictionSet %s already exists.' % PredictionSetID)
+        d = dict(
+            ID                  = PredictionSetID,
+            Status              = Status,
+            Priority            = Priority,
+            ProteinStability    = contains_protein_stability_predictions,
+            BindingAffinity     = contains_binding_affinity_predictions,
+            BatchSize           = BatchSize,
+        )
+        self.ddGDB.insertDictIfNew("PredictionSet", d, ['ID'])
+
+
+    def createPredictionsFromUserDataSet(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False): raise Exception('This function has been deprecated. Use add_prediction_set_jobs instead.')
+    def add_prediction_set_jobs(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
+        raise Exception('This function needs to be rewritten.')
+
+        assert(self.ddGDB.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
+
+        #results = self.ddGDB.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
+        results = self.ddGDB.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
+        if not results:
+            return False
+
+        if not(quiet):
+            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, ProtocolID))
+            colortext.message("%d records found in the UserDataSet" % len(results))
+
+        count = 0
+        showprogress = not(quiet) and len(results) > 300
+        if showprogress:
+            print("|" + ("*" * (int(len(results)/100)-2)) + "|")
+        for r in results:
+
+            existing_results = self.ddGDB.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
+            if len(existing_results) > 0:
+                #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
+                continue
+
+            PredictionID = self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
+            count += 1
+            if showprogress:
+                if count > 100:
+                    colortext.write(".", "cyan", flush = True)
+                    count = 0
+            if shortrun and count > 4:
+                break
+        print("")
+        return(True)
+
+    def add_predictions_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True): raise Exception('This function has been deprecated. Use add_jobs_by_pdb_id instead.')
+    def add_jobs_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True):
+        ''' This function adds predictions for all Experiments corresponding to pdb_ID to the specified prediction set.
+            This is useful for custom runs e.g. when we are using the DDG scheduler for design rather than for benchmarking.
+        '''
+        raise Exception('This function needs to be rewritten.')
+        colortext.printf("\nAdding any mutations for this structure which have not been queued/run in the %s prediction set." % PredictionSet, "lightgreen")
+
+        d = {
+            'ID' : PredictionSet,
+            'Status' : status,
+            'Priority' : priority,
+            'BatchSize' : 40,
+            'EntryDate' : datetime.datetime.now(),
+        }
+        self.ddGDB.insertDictIfNew('PredictionSet', d, ['ID'])
+
+        # Update the priority and activity if necessary
+        self.ddGDB.execute('UPDATE PredictionSet SET Status=%s, Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
+
+        # Determine the set of experiments to add
+        ExperimentIDs = set([r['ID'] for r in self.ddGDB.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
+        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in self.ddGDB.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
+        experiment_IDs_to_add = sorted(ExperimentIDs.difference(ExperimentIDsInPredictionSet))
+
+        if experiment_IDs_to_add:
+            colortext.printf("\nAdding %d jobs to the prediction set." % len(experiment_IDs_to_add), "lightgreen")
+            count = 0
+            for experiment_ID in experiment_IDs_to_add:
+                colortext.write('.', "lightgreen")
+                self.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True, strip_other_chains = strip_other_chains)
+                count +=1
+        else:
+            colortext.printf("\nAll jobs are already in the queue or have been run.", "lightgreen")
+        print('')
+
+    def addPrediction(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True): raise Exception('This function has been deprecated. Use add_job instead.')
+    def add_job(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True):
+        '''This function inserts a prediction into the database.
+            The parameters define:
+                the experiment we are running the prediction for;
+                the name of the set of predictions for later grouping;
+                the short description of the Command to be used for prediction;
+                whether HETATM lines are to be kept or not.
+            We strip the PDB based on the chains used for the experiment and KeepHETATMLines.
+            We then add the prediction record, including the stripped PDB and the inverse mapping
+            from Rosetta residue numbering to PDB residue numbering.'''
+        raise Exception('This function needs to be rewritten.')
+
+        parameters = (experimentID,)
+        assert(ReverseMutation == False) # todo: allow this later
+        try:
+            predictionPDB_ID = None
+
+            sql = "SELECT PDBFileID, Content FROM Experiment INNER JOIN PDBFile WHERE Experiment.PDBFileID=PDBFile.ID AND Experiment.ID=%s"
+            results = self.ddGDB.execute_select(sql, parameters = parameters)
+            if len(results) != 1:
+                raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
+            experimentPDB_ID = results[0]["PDBFileID"]
+            pdbID = results[0]["PDBFileID"]
+
+            if PDB_ID:
+                #sql = "SELECT ID, Content FROM PDBFile WHERE ID=%s"
+                results = self.ddGDB.execute_select("SELECT ID, Content FROM PDBFile WHERE ID=%s", parameters=(PDB_ID))
+                if len(results) != 1:
+                    raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
+                predictionPDB_ID = results[0]["ID"]
+                pdbID = results[0]["ID"]
+            else:
+                predictionPDB_ID = experimentPDB_ID
+
+            # Get the related PDB ID and file
+            assert(len(results) == 1)
+            result = results[0]
+            contents = result["Content"]
+
+            pdb = PDB(contents.split("\n"))
+
+            # Check that the mutated positions exist and that the wild-type matches the PDB
+            mutations = self.ddGDB.call_select_proc("GetMutations", parameters = parameters)
+
+            # todo: Hack. This should be removed when PDB homologs are dealt with properly.
+            mutation_objects = []
+            for mutation in mutations:
+                if experimentPDB_ID == "1AJ3" and predictionPDB_ID == "1U5P":
+                    assert(int(mutation['ResidueID']) < 1000)
+                    mutation['ResidueID'] = str(int(mutation['ResidueID']) + 1762)
+                mutation_objects.append(Mutation(mutation['WildTypeAA'], mutation['ResidueID'], mutation['MutantAA'], mutation['Chain']))
+
+            #todo: a
+            #checkPDBAgainstMutations(pdbID, pdb, mutations)
+            pdb.validate_mutations(mutation_objects)
+
+            #for mutation in mutations:
+            #    if experimentPDB_ID == "ub_OTU":
+            #        mutation['ResidueID'] = str(int(mutation['ResidueID']) + 172)
+
+            # Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
+            chains = [result['Chain'] for result in self.ddGDB.call_select_proc("GetChains", parameters = parameters)]
+            if strip_other_chains:
+                pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
+            else:
+                pdb.stripForDDG(True, KeepHETATMLines, numberOfModels = 1)
+
+            #print('\n'.join(pdb.lines))
+            # - Post stripping checks -
+            # Get the 'Chain ResidueID' PDB-formatted identifier for each mutation mapped to Rosetta numbering
+            # then check again that the mutated positions exist and that the wild-type matches the PDB
+            colortext.warning('mutations %s' % (str(mutations)))
+
+            remappedMutations = pdb.remapMutations(mutations, pdbID)
+
+            #resfile = self._createResfile(pdb, remappedMutations)
+            mutfile = self._createMutfile(pdb, remappedMutations)
+
+            # Check to make sure that we haven't stripped all the ATOM lines
+            if not pdb.GetAllATOMLines():
+                raise colortext.Exception("No ATOM lines remain in the stripped PDB file of %s." % pdbID)
+
+            # Check to make sure that CSE and MSE are not present in the PDB
+            badresidues = pdb.CheckForPresenceOf(["CSE", "MSE"])
+            if badresidues:
+                raise colortext.Exception("Found residues [%s] in the stripped PDB file of %s. These should be changed to run this job under Rosetta." % (', '.join(badresidues), pdbID))
+
+            # Turn the lines array back into a valid PDB file
+            strippedPDB = '\n'.join(pdb.lines)
+        except Exception, e:
+            colortext.error("Error in %s, %s: .\n%s" % (experimentID, UserDataSetExperimentID, traceback.format_exc()))
+            colortext.warning(str(e))
+            return
+            colortext.error("\nError: '%s'.\n" % (str(e)))
+            colortext.error(traceback.format_exc())
+            raise colortext.Exception("An exception occurred retrieving the experimental data for Experiment ID #%s." % experimentID)
+
+        #InputFiles["RESFILE"] = resfile
+        InputFiles["MUTFILE"] = mutfile
+
+        ExtraParameters = {}
+        InputFiles = pickle.dumps(InputFiles)
+        Description = pickle.dumps(Description)
+        ExtraParameters = pickle.dumps(ExtraParameters)
+
+        PredictionFieldNames = self.ddGDB.FieldNames.Prediction
+        params = {
+            PredictionFieldNames.ExperimentID		: experimentID,
+            PredictionFieldNames.UserDataSetExperimentID : UserDataSetExperimentID,
+            PredictionFieldNames.PredictionSet		: PredictionSet,
+            PredictionFieldNames.ProtocolID			: ProtocolID,
+            PredictionFieldNames.KeptHETATMLines	: KeepHETATMLines,
+            PredictionFieldNames.StrippedPDB		: strippedPDB,
+            PredictionFieldNames.ResidueMapping		: pickle.dumps(pdb.get_ddGInverseResmap()),
+            PredictionFieldNames.InputFiles			: InputFiles,
+            PredictionFieldNames.Description		: Description,
+            PredictionFieldNames.Status 			: "queued",
+            PredictionFieldNames.ExtraParameters	: ExtraParameters,
+            PredictionFieldNames.StoreOutput		: StoreOutput,
+        }
+        if not testonly:
+            self.ddGDB.insertDict('Prediction', params)
+
+            # Add cryptID string
+            predictionID = self.ddGDB.getLastRowID()
+            entryDate = self.ddGDB.execute_select("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]
+            rdmstring = ''.join(random.sample('0123456789abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 16))
+            cryptID = "%(predictionID)s%(experimentID)s%(PredictionSet)s%(ProtocolID)s%(entryDate)s%(rdmstring)s" % vars()
+            cryptID = md5.new(cryptID.encode('utf-8')).hexdigest()
+            entryDate = self.ddGDB.execute("UPDATE Prediction SET cryptID=%s WHERE ID=%s", parameters = (cryptID, predictionID))
+            return predictionID
+
+
+    def clone_prediction_set(self, existing_prediction_set, new_prediction_set):
+        raise Exception('not implemented yet')
+        #assert(exisitng_prediction_set exists and has records)
+        #assert(new_prediction_set is empty)
+
+
+
+##### Private API: Job completion functions
+
+
+
+    def _add_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores, is_wildtype):
+        raise Exception('not implemented yet')
+        #if ScoreMethodID is None, raise an exception but report the score method id for the default score method
+        #assert(scores fields match db fields)
+
+
+
+##### Public API: Job completion functions
+
+
+
+    def add_ddg_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
+        raise Exception('not implemented yet')
+        #if ScoreMethodID is None, raise an exception but report the score method id for the default score method
+        #assert(scores fields match db fields)
+
+
+    def add_wildtype_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
+        raise Exception('not implemented yet')
+
+
+    def add_mutant_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
+        raise Exception('not implemented yet')
+
+
+
+##### Public API: File-related functions
+
+
+
+    def get_file_id(self, content, hexdigest = None):
+        '''Searches the database to see whether the FileContent already exists. The search uses the digest and filesize as
+           heuristics to speed up the search. If a file has the same hex digest and file size then we do a straight comparison
+           of the contents.
+           If the FileContent exists, the value of the ID field is returned else None is returned.
+           '''
+        existing_filecontent_id = None
+        hexdigest = hexdigest or get_hexdigest(content)
+        filesize = len(content)
+        for r in self.ddGDB.execute_select('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', parameters=(hexdigest, filesize)):
+            if r['Content'] == content:
+                assert(existing_filecontent_id == None) # content uniqueness check
+                existing_filecontent_id = r['ID']
+        return existing_filecontent_id
+
+
+    def add_file_content(self, content, rm_trailing_line_whitespace = False, forced_mime_type = None):
+        '''Takes file content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
+           a new record if necessary, and returns the associated FileContent.ID value.'''
+
+        if rm_trailing_line_whitespace:
+            content = remove_trailing_line_whitespace(content)
+
+        # Check to see whether the file has been uploaded before
+        hexdigest = get_hexdigest(content)
+        existing_filecontent_id = self.get_file_id(content, hexdigest = hexdigest)
+
+        # Create the FileContent record if the file is a new file
+        if existing_filecontent_id == None:
+
+            mime_type = None
+            if forced_mime_type:
+                mime_type = forced_mime_type
+            else:
+                temporary_file = write_temp_file('/tmp', content, ftype = 'wb')
+                m=magic.open(magic.MAGIC_MIME_TYPE) # see mime.__dict__ for more values e.g. MAGIC_MIME, MAGIC_MIME_ENCODING, MAGIC_NONE
+                m.load()
+                mime_type = m.file(temporary_file)
+                os.remove(temporary_file)
+
+            d = dict(
+                Content = content,
+                MIMEType = mime_type,
+                Filesize = len(content),
+                MD5HexDigest = hexdigest
+            )
+            self.ddGDB.insertDictIfNew('FileContent', d, ['Content'])
+            existing_filecontent_id = self.get_file_id(content, hexdigest = hexdigest)
+            assert(existing_filecontent_id != None)
+
+        return existing_filecontent_id
+
+
+    def add_pdb_file_content(self, pdb_content):
+        return self.add_file_content(pdb_content, rm_trailing_line_whitespace = True, forced_mime_type = 'chemical/x-pdb')
+
+
+
+##### Private API: File-related functions
+
+
+
+    def _add_residue_map_to_prediction(self, prediction_table, prediction_id, residue_mapping):
+        assert(type(residue_mapping) == type(self.__dict__))
+
+        # Add the file contents to the database
+        json_content = json.dumps(residue_mapping, sort_keys=True) # sorting helps to quotient the file content space over identical data
+        file_content_id = self.add_file_content(json_content, forced_mime_type="application/json")
+
+        # Link the file contents to the prediction
+        d = dict(
+            FileContentID = file_content_id,
+            Filename = 'residue_mapping.json' % prediction_id,
+            Filetype = 'RosettaPDBMapping',
+            FileRole = 'Rosetta<->PDB residue mapping',
+            Stage = 'Input',
+        )
+        if prediction_table == 'Prediction':
+            d['PredictionID'] = prediction_id,
+            self.ddGDB.insertDictIfNew('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
+        elif prediction_table == 'PredictionPPI':
+            d['PredictionPPIID'] = prediction_id,
+            self.ddGDB.insertDictIfNew('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
+        else:
+            raise('Invalid table "%s" passed.' % prediction_table)
+
+
+
+
+##### Database API: end of curated functionality
+
+
+
     def get_predictionset_data(self, predictionset, userdataset_textid, cached_pdb_details = None, only_single = False):
         '''
             A helper function for analysis / generating graphs.
@@ -1094,8 +1258,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 predictions - a mapping: Prediction IDs -> ExperimentID, UserDataSetExperimentID, Experiment and Prediction (this is the one used for the prediction) PDB IDs, scores. If single mutation then also mutation details, DSSP, and exposure.
                 analysis_datasets - a mapping: analysis subset (e.g. "Guerois") -> Prediction IDs -> (prediction) PDB_ID, ExperimentID, ExperimentDDG (mean of experimental values)
         '''
-        import json
-
         UserDataSetID = self.ddGDB.execute_select("SELECT ID FROM UserDataSet WHERE TextID=%s", parameters=(userdataset_textid,))
         assert(UserDataSetID)
         UserDataSetID = UserDataSetID[0]['ID']
