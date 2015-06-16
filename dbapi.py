@@ -69,12 +69,13 @@ class ddG(object):
     '''This class is responsible for inserting prediction jobs to the database.'''
 
     def __init__(self, passwd = None, username = 'kortemmelab'):
-        self.ddGDB = ddgdbapi.ddGDatabase(passwd = passwd, username = username)
-        self.prediction_data_path = self.ddGDB.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
+        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username)
+        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, use_utf = True)
+        self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
 
     def __del__(self):
         pass
-        #self.ddGDB.close()
+        #self.DDG_db.close()
         #self.ddGDataDB.close()
 
     def _createResfile(self, pdb, mutations):
@@ -145,7 +146,7 @@ class ddG(object):
             if structures:
                 colortext.printf("\nRelated publications for structures:", "lightgreen")
                 for id in sorted(structures.IDs):
-                    pubs = self.ddGDB.callproc("GetPublications", parameters=(id,))
+                    pubs = self.DDG_db.callproc("GetPublications", parameters=(id,))
                     print(id)
                     for pub in pubs:
                         print("\t%s: %s" % (pub["Type"], pub["PublicationID"]))
@@ -153,18 +154,18 @@ class ddG(object):
             if experiments:
                 colortext.printf("\nRelated publications for experiments:", "lightgreen")
                 for id in sorted(experiments.IDs):
-                    pubs = self.ddGDB.callproc("GetExperimentPublications", parameters=(id,))
+                    pubs = self.DDG_db.callproc("GetExperimentPublications", parameters=(id,))
                     print(id)
                     for pub in pubs:
                         print("\t%s: %s" % (pub["Type"], pub["SourceLocation.ID"]))
 
-                experimentsets = [e[0] for e in self.ddGDB.execute_select("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % ','.join(map(str, list(experiments.IDs))), cursorClass = ddgdbapi.StdCursor)]
+                experimentsets = [e[0] for e in self.DDG_db.execute_select("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % ','.join(map(str, list(experiments.IDs))), cursorClass = ddgdbapi.StdCursor)]
 
                 if experimentsets:
                     colortext.printf("\nRelated publications for experiment-set sources:", "lightgreen")
                     for id in sorted(experimentsets):
                         print(id)
-                        pubs = self.ddGDB.execute_select("SELECT ID, Type FROM SourceLocation WHERE SourceID=%s", parameters = (id,))
+                        pubs = self.DDG_db.execute_select("SELECT ID, Type FROM SourceLocation WHERE SourceID=%s", parameters = (id,))
                         for pub in pubs:
                             print("\t%s: %s" % (pub["Type"], pub["ID"]))
         else:
@@ -178,15 +179,15 @@ class ddG(object):
     def analyze(self, prediction_result_set, outpath = os.getcwd()):
         PredictionIDs = sorted(list(prediction_result_set.getFilteredIDs()))
         colortext.printf("Analyzing %d records:" % len(PredictionIDs), "lightgreen")
-        #results = self.ddGDB.execute_select("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % join(map(str, PredictionIDs), ","))
+        #results = self.DDG_db.execute_select("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % join(map(str, PredictionIDs), ","))
 
         #for r in results:
         #	r["ddG"] = pickle.loads(r["ddG"])
         #	predicted_score = r["ddG"]["data"]["ddG"]
-        #	experimental_scores = [expscore["ddG"] for expscore in self.ddGDB.callproc("GetScores", parameters = r["ExperimentID"])]
+        #	experimental_scores = [expscore["ddG"] for expscore in self.DDG_db.callproc("GetScores", parameters = r["ExperimentID"])]
         #	mean_experimental_score = float(sum(experimental_scores)) / float(len(experimental_scores))
 
-        results = self.ddGDB.execute_select("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % ','.join(map(str, PredictionIDs)))
+        results = self.DDG_db.execute_select("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % ','.join(map(str, PredictionIDs)))
 
         analysis.plot(analysis._R_mean_unsigned_error, analysis._createMAEFile, results, "my_plot1.pdf", average_fn = analysis._mean)
         analysis.plot(analysis._R_correlation_coefficient, analysis._createAveragedInputFile, results, "my_plot2.pdf", average_fn = analysis._mean)
@@ -209,9 +210,9 @@ class ddG(object):
             rootname = pdbID
 
         try:
-            dbp = ddgdbapi.PDBStructure(self.ddGDB, rootname, contains_membrane_protein = contains_membrane_protein, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques)
-            #Structure.getPDBContents(self.ddGDB)
-            results = self.ddGDB.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters = (rootname,))
+            dbp = ddgdbapi.PDBStructure(self.DDG_db, rootname, contains_membrane_protein = contains_membrane_protein, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques)
+            #Structure.getPDBContents(self.DDG_db)
+            results = self.DDG_db.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters = (rootname,))
             if results:
                 #ddgdbapi.getUniProtMapping(pdbID, storeInDatabase = True)
                 #raise Exception("There is already a structure in the database with the ID %s." % rootname)
@@ -228,7 +229,7 @@ class ddG(object):
     def add_pdb_file(self, filepath, pdb_id):
         #todo: use either this or add_PDB_to_database but not both
         raise Exception('deprecated in favor of add_PDB_to_database')
-        existing_pdb = self.ddGDB.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))
+        existing_pdb = self.DDG_db.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))
         if not existing_pdb:
             pdb_contents = read_file(filepath)
             p = PDB(pdb_contents)
@@ -249,7 +250,7 @@ class ddG(object):
                 'BFactors' : '',
                 'Publication' : None
             }
-            self.ddGDB.insertDictIfNew('PDBFile', d, ['ID'])
+            self.DDG_db.insertDictIfNew('PDBFile', d, ['ID'])
 
     def createDummyExperiment(self, pdbID, mutationset, chains, sourceID, ddG, ExperimentSetName = "DummySource"):
         #todo: elide createDummyExperiment, createDummyExperiment_ankyrin_repeat, and add_mutant
@@ -260,11 +261,11 @@ class ddG(object):
         for c in chains:
             Experiment.addChain(c)
         Experiment.addExperimentalScore(sourceID, ddG, pdbID)
-        Experiment.commit(self.ddGDB)
+        Experiment.commit(self.DDG_db)
 
     def createDummyExperiment_ankyrin_repeat(self, pdbID, mutations, chain):
         #todo: elide createDummyExperiment, createDummyExperiment_ankyrin_repeat, and add_mutant
-        experiment = ddgdbapi.ExperimentDefinition(self.ddGDB, pdbID, interface = None)
+        experiment = ddgdbapi.ExperimentDefinition(self.DDG_db, pdbID, interface = None)
         experiment.addChain(chain)
         for m in mutations:
             experiment.addMutation(m)
@@ -283,7 +284,7 @@ class ddG(object):
 
     def get_flattened_prediction_results(self, PredictionSet):
         #todo: add this as a stored procedure
-        return self.ddGDB.execute_select('''
+        return self.DDG_db.execute_select('''
 SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, Experiment.PDBFileID, ExperimentMutations.FlattenedMutations, Prediction.Scores, TIMEDIFF(Prediction.EndDate, Prediction.StartDate) AS TimeTaken FROM Prediction INNER JOIN
 (
   SELECT ExperimentID, GROUP_CONCAT(Mutation SEPARATOR ', ') AS FlattenedMutations FROM
@@ -771,12 +772,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         # score, we could have multiple wildtype structures to choose from. In this case, we choose a pair where the wildtype
         # structure has the minimal total score.
 
-        lowest_mutant_score = self.ddGDB.execute_select('SELECT total FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" ORDER BY total LIMIT 1', parameters=(PredictionID, ScoreMethodID))
+        lowest_mutant_score = self.DDG_db.execute_select('SELECT total FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" ORDER BY total LIMIT 1', parameters=(PredictionID, ScoreMethodID))
         if lowest_mutant_score:
             lowest_mutant_score = lowest_mutant_score[0]['total']
-            mutant_structure_ids = [r['StructureID'] for r in self.ddGDB.execute_select('SELECT StructureID FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" AND total=%s', parameters=(PredictionID, ScoreMethodID, lowest_mutant_score))]
+            mutant_structure_ids = [r['StructureID'] for r in self.DDG_db.execute_select('SELECT StructureID FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" AND total=%s', parameters=(PredictionID, ScoreMethodID, lowest_mutant_score))]
             if len(mutant_structure_ids) > 1:
-                return self.ddGDB.execute_select(('SELECT StructureID FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="WildType" AND StructureID IN (' + ','.join(map(str, mutant_structure_ids)) + ') ORDER BY total LIMIT 1'), parameters=(PredictionID, ScoreMethodID ))[0]['StructureID']
+                return self.DDG_db.execute_select(('SELECT StructureID FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="WildType" AND StructureID IN (' + ','.join(map(str, mutant_structure_ids)) + ') ORDER BY total LIMIT 1'), parameters=(PredictionID, ScoreMethodID ))[0]['StructureID']
             else:
                 return mutant_structure_ids[0]
         return None
@@ -791,7 +792,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         amino_acids = {}
         polarity_map = {'polar' : 'P', 'charged' : 'C', 'hydrophobic' : 'H'}
         aromaticity_map = {'aliphatic' : 'L', 'aromatic' : 'R', 'neither' : '-'}
-        results = self.ddGDB.execute_select('SELECT * FROM AminoAcid')
+        results = self.DDG_db.execute_select('SELECT * FROM AminoAcid')
         for r in results:
             if r['Code'] != 'X':
                 amino_acids[r['Code']] = dict(
@@ -817,7 +818,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             if pdb_id in cached_pdb_ids:
                 pdbs[pdb_id] = cached_pdb_details[pdb_id]
             else:
-                record = self.ddGDB.execute_select('SELECT * FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))[0]
+                record = self.DDG_db.execute_select('SELECT * FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))[0]
                 p = PDB(record['Content'])
                 pdb_chain_lengths = {}
                 for chain_id, s in p.atom_sequences.iteritems():
@@ -834,7 +835,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     def get_prediction_experiment_chains(self, predictionset):
-        return self.ddGDB.execute_select('''
+        return self.DDG_db.execute_select('''
             SELECT Prediction.ID, Experiment.PDBFileID, Chain
             FROM Prediction
             INNER JOIN Experiment ON Experiment.ID=Prediction.ExperimentID
@@ -851,6 +852,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     ## Database API: start of curated functionality. Eventually all functions should be moved into here
     #####
 
+    ################################################
+    ## Public API
+    ################################################
+
+
+
     ##### Deprecated functions
 
 
@@ -862,8 +869,16 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def addPrediction(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True): raise Exception('This function has been deprecated. Use add_job instead.')
 
 
+    ##### Misc functions
 
-    ##### Public API: PredictionSet functions
+
+
+    def get_prediction_table(self):
+        raise Exception('Use a concrete API for working with prediction tables.')
+
+
+
+    ##### PredictionSet functions
 
 
 
@@ -875,7 +890,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         else:
             Status = 'active'
 
-        if allow_existing_prediction_set == False and len(self.ddGdb.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(PredictionSetID,))) > 0:
+        if allow_existing_prediction_set == False and len(self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(PredictionSetID,))) > 0:
             raise Exception('The PredictionSet %s already exists.' % PredictionSetID)
         d = dict(
             ID                  = PredictionSetID,
@@ -885,11 +900,20 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             BindingAffinity     = contains_binding_affinity_predictions,
             BatchSize           = BatchSize,
         )
-        self.ddGDB.insertDictIfNew("PredictionSet", d, ['ID'])
+        self.DDG_db.insertDictIfNew("PredictionSet", d, ['ID'])
 
 
 
-    ##### Public API: File-related functions
+    ##### PDB-related functions
+
+
+
+    def get_pdb_chains_for_prediction(self, prediction_id):
+        '''Returns the PDB file ID and a list of chains for the prediction.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    ##### File-related functions
 
 
 
@@ -902,7 +926,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         existing_filecontent_id = None
         hexdigest = hexdigest or get_hexdigest(content)
         filesize = len(content)
-        for r in self.ddGDB.execute_select('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', parameters=(hexdigest, filesize)):
+        for r in self.DDG_db.execute_select('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', parameters=(hexdigest, filesize)):
             if r['Content'] == content:
                 assert(existing_filecontent_id == None) # content uniqueness check
                 existing_filecontent_id = r['ID']
@@ -938,7 +962,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 Filesize = len(content),
                 MD5HexDigest = hexdigest
             )
-            self.ddGDB.insertDictIfNew('FileContent', d, ['Content'])
+            self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
             existing_filecontent_id = self.get_file_id(content, hexdigest = hexdigest)
             assert(existing_filecontent_id != None)
         return existing_filecontent_id
@@ -948,34 +972,68 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         return self.add_file_content(pdb_content, rm_trailing_line_whitespace = True, forced_mime_type = 'chemical/x-pdb')
 
 
+    ################################################
+    ## Private API
+    ################################################
 
-    ##### Private API: File-related functions
+
+    ##### File-related functions
 
 
 
-    def _add_residue_map_to_prediction(self, prediction_table, prediction_id, residue_mapping):
-        assert(type(residue_mapping) == type(self.__dict__))
+    def _add_prediction_file(self, prediction_id, file_content, filename, filetype, filerole, stage, rm_trailing_line_whitespace = False, forced_mime_type = None):
+
+        prediction_table = self.get_prediction_table()
 
         # Add the file contents to the database
-        json_content = json.dumps(residue_mapping, sort_keys=True) # sorting helps to quotient the file content space over identical data
-        file_content_id = self.add_file_content(json_content, forced_mime_type="application/json")
+        if filetype == 'PDB':
+            forced_mime_type = forced_mime_type or 'chemical/x-pdb'
+
+        file_content_id = self.add_file_content(file_content, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
 
         # Link the file contents to the prediction
         d = dict(
             FileContentID = file_content_id,
-            Filename = 'residue_mapping.json' % prediction_id,
-            Filetype = 'RosettaPDBMapping',
-            FileRole = 'Rosetta<->PDB residue mapping',
-            Stage = 'Input',
+            Filename = filename,
+            Filetype = filetype,
+            FileRole = filerole,
+            Stage = stage,
         )
         if prediction_table == 'Prediction':
             d['PredictionID'] = prediction_id,
-            self.ddGDB.insertDictIfNew('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
+            self.DDG_db.insertDictIfNew('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
         elif prediction_table == 'PredictionPPI':
             d['PredictionPPIID'] = prediction_id,
-            self.ddGDB.insertDictIfNew('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
+            self.DDG_db.insertDictIfNew('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
         else:
             raise('Invalid table "%s" passed.' % prediction_table)
+
+
+    def _add_residue_map_to_prediction(self, prediction_id, residue_mapping):
+        assert(type(residue_mapping) == type(self.__dict__))
+        json_content = json.dumps(residue_mapping, sort_keys=True) # sorting helps to quotient the file content space over identical data
+        self._add_prediction_file(prediction_id, json_content, 'residue_mapping.json', 'RosettaPDBMapping', 'Rosetta<->PDB residue mapping', 'Input', forced_mime_type = "application/json")
+
+
+    def _strip_pdb(self, pdb_file_id, chains):
+        raise Exception('assert that chains exist in PDBChain table. reads PDB content from the database. call PDB class functions to strip to chains.')
+
+
+    def _add_stripped_pdb_to_prediction(self, prediction_id):
+        pdb_file_id, chains = self.get_pdb_chains_for_prediction(prediction_id)
+        pdb_content = self._strip_pdb(pdb_file_id, chains)
+        filename = '%s_%s' % (pdb_file_id, ''.join(sorted(chains)))
+        self._add_prediction_file(prediction_id, pdb_content, filename, 'PDB', 'StrippedPDB', 'Input', rm_trailing_line_whitespace = True, forced_mime_type = 'chemical/x-pdb')
+
+
+    def _add_resfile_to_prediction(self, prediction_id):
+        resfile_content = self.create_resfile(prediction_id)
+        self._add_prediction_file(prediction_id, resfile_content, 'mutations.resfile', 'Resfile', 'Resfile', 'Input', rm_trailing_line_whitespace = True)
+
+
+    def _add_mutfile_to_prediction(self, prediction_id):
+        mutfile_content = self.create_mutfile(prediction_id)
+        self._add_prediction_file(prediction_id, mutfile_content, 'mutations.mutfile', 'Mutfile', 'Mutfile', 'Input', rm_trailing_line_whitespace = True)
 
 
 

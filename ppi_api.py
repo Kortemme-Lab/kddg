@@ -14,15 +14,50 @@ from tools.fs.fsio import read_file
 import ddgdbapi
 from dbapi import ddG
 
+
+class BindingAffinityDDGUserInterface(ddG):
+
+    def private_function_call(self, function_name):
+        raise Exception('The function %s is not part of the public API.')
+
+
+    def __init__(self):
+        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username)
+        private_methods = []
+        for pm_name in private_methods:
+            if
+
 class BindingAffinityDDGInterface(ddG):
 
 
-    ##### Private API: File-related functions
+     def __init__(self, passwd = None, username = 'kortemmelab'):
+        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username)
+
+    def get_prediction_table(self):
+        return 'PredictionPPI'
+
+
+    ##### Public API: Rosetta-related functions
 
 
 
-    def _add_residue_map_to_prediction(self, prediction_id, residue_mapping):
-        super(BindingAffinityDDGInterface, self)._add_residue_map_to_prediction(prediction_id, residue_mapping, 'PredictionPPI')
+    def create_resfile(self, prediction_id):
+        raise Exception('This needs to be implemented.')
+
+
+
+    def create_mutfile(self, prediction_id):
+        raise Exception('This needs to be implemented.')
+
+
+
+    ##### Public API: PDB-related functions
+
+
+
+    def get_pdb_chains_for_prediction(self, prediction_id):
+        '''Returns the PDB file ID and a list of chains for the prediction.'''
+        raise Exception('This needs to be implemented.')
 
 
 
@@ -44,18 +79,18 @@ class BindingAffinityDDGInterface(ddG):
         raise Exception('This function needs to be rewritten.')
         from tools.bio.rcsb import parseFASTAs
 
-        ddGdb = self.ddGDB
-        predictions = ddGdb.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
+        DDG_db = self.DDG_db
+        predictions = DDG_db.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
 
         PDB_chain_lengths ={}
         for prediction in predictions:
-            chain_records = ddGdb.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
+            chain_records = DDG_db.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
             num_residues = 0
             for chain_record in chain_records:
                 key = (chain_record['PDBFileID'], chain_record['Chain'])
 
                 if PDB_chain_lengths.get(key) == None:
-                    fasta = ddGdb.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
+                    fasta = DDG_db.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
                     assert(len(fasta) == 1)
                     fasta = fasta[0]['FASTA']
                     f = parseFASTAs(fasta)
@@ -65,7 +100,7 @@ class BindingAffinityDDGInterface(ddG):
 
             print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
 
-            predictions = ddGdb.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
+            predictions = DDG_db.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
 
 
 
@@ -76,10 +111,10 @@ class BindingAffinityDDGInterface(ddG):
     def add_prediction_set_jobs(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
         raise Exception('This function needs to be rewritten.')
 
-        assert(self.ddGDB.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
+        assert(self.DDG_db.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
 
-        #results = self.ddGDB.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
-        results = self.ddGDB.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
+        #results = self.DDG_db.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
+        results = self.DDG_db.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
         if not results:
             return False
 
@@ -93,7 +128,7 @@ class BindingAffinityDDGInterface(ddG):
             print("|" + ("*" * (int(len(results)/100)-2)) + "|")
         for r in results:
 
-            existing_results = self.ddGDB.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
+            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
             if len(existing_results) > 0:
                 #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
                 continue
@@ -124,14 +159,14 @@ class BindingAffinityDDGInterface(ddG):
             'BatchSize' : 40,
             'EntryDate' : datetime.datetime.now(),
         }
-        self.ddGDB.insertDictIfNew('PredictionSet', d, ['ID'])
+        self.DDG_db.insertDictIfNew('PredictionSet', d, ['ID'])
 
         # Update the priority and activity if necessary
-        self.ddGDB.execute('UPDATE PredictionSet SET Status=%s, Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
+        self.DDG_db.execute('UPDATE PredictionSet SET Status=%s, Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
 
         # Determine the set of experiments to add
-        ExperimentIDs = set([r['ID'] for r in self.ddGDB.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
-        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in self.ddGDB.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
+        ExperimentIDs = set([r['ID'] for r in self.DDG_db.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
+        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in self.DDG_db.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
         experiment_IDs_to_add = sorted(ExperimentIDs.difference(ExperimentIDsInPredictionSet))
 
         if experiment_IDs_to_add:
@@ -164,7 +199,7 @@ class BindingAffinityDDGInterface(ddG):
             predictionPDB_ID = None
 
             sql = "SELECT PDBFileID, Content FROM Experiment INNER JOIN PDBFile WHERE Experiment.PDBFileID=PDBFile.ID AND Experiment.ID=%s"
-            results = self.ddGDB.execute_select(sql, parameters = parameters)
+            results = self.DDG_db.execute_select(sql, parameters = parameters)
             if len(results) != 1:
                 raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
             experimentPDB_ID = results[0]["PDBFileID"]
@@ -172,7 +207,7 @@ class BindingAffinityDDGInterface(ddG):
 
             if PDB_ID:
                 #sql = "SELECT ID, Content FROM PDBFile WHERE ID=%s"
-                results = self.ddGDB.execute_select("SELECT ID, Content FROM PDBFile WHERE ID=%s", parameters=(PDB_ID))
+                results = self.DDG_db.execute_select("SELECT ID, Content FROM PDBFile WHERE ID=%s", parameters=(PDB_ID))
                 if len(results) != 1:
                     raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
                 predictionPDB_ID = results[0]["ID"]
@@ -188,7 +223,7 @@ class BindingAffinityDDGInterface(ddG):
             pdb = PDB(contents.split("\n"))
 
             # Check that the mutated positions exist and that the wild-type matches the PDB
-            mutations = self.ddGDB.call_select_proc("GetMutations", parameters = parameters)
+            mutations = self.DDG_db.call_select_proc("GetMutations", parameters = parameters)
 
             # todo: Hack. This should be removed when PDB homologs are dealt with properly.
             mutation_objects = []
@@ -207,7 +242,7 @@ class BindingAffinityDDGInterface(ddG):
             #        mutation['ResidueID'] = str(int(mutation['ResidueID']) + 172)
 
             # Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
-            chains = [result['Chain'] for result in self.ddGDB.call_select_proc("GetChains", parameters = parameters)]
+            chains = [result['Chain'] for result in self.DDG_db.call_select_proc("GetChains", parameters = parameters)]
             if strip_other_chains:
                 pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
             else:
@@ -251,7 +286,7 @@ class BindingAffinityDDGInterface(ddG):
         Description = pickle.dumps(Description)
         ExtraParameters = pickle.dumps(ExtraParameters)
 
-        PredictionFieldNames = self.ddGDB.FieldNames.Prediction
+        PredictionFieldNames = self.DDG_db.FieldNames.Prediction
         params = {
             PredictionFieldNames.ExperimentID		: experimentID,
             PredictionFieldNames.UserDataSetExperimentID : UserDataSetExperimentID,
@@ -267,22 +302,23 @@ class BindingAffinityDDGInterface(ddG):
             PredictionFieldNames.StoreOutput		: StoreOutput,
         }
         if not testonly:
-            self.ddGDB.insertDict('Prediction', params)
+            self.DDG_db.insertDict('Prediction', params)
 
             # Add cryptID string
-            predictionID = self.ddGDB.getLastRowID()
-            entryDate = self.ddGDB.execute_select("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]
+            predictionID = self.DDG_db.getLastRowID()
+            entryDate = self.DDG_db.execute_select("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]
             rdmstring = ''.join(random.sample('0123456789abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 16))
             cryptID = "%(predictionID)s%(experimentID)s%(PredictionSet)s%(ProtocolID)s%(entryDate)s%(rdmstring)s" % vars()
             cryptID = md5.new(cryptID.encode('utf-8')).hexdigest()
-            entryDate = self.ddGDB.execute("UPDATE Prediction SET cryptID=%s WHERE ID=%s", parameters = (cryptID, predictionID))
+            entryDate = self.DDG_db.execute("UPDATE Prediction SET cryptID=%s WHERE ID=%s", parameters = (cryptID, predictionID))
             return predictionID
 
 
     def clone_prediction_set(self, existing_prediction_set, new_prediction_set):
         raise Exception('not implemented yet')
-        #assert(exisitng_prediction_set exists and has records)
+        #assert(existing_prediction_set exists and has records)
         #assert(new_prediction_set is empty)
+        #for each prediction record, add the record and all associated predictionfile records,
 
 
 

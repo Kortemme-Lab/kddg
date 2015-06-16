@@ -15,22 +15,39 @@ Created by Shane O'Connor 2015.
 Copyright (c) 2015 __UCSF__. All rights reserved.
 """
 
-from tools.fs.fsio import read_file
-import ddgdbapi
 from dbapi import ddG
+from tools import colortext
+
 
 
 class MonomericStabilityDDGInterface(ddG):
 
 
+    def get_prediction_table(self):
+        return 'Prediction'
 
-    ##### Private API: File-related functions
+
+    ##### Public API: Rosetta-related functions
 
 
 
-    def _add_residue_map_to_prediction(self, prediction_id, residue_mapping):
-        super(MonomericStabilityDDGInterface, self)._add_residue_map_to_prediction(prediction_id, residue_mapping, 'Prediction')
-        super(xxx, self)._add_residue_map_to_prediction(prediction_id, residue_mapping, 'PredictionPPI')
+    def create_resfile(self, prediction_id):
+        raise Exception('This needs to be implemented.')
+
+
+
+    def create_mutfile(self, prediction_id):
+        raise Exception('This needs to be implemented.')
+
+
+
+    ##### Public API: PDB-related functions
+
+
+
+    def get_pdb_chains_for_prediction(self, prediction_id):
+        '''Returns the PDB file ID and a list of chains for the prediction.'''
+        raise Exception('This needs to be implemented.')
 
 
 
@@ -53,18 +70,18 @@ class MonomericStabilityDDGInterface(ddG):
         raise Exception('This function needs to be rewritten.')
         from tools.bio.rcsb import parseFASTAs
 
-        ddGdb = self.ddGDB
-        predictions = ddGdb.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
+        DDG_db = self.DDG_db
+        predictions = DDG_db.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
 
         PDB_chain_lengths ={}
         for prediction in predictions:
-            chain_records = ddGdb.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
+            chain_records = DDG_db.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
             num_residues = 0
             for chain_record in chain_records:
                 key = (chain_record['PDBFileID'], chain_record['Chain'])
 
                 if PDB_chain_lengths.get(key) == None:
-                    fasta = ddGdb.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
+                    fasta = DDG_db.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
                     assert(len(fasta) == 1)
                     fasta = fasta[0]['FASTA']
                     f = parseFASTAs(fasta)
@@ -74,7 +91,7 @@ class MonomericStabilityDDGInterface(ddG):
 
             print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
 
-            predictions = ddGdb.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
+            predictions = DDG_db.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
 
 
 
@@ -85,10 +102,10 @@ class MonomericStabilityDDGInterface(ddG):
     def add_prediction_set_jobs(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
         raise Exception('This function needs to be rewritten.')
 
-        assert(self.ddGDB.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
+        assert(self.DDG_db.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
 
-        #results = self.ddGDB.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
-        results = self.ddGDB.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
+        #results = self.DDG_db.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
+        results = self.DDG_db.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
         if not results:
             return False
 
@@ -102,7 +119,7 @@ class MonomericStabilityDDGInterface(ddG):
             print("|" + ("*" * (int(len(results)/100)-2)) + "|")
         for r in results:
 
-            existing_results = self.ddGDB.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
+            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
             if len(existing_results) > 0:
                 #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
                 continue
@@ -133,14 +150,14 @@ class MonomericStabilityDDGInterface(ddG):
             'BatchSize' : 40,
             'EntryDate' : datetime.datetime.now(),
         }
-        self.ddGDB.insertDictIfNew('PredictionSet', d, ['ID'])
+        self.DDG_db.insertDictIfNew('PredictionSet', d, ['ID'])
 
         # Update the priority and activity if necessary
-        self.ddGDB.execute('UPDATE PredictionSet SET Status=%s, Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
+        self.DDG_db.execute('UPDATE PredictionSet SET Status=%s, Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
 
         # Determine the set of experiments to add
-        ExperimentIDs = set([r['ID'] for r in self.ddGDB.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
-        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in self.ddGDB.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
+        ExperimentIDs = set([r['ID'] for r in self.DDG_db.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
+        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in self.DDG_db.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
         experiment_IDs_to_add = sorted(ExperimentIDs.difference(ExperimentIDsInPredictionSet))
 
         if experiment_IDs_to_add:
@@ -173,7 +190,7 @@ class MonomericStabilityDDGInterface(ddG):
             predictionPDB_ID = None
 
             sql = "SELECT PDBFileID, Content FROM Experiment INNER JOIN PDBFile WHERE Experiment.PDBFileID=PDBFile.ID AND Experiment.ID=%s"
-            results = self.ddGDB.execute_select(sql, parameters = parameters)
+            results = self.DDG_db.execute_select(sql, parameters = parameters)
             if len(results) != 1:
                 raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
             experimentPDB_ID = results[0]["PDBFileID"]
@@ -181,7 +198,7 @@ class MonomericStabilityDDGInterface(ddG):
 
             if PDB_ID:
                 #sql = "SELECT ID, Content FROM PDBFile WHERE ID=%s"
-                results = self.ddGDB.execute_select("SELECT ID, Content FROM PDBFile WHERE ID=%s", parameters=(PDB_ID))
+                results = self.DDG_db.execute_select("SELECT ID, Content FROM PDBFile WHERE ID=%s", parameters=(PDB_ID))
                 if len(results) != 1:
                     raise colortext.Exception("The SQL query '%s' returned %d results where 1 result was expected." % (sql, len(results)))
                 predictionPDB_ID = results[0]["ID"]
@@ -197,7 +214,7 @@ class MonomericStabilityDDGInterface(ddG):
             pdb = PDB(contents.split("\n"))
 
             # Check that the mutated positions exist and that the wild-type matches the PDB
-            mutations = self.ddGDB.call_select_proc("GetMutations", parameters = parameters)
+            mutations = self.DDG_db.call_select_proc("GetMutations", parameters = parameters)
 
             # todo: Hack. This should be removed when PDB homologs are dealt with properly.
             mutation_objects = []
@@ -216,7 +233,7 @@ class MonomericStabilityDDGInterface(ddG):
             #        mutation['ResidueID'] = str(int(mutation['ResidueID']) + 172)
 
             # Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
-            chains = [result['Chain'] for result in self.ddGDB.call_select_proc("GetChains", parameters = parameters)]
+            chains = [result['Chain'] for result in self.DDG_db.call_select_proc("GetChains", parameters = parameters)]
             if strip_other_chains:
                 pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
             else:
@@ -260,7 +277,7 @@ class MonomericStabilityDDGInterface(ddG):
         Description = pickle.dumps(Description)
         ExtraParameters = pickle.dumps(ExtraParameters)
 
-        PredictionFieldNames = self.ddGDB.FieldNames.Prediction
+        PredictionFieldNames = self.DDG_db.FieldNames.Prediction
         params = {
             PredictionFieldNames.ExperimentID		: experimentID,
             PredictionFieldNames.UserDataSetExperimentID : UserDataSetExperimentID,
@@ -276,22 +293,23 @@ class MonomericStabilityDDGInterface(ddG):
             PredictionFieldNames.StoreOutput		: StoreOutput,
         }
         if not testonly:
-            self.ddGDB.insertDict('Prediction', params)
+            self.DDG_db.insertDict('Prediction', params)
 
             # Add cryptID string
-            predictionID = self.ddGDB.getLastRowID()
-            entryDate = self.ddGDB.execute_select("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]
+            predictionID = self.DDG_db.getLastRowID()
+            entryDate = self.DDG_db.execute_select("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]
             rdmstring = ''.join(random.sample('0123456789abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 16))
             cryptID = "%(predictionID)s%(experimentID)s%(PredictionSet)s%(ProtocolID)s%(entryDate)s%(rdmstring)s" % vars()
             cryptID = md5.new(cryptID.encode('utf-8')).hexdigest()
-            entryDate = self.ddGDB.execute("UPDATE Prediction SET cryptID=%s WHERE ID=%s", parameters = (cryptID, predictionID))
+            entryDate = self.DDG_db.execute("UPDATE Prediction SET cryptID=%s WHERE ID=%s", parameters = (cryptID, predictionID))
             return predictionID
 
 
     def clone_prediction_set(self, existing_prediction_set, new_prediction_set):
         raise Exception('not implemented yet')
-        #assert(exisitng_prediction_set exists and has records)
+        #assert(existing_prediction_set exists and has records)
         #assert(new_prediction_set is empty)
+        #for each prediction record, add the record and all associated predictionfile records,
 
 
 
@@ -342,7 +360,7 @@ class MonomericStabilityDDGInterface(ddG):
                 predictions - a mapping: Prediction IDs -> ExperimentID, UserDataSetExperimentID, Experiment and Prediction (this is the one used for the prediction) PDB IDs, scores. If single mutation then also mutation details, DSSP, and exposure.
                 analysis_datasets - a mapping: analysis subset (e.g. "Guerois") -> Prediction IDs -> (prediction) PDB_ID, ExperimentID, ExperimentDDG (mean of experimental values)
         '''
-        UserDataSetID = self.ddGDB.execute_select("SELECT ID FROM UserDataSet WHERE TextID=%s", parameters=(userdataset_textid,))
+        UserDataSetID = self.DDG_db.execute_select("SELECT ID FROM UserDataSet WHERE TextID=%s", parameters=(userdataset_textid,))
         assert(UserDataSetID)
         UserDataSetID = UserDataSetID[0]['ID']
 
@@ -351,7 +369,7 @@ class MonomericStabilityDDGInterface(ddG):
 
         # Get the list of mutation predictions
         if only_single:
-            prediction_records = self.ddGDB.execute_select('''
+            prediction_records = self.DDG_db.execute_select('''
                 SELECT a.ID AS PredictionID FROM
                 (
                 SELECT Prediction.ID, Prediction.ExperimentID, UserDataSetExperimentID, COUNT(Prediction.ID) AS NumMutations
@@ -362,7 +380,7 @@ class MonomericStabilityDDGInterface(ddG):
                 ) AS a
                 WHERE a.NumMutations=1''', parameters=(predictionset,))
         else:
-            prediction_records = self.ddGDB.execute_select('''
+            prediction_records = self.DDG_db.execute_select('''
                 SELECT a.ID AS PredictionID FROM
                 (
                 SELECT Prediction.ID, Prediction.ExperimentID, UserDataSetExperimentID, COUNT(Prediction.ID) AS NumMutations
@@ -373,11 +391,11 @@ class MonomericStabilityDDGInterface(ddG):
                 ) AS a''', parameters=(predictionset,))
         allowed_prediction_ids = set([m['PredictionID'] for m in prediction_records])
 
-        kellogg_score_method_id = self.ddGDB.execute_select('''SELECT ID FROM ScoreMethod WHERE MethodName='Global' AND MethodType='Protocol 16' ''')
+        kellogg_score_method_id = self.DDG_db.execute_select('''SELECT ID FROM ScoreMethod WHERE MethodName='Global' AND MethodType='Protocol 16' ''')
         assert(len(kellogg_score_method_id) == 1)
         kellogg_score_method_id = kellogg_score_method_id[0]['ID']
 
-        noah_8A_positional_score_method_id = self.ddGDB.execute_select('''SELECT ID FROM ScoreMethod WHERE MethodName='Local' AND MethodType='Position' ''')
+        noah_8A_positional_score_method_id = self.DDG_db.execute_select('''SELECT ID FROM ScoreMethod WHERE MethodName='Local' AND MethodType='Position' ''')
         assert(len(noah_8A_positional_score_method_id) == 1)
         noah_8A_positional_score_method_id = noah_8A_positional_score_method_id[0]['ID']
 
@@ -385,7 +403,7 @@ class MonomericStabilityDDGInterface(ddG):
         # See ExperimentAssays ( 917, 918, 919, 920, 922, 7314, 932, 933, 936, 937, 938, 2076, 7304, 7305, 7307, 7308, 7309, 7310, 7312, 7315, 7316, 7317, 7320 )
         # or Experiments (111145, 110303, 110284, 110287, 110299, 110300, 110285, 110286, 110289, 114180, 114175, 114177, 114171, 110304, 110305, 114179, 114168, 114170, 114172, 114173, 114178, 114167)
         # or PubMed IDs 7479708, 9079363, and 9878405)
-        badly_entered_predictions = self.ddGDB.execute_select('''
+        badly_entered_predictions = self.DDG_db.execute_select('''
                     SELECT Prediction.ID AS PredictionID FROM Prediction
                     INNER JOIN Experiment ON Experiment.ID=Prediction.ExperimentID
                     WHERE PredictionSet=%s
@@ -395,7 +413,7 @@ class MonomericStabilityDDGInterface(ddG):
 
 
         # Read in the PredictionStructureScore records
-        kellogg_structure_score_query = self.ddGDB.execute_select('''
+        kellogg_structure_score_query = self.DDG_db.execute_select('''
             SELECT PredictionID, ScoreType, StructureID, total FROM PredictionStructureScore
             WHERE PredictionID >=%s
             AND PredictionID <=%s
@@ -415,7 +433,7 @@ class MonomericStabilityDDGInterface(ddG):
         prediction_ids = set()
         pdb_ids = set()
         failures = 0
-        prediction_results = self.ddGDB.execute_select('''
+        prediction_results = self.DDG_db.execute_select('''
             SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, UserDataSetExperimentID, Experiment.PDBFileID AS ePDB, UserDataSetExperiment.PDBFileID AS pPDB, Scores
             FROM Prediction
             INNER JOIN Experiment ON Experiment.ID=Prediction.ExperimentID
@@ -486,7 +504,7 @@ class MonomericStabilityDDGInterface(ddG):
 
 
         # Get the mutation details for each single mutation prediction
-        mutation_details_1 = self.ddGDB.execute_select('''
+        mutation_details_1 = self.DDG_db.execute_select('''
 SELECT a.ID AS PredictionID, UserDataSetExperiment.PDBFileID as pPDB, ExperimentMutation.Chain, ExperimentMutation.ResidueID, ExperimentMutation.WildTypeAA, ExperimentMutation.MutantAA,
 PDBResidue.MonomericExposure, PDBResidue.MonomericDSSP
 FROM
@@ -505,7 +523,7 @@ INNER JOIN PDBResidue
   AND TRIM(PDBResidue.ResidueID)=TRIM(ExperimentMutation.ResidueID))
 WHERE a.NumMutations=1''', parameters=(predictionset,))
         # Hack for 1U5P. Note: TRIM removes warnings e.g. "Warning: Truncated incorrect INTEGER value: '1722 '".
-        mutation_details_2 = self.ddGDB.execute_select('''
+        mutation_details_2 = self.DDG_db.execute_select('''
 SELECT a.ID AS PredictionID, UserDataSetExperiment.PDBFileID as pPDB, ExperimentMutation.Chain, ExperimentMutation.ResidueID, ExperimentMutation.WildTypeAA, ExperimentMutation.MutantAA,
 PDBResidue.MonomericExposure, PDBResidue.MonomericDSSP
 FROM
@@ -562,13 +580,13 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
         # with the UserDataSet i.e. AnalysisSets for a UserDataSet := "SELECT DISTINCT Subset FROM UserAnalysisSet WHERE UserDataSetID=x".
         from analysis import UserDataSetExperimentalScores
         analysis_data = {}
-        analysis_subsets = [r['Subset'] for r in self.ddGDB.execute_select("SELECT DISTINCT Subset FROM UserAnalysisSet WHERE UserDataSetID=%s", parameters=(UserDataSetID,))]
+        analysis_subsets = [r['Subset'] for r in self.DDG_db.execute_select("SELECT DISTINCT Subset FROM UserAnalysisSet WHERE UserDataSetID=%s", parameters=(UserDataSetID,))]
         for analysis_subset in analysis_subsets:
             analysis_data[analysis_subset] = {}
             adata = analysis_data[analysis_subset]
             adata['Missing'] = []
 
-            UDS_scores = UserDataSetExperimentalScores(self.ddGDB, 1, analysis_subset)
+            UDS_scores = UserDataSetExperimentalScores(self.DDG_db, 1, analysis_subset)
             count = 0
             for section, sectiondata in sorted(UDS_scores.iteritems()):
                 for recordnumber, record_data in sorted(sectiondata.iteritems()):
@@ -605,7 +623,7 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
 
         # Read the list of experiments from the database
         analysis_set_experiments = {}
-        results = self.ddGDB.execute_select('SELECT * FROM UserAnalysisSet WHERE UserDataSetID=%s', parameters=(UserDataSetID,))
+        results = self.DDG_db.execute_select('SELECT * FROM UserAnalysisSet WHERE UserDataSetID=%s', parameters=(UserDataSetID,))
         for r in results:
             subset = r['Subset']
             if (len(restrict_to_subsets) == 0) or (subset in restrict_to_subsets):
@@ -636,7 +654,7 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
         # Read the list of experiments from the database
         analysis_set_experiments = {}
         primary_analysis_set_experiments = set()
-        results = self.ddGDB.execute_select('SELECT * FROM UserAnalysisSet WHERE UserDataSetID=%s', parameters=(UserDataSetID,))
+        results = self.DDG_db.execute_select('SELECT * FROM UserAnalysisSet WHERE UserDataSetID=%s', parameters=(UserDataSetID,))
         for r in results:
             subset = r['Subset']
             if subset != primary_subset:
@@ -764,7 +782,7 @@ class AnalysisBreakdown(object):
         print('ID,Experimental,Predicted')
 
         # for benchmarks paper
-        ddgapio = MonomericStabilityDDGInterface().ddGDB
+        ddgapio = MonomericStabilityDDGInterface().DDG_db
 
         for prediction_id, details in sorted(predictions.iteritems()):
             if prediction_id in analysis_dataset:
@@ -1271,3 +1289,10 @@ WHERE Prediction.ID = %s''', parameters=(prediction_id,))
                 all_results[main_subset_names[subid]] = results
         return all_results
 
+
+class MonomericStabilityDDGUserInterface(MonomericStabilityDDGInterface): pass
+
+import inspect
+for m in inspect.getmembers(MonomericStabilityDDGInterface, predicate=inspect.ismethod):
+    print(m)
+    MonomericStabilityDDGUserInterface.__dict__[m[0]] = m[1]
