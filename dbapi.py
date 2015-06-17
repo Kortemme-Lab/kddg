@@ -65,6 +65,31 @@ class MutationSet(object):
         return sorted(list(set([m[0] for m in self.mutations])))
 
 
+### API function decorators. These are used to group functions together when printing the help text.
+
+def jobcreator(func):
+    func._helptype = 'Job creation API'
+    return func
+
+def inputfiles(func):
+    func._helptype = 'Input file generation API'
+    return func
+
+def analysisfn(func):
+    func._helptype = 'Analysis API'
+    return func
+
+def pymolapi(func):
+    func._helptype = 'PyMOL API'
+    return func
+
+def deprecated(func):
+    func._helptype = 'Deprecated functions'
+    return func
+
+
+
+
 class ddG(object):
     '''This class is responsible for inserting prediction jobs to the database.'''
 
@@ -176,6 +201,7 @@ class ddG(object):
     def dumpData(self, outfile, predictionID):
         write_file(outfile, self.getData(predictionID))
 
+    @analysisfn
     def analyze(self, prediction_result_set, outpath = os.getcwd()):
         PredictionIDs = sorted(list(prediction_result_set.getFilteredIDs()))
         colortext.printf("Analyzing %d records:" % len(PredictionIDs), "lightgreen")
@@ -226,6 +252,8 @@ class ddG(object):
             colortext.error(traceback.format_exc())
             raise Exception("An exception occurred committing %s to the database." % filepath)
 
+
+    @deprecated
     def add_pdb_file(self, filepath, pdb_id):
         #todo: use either this or add_PDB_to_database but not both
         raise Exception('deprecated in favor of add_PDB_to_database')
@@ -302,6 +330,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     #### todo: these following functions should be refactored and renamed. In particular, the graphing functions should
     ####       be moved into the tools repository
 
+    @analysisfn
     def create_abacus_graph_for_a_single_structure(self, PredictionSet, scoring_method, scoring_type, graph_title = None, PredictionIDs = None, graph_filename = None, cached_results = None, num_datapoints = 0):
         '''This function is meant to
             The num_datapoints is mainly for debugging - tuning the resolution/DPI to fit the number of datapoints.'''
@@ -375,10 +404,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         else:
             return self.create_abacus_graph(graph_title, labels, pruned_data, scoring_method, scoring_type)
 
+    @analysisfn
     def write_abacus_graph(self, graph_filename, graph_title, labels, data, scoring_method, scoring_type):
         byte_stream = self.create_abacus_graph(graph_title, labels, data, scoring_method, scoring_type)
         write_file(graph_filename, byte_stream.getvalue(), 'wb')
 
+    @analysisfn
     def create_abacus_graph(self, graph_title, labels, data, scoring_method, scoring_type):
         '''Even though this is technically a scatterplot, I call this an abacus graph because it is basically a bunch of beads on lines.'''
 
@@ -536,6 +567,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         else:
             colortext.warning(p.stdout)
 
+    @analysisfn
     def test_results(output_dir, PredictionSet):
         PredictionIDs = []
         results = get_flattened_prediction_results(PredictionSet)
@@ -591,6 +623,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             print(s)
             print(t)
 
+    @pymolapi
     def create_pymol_session(download_dir, PredictionID, task_number, keep_files = True):
         '''Create a PyMOL session for a pair of structures.'''
 
@@ -616,6 +649,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             shutil.rmtree(download_dir)
         return chain_mapper.generate_pymol_session()
 
+    @pymolapi
     def create_pymol_session_in_memory(self, PredictionID, task_number):
         '''Create a PyMOL session for a pair of structures.
         '''
@@ -782,7 +816,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 return mutant_structure_ids[0]
         return None
 
-
+    @pymolapi
     def write_pymol_session(download_dir, PredictionID, task_number, keep_files = True):
         PSE_file = create_pymol_session(download_dir, PredictionID, task_number, keep_files = keep_files)
         write_file(output_filepath, PSE_file[0], 'wb')
@@ -861,11 +895,19 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     ##### Deprecated functions
 
 
-
+    @deprecated
     def create_PredictionSet(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False): raise Exception('This function has been deprecated. Use add_prediction_set instead.')
+
+    @deprecated
     def charge_PredictionSet_by_number_of_residues(self, PredictionSet): raise Exception('This function has been deprecated. Use _charge_prediction_set_by_residue_count instead.')
+
+    @deprecated
     def createPredictionsFromUserDataSet(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False): raise Exception('This function has been deprecated. Use add_prediction_set_jobs instead.')
+
+    @deprecated
     def add_predictions_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True): raise Exception('This function has been deprecated. Use add_jobs_by_pdb_id instead.')
+
+    @deprecated
     def addPrediction(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True): raise Exception('This function has been deprecated. Use add_job instead.')
 
 

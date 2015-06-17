@@ -11,26 +11,75 @@ Copyright (c) 2015 __UCSF__. All rights reserved.
 """
 
 from tools.fs.fsio import read_file
+from tools import colortext
 import ddgdbapi
-from dbapi import ddG
+import pprint
+from dbapi import ddG, jobcreator, inputfiles, analysisfn, pymolapi, deprecated
+import inspect
+import functools
+
+def bind_object_function(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs): return fn(*args, **kwargs)
+    return wrapper
 
 
-class BindingAffinityDDGUserInterface(ddG):
+class BindingAffinityDDGUserInterface(object):
+    '''This is the class that should be used to interface with the database. It hides functions that should only be called
+       within this other API functions.
 
-    def private_function_call(self, function_name):
-        raise Exception('The function %s is not part of the public API.')
+       The class contains a private copy of the internal API and wraps the public functions of that API so that the
+       functions of BindingAffinityDDGUserInterface contain only the public functions of the internal API. Private functions
+       are denoted as such by a leading underscore in the function name.
+       '''
+
+    def __init__(self, passwd = None, username = 'kortemmelab'):
+
+        self._ddg_interface = BindingAffinityDDGInterface(passwd = passwd, username = username)
+        self._api_functions = []
+        self._api_function_args = {}
+        self.DDG_db = self._ddg_interface.DDG_db
+        self.DDG_db_utf = self._ddg_interface.DDG_db_utf
+
+        for m in inspect.getmembers(BindingAffinityDDGInterface, predicate=inspect.ismethod):
+            if m[0][0] != '_':
+                fn_name = m[0]
+                self._api_function_args[fn_name] = getattr(self._ddg_interface, fn_name).func_code.co_varnames
+                self._api_functions.append(fn_name)
+                self.__dict__[fn_name] = bind_object_function(getattr(self._ddg_interface, fn_name))
 
 
-    def __init__(self):
-        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username)
-        private_methods = []
-        for pm_name in private_methods:
-            if
+    def help(self):
+        helpstr = []
+        helpstr.append(colortext.mcyan('\n*****\n*** %s API\n*****\n' % self.__class__.__name__))
+
+        doc_strings = {}
+        for fn_name in sorted(self._api_functions):
+            fn = self.__dict__[fn_name]
+            function_class = 'Miscellanous'
+            try:
+                function_class = fn._helptype
+            except: pass
+            doc_strings[function_class] = doc_strings.get(function_class, {})
+            doc_strings[function_class][fn_name] = fn.__doc__
+
+        for function_class, fn_names in sorted(doc_strings.iteritems()):
+            helpstr.append(colortext.mlightpurple('* %s *\n' % function_class))
+            for fn_name, docstr in sorted(fn_names.iteritems()):
+                helpstr.append(colortext.mgreen('  %s(%s)' % (fn_name, ', '.join(self._api_function_args[fn_name]))))
+                if docstr:
+                    helpstr.append(colortext.myellow('    %s' % ('\n    '.join([s.strip() for s in docstr.split('\n') if s.strip()]))))
+                else:
+                    helpstr.append(colortext.mred('    <not documented>'))
+                helpstr.append('')
+        return '\n'.join(helpstr)
+
 
 class BindingAffinityDDGInterface(ddG):
+    '''This is the internal API class that should be NOT used to interface with the database.'''
 
 
-     def __init__(self, passwd = None, username = 'kortemmelab'):
+    def __init__(self, passwd = None, username = 'kortemmelab'):
         super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username)
 
     def get_prediction_table(self):
@@ -40,12 +89,12 @@ class BindingAffinityDDGInterface(ddG):
     ##### Public API: Rosetta-related functions
 
 
-
+    @inputfiles
     def create_resfile(self, prediction_id):
         raise Exception('This needs to be implemented.')
 
 
-
+    @inputfiles
     def create_mutfile(self, prediction_id):
         raise Exception('This needs to be implemented.')
 
@@ -56,7 +105,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     def get_pdb_chains_for_prediction(self, prediction_id):
-        '''Returns the PDB file ID and a list of chains for the prediction.'''
+        '''<!Job insertion>Returns the PDB file ID and a list of chains for the prediction.'''
         raise Exception('This needs to be implemented.')
 
 
@@ -107,7 +156,7 @@ class BindingAffinityDDGInterface(ddG):
     ##### Public API: Job insertion functions
 
 
-
+    @jobcreator
     def add_prediction_set_jobs(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
         raise Exception('This function needs to be rewritten.')
 
@@ -145,6 +194,7 @@ class BindingAffinityDDGInterface(ddG):
         return(True)
 
 
+    @jobcreator
     def add_jobs_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True):
         ''' This function adds predictions for all Experiments corresponding to pdb_ID to the specified prediction set.
             This is useful for custom runs e.g. when we are using the DDG scheduler for design rather than for benchmarking.
@@ -181,6 +231,7 @@ class BindingAffinityDDGInterface(ddG):
         print('')
 
 
+    @jobcreator
     def add_job(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True):
         '''This function inserts a prediction into the database.
             The parameters define:
@@ -314,6 +365,7 @@ class BindingAffinityDDGInterface(ddG):
             return predictionID
 
 
+    @jobcreator
     def clone_prediction_set(self, existing_prediction_set, new_prediction_set):
         raise Exception('not implemented yet')
         #assert(existing_prediction_set exists and has records)
@@ -540,6 +592,8 @@ class PPIJobCreator(ddG):
 
 
 if __name__ == '__main__':
+
+    a='''
     PPIJobCreator = PPIJobCreator(passwd = read_file('ddgdb.pw').strip())
 
     1.
@@ -573,3 +627,4 @@ if __name__ == '__main__':
     Kyle's runner runs the jobs and saves the results back into the database
 
 
+    '''
