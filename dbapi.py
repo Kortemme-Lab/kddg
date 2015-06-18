@@ -24,6 +24,7 @@ import magic
 import json
 import inspect
 import functools
+from io import BytesIO
 
 try:
     import matplotlib
@@ -89,6 +90,9 @@ def deprecated(func):
     func._helptype = 'Deprecated functions'
     return func
 
+def alien(func):
+    func._helptype = 'Alien functions (these should be moved into another package)'
+    return func
 
 class GenericUserInterface(object):
     '''This is the class that should be used to interface with the database. It hides functions that should only be called
@@ -120,7 +124,8 @@ class GenericUserInterface(object):
         for m in inspect.getmembers(cls, predicate=inspect.ismethod):
             if m[0][0] != '_':
                 fn_name = m[0]
-                self._api_function_args[fn_name] = getattr(self._ddg_interface, fn_name).func_code.co_varnames
+                fn_ref = getattr(self._ddg_interface, fn_name)
+                self._api_function_args[fn_name] = fn_ref.func_code.co_varnames[:fn_ref.func_code.co_argcount]
                 self._api_functions.append(fn_name)
                 self.__dict__[fn_name] = GenericUserInterface.bind_object_function(getattr(self._ddg_interface, fn_name))
 
@@ -394,13 +399,12 @@ WHERE Prediction.PredictionSet=%s AND Prediction.Scores IS NOT NULL
 ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
-    #### todo: these following functions should be refactored and renamed. In particular, the graphing functions should
-    ####       be moved into the tools repository
-
     @analysisfn
     def create_abacus_graph_for_a_single_structure(self, PredictionSet, scoring_method, scoring_type, graph_title = None, PredictionIDs = None, graph_filename = None, cached_results = None, num_datapoints = 0):
-        '''This function is meant to
-            The num_datapoints is mainly for debugging - tuning the resolution/DPI to fit the number of datapoints.'''
+        '''This function creates an abacus graph for one PDB file. It is useful when scanning all mutations at all positions
+           on small proteins e.g. ubiquitin to show which mutations at which positions are likely to improve the stability or
+           binding affinity.
+           The num_datapoints variable is mainly for debugging - I was tuning the resolution/DPI to fit the number of datapoints.'''
 
         results = cached_results
         if not results:
@@ -471,16 +475,26 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         else:
             return self.create_abacus_graph(graph_title, labels, pruned_data, scoring_method, scoring_type)
 
-    @analysisfn
-    def write_abacus_graph(self, graph_filename, graph_title, labels, data, scoring_method, scoring_type):
-        byte_stream = self.create_abacus_graph(graph_title, labels, data, scoring_method, scoring_type)
+
+    @alien
+    def write_abacus_graph(self, graph_filename, graph_title, labels, data):
+        '''NOTE: This function should be generalized and moved into the tools repository.
+           This is a simple function wrapper around create_abacus_graph which writes the graph to file.'''
+        byte_stream = self.create_abacus_graph(graph_title, labels, data)
         write_file(graph_filename, byte_stream.getvalue(), 'wb')
 
-    @analysisfn
-    def create_abacus_graph(self, graph_title, labels, data, scoring_method, scoring_type):
-        '''Even though this is technically a scatterplot, I call this an abacus graph because it is basically a bunch of beads on lines.'''
 
-        from io import BytesIO
+    @alien
+    def create_abacus_graph(self, graph_title, labels, data):
+        '''NOTE: This function should be generalized and moved into the tools repository.
+           This function creates an 'abacus graph' from a set of data. Even though this is technically a scatterplot,
+           I call this an abacus graph because it is looks like rows of beads on lines.
+           The function takes a graph title, a set of labels (one per row of data), and an array of data where each row
+           should have the same number of columns.
+           A byte stream for the graph (currently PNG format but we could parameterize this) is returned. This may be
+           written directly to a binary file or streamed for online display.
+        '''
+
         if plt:
             assert(data)
 
