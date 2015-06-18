@@ -15,12 +15,21 @@ Created by Shane O'Connor 2015.
 Copyright (c) 2015 __UCSF__. All rights reserved.
 """
 
-from dbapi import ddG
+from dbapi import ddG, jobcreator, inputfiles, analysisfn, pymolapi, deprecated, GenericUserInterface
 from tools import colortext
 
 
+def get_interface(passwd, username = 'kortemmelab'):
+    '''This is the function that should be used to get a MonomericStabilityDDGInterface interface object. It hides the
+    private methods from the user so that a more traditional object-oriented API is created.'''
+    return GenericUserInterface.generate(MonomericStabilityDDGInterface, passwd = passwd, username = username)
+
 
 class MonomericStabilityDDGInterface(ddG):
+
+
+    def __init__(self, passwd = None, username = 'kortemmelab'):
+        super(MonomericStabilityDDGInterface, self).__init__(passwd = passwd, username = username)
 
 
     def get_prediction_table(self):
@@ -1290,9 +1299,9 @@ WHERE Prediction.ID = %s''', parameters=(prediction_id,))
         return all_results
 
 
-class MonomericStabilityDDGUserInterface(MonomericStabilityDDGInterface): pass
+#class MonomericStabilityDDGUserInterface(MonomericStabilityDDGInterface): pass
 
-import inspect
-for m in inspect.getmembers(MonomericStabilityDDGInterface, predicate=inspect.ismethod):
-    print(m)
-    MonomericStabilityDDGUserInterface.__dict__[m[0]] = m[1]
+#import inspect
+#for m in inspect.getmembers(MonomericStabilityDDGInterface, predicate=inspect.ismethod):
+#    print(m)
+#    MonomericStabilityDDGUserInterface.__dict__[m[0]] = m[1]

@@ -1,3 +1,15 @@
+#!/usr/bin/python2.4
+# encoding: utf-8
+"""
+analysis.py
+This module contains functions used to create the LaTeX reports I used to generate for the protein stability runs.
+It may need to be updated due to recent changes to the database and we may want to redo the analysis functions
+entirely.
+
+Created by Shane O'Connor 2012.
+Copyright (c) 2012 __UCSF__. All rights reserved.
+"""
+
 import sys
 import os
 import re

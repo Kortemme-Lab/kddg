@@ -14,65 +14,14 @@ from tools.fs.fsio import read_file
 from tools import colortext
 import ddgdbapi
 import pprint
-from dbapi import ddG, jobcreator, inputfiles, analysisfn, pymolapi, deprecated
-import inspect
-import functools
-
-def bind_object_function(fn):
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs): return fn(*args, **kwargs)
-    return wrapper
+from dbapi import ddG, jobcreator, inputfiles, analysisfn, pymolapi, deprecated, GenericUserInterface
 
 
-class BindingAffinityDDGUserInterface(object):
-    '''This is the class that should be used to interface with the database. It hides functions that should only be called
-       within this other API functions.
 
-       The class contains a private copy of the internal API and wraps the public functions of that API so that the
-       functions of BindingAffinityDDGUserInterface contain only the public functions of the internal API. Private functions
-       are denoted as such by a leading underscore in the function name.
-       '''
-
-    def __init__(self, passwd = None, username = 'kortemmelab'):
-
-        self._ddg_interface = BindingAffinityDDGInterface(passwd = passwd, username = username)
-        self._api_functions = []
-        self._api_function_args = {}
-        self.DDG_db = self._ddg_interface.DDG_db
-        self.DDG_db_utf = self._ddg_interface.DDG_db_utf
-
-        for m in inspect.getmembers(BindingAffinityDDGInterface, predicate=inspect.ismethod):
-            if m[0][0] != '_':
-                fn_name = m[0]
-                self._api_function_args[fn_name] = getattr(self._ddg_interface, fn_name).func_code.co_varnames
-                self._api_functions.append(fn_name)
-                self.__dict__[fn_name] = bind_object_function(getattr(self._ddg_interface, fn_name))
-
-
-    def help(self):
-        helpstr = []
-        helpstr.append(colortext.mcyan('\n*****\n*** %s API\n*****\n' % self.__class__.__name__))
-
-        doc_strings = {}
-        for fn_name in sorted(self._api_functions):
-            fn = self.__dict__[fn_name]
-            function_class = 'Miscellanous'
-            try:
-                function_class = fn._helptype
-            except: pass
-            doc_strings[function_class] = doc_strings.get(function_class, {})
-            doc_strings[function_class][fn_name] = fn.__doc__
-
-        for function_class, fn_names in sorted(doc_strings.iteritems()):
-            helpstr.append(colortext.mlightpurple('* %s *\n' % function_class))
-            for fn_name, docstr in sorted(fn_names.iteritems()):
-                helpstr.append(colortext.mgreen('  %s(%s)' % (fn_name, ', '.join(self._api_function_args[fn_name]))))
-                if docstr:
-                    helpstr.append(colortext.myellow('    %s' % ('\n    '.join([s.strip() for s in docstr.split('\n') if s.strip()]))))
-                else:
-                    helpstr.append(colortext.mred('    <not documented>'))
-                helpstr.append('')
-        return '\n'.join(helpstr)
+def get_interface(passwd, username = 'kortemmelab'):
+    '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
+       from the user so that a more traditional object-oriented API is created.'''
+    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username)
 
 
 class BindingAffinityDDGInterface(ddG):

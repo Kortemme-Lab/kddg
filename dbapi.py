@@ -22,6 +22,8 @@ import zipfile
 import pprint
 import magic
 import json
+import inspect
+import functools
 
 try:
     import matplotlib
@@ -88,12 +90,77 @@ def deprecated(func):
     return func
 
 
+class GenericUserInterface(object):
+    '''This is the class that should be used to interface with the database. It hides functions that should only be called
+       within this other API functions.
+
+       The class contains a private copy of the internal API and wraps the public functions of that API so that the
+       functions of GenericUserInterface contain only the public functions of the internal API. Private functions
+       are denoted as such by a leading underscore in the function name.
+       '''
+
+    @staticmethod
+    def generate(cls, passwd = None, username = 'kortemmelab'):
+        return GenericUserInterface(cls, passwd = passwd, username = username)
+
+    @staticmethod
+    def bind_object_function(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs): return fn(*args, **kwargs)
+        return wrapper
+
+    def __init__(self, cls, passwd = None, username = 'kortemmelab'):
+
+        self._ddg_interface = cls(passwd = passwd, username = username)
+        self._api_functions = []
+        self._api_function_args = {}
+        self.DDG_db = self._ddg_interface.DDG_db
+        self.DDG_db_utf = self._ddg_interface.DDG_db_utf
+
+        for m in inspect.getmembers(cls, predicate=inspect.ismethod):
+            if m[0][0] != '_':
+                fn_name = m[0]
+                self._api_function_args[fn_name] = getattr(self._ddg_interface, fn_name).func_code.co_varnames
+                self._api_functions.append(fn_name)
+                self.__dict__[fn_name] = GenericUserInterface.bind_object_function(getattr(self._ddg_interface, fn_name))
+
+
+    def help(self):
+        print(self.get_help())
+
+
+    def get_help(self):
+        helpstr = []
+        helpstr.append(colortext.mcyan('\n*****\n*** %s API\n*****\n' % self._ddg_interface.__class__.__name__))
+
+        doc_strings = {}
+        for fn_name in sorted(self._api_functions):
+            fn = self.__dict__[fn_name]
+            function_class = 'Miscellanous'
+            try:
+                function_class = fn._helptype
+            except: pass
+            doc_strings[function_class] = doc_strings.get(function_class, {})
+            doc_strings[function_class][fn_name] = fn.__doc__
+
+        for function_class, fn_names in sorted(doc_strings.iteritems()):
+            helpstr.append(colortext.mlightpurple('* %s *\n' % function_class))
+            for fn_name, docstr in sorted(fn_names.iteritems()):
+                helpstr.append(colortext.mgreen('  %s(%s)' % (fn_name, ', '.join(self._api_function_args[fn_name]))))
+                if docstr:
+                    helpstr.append(colortext.myellow('    %s' % ('\n    '.join([s.strip() for s in docstr.split('\n') if s.strip()]))))
+                else:
+                    helpstr.append(colortext.mred('    <not documented>'))
+                helpstr.append('')
+        return '\n'.join(helpstr)
 
 
 class ddG(object):
     '''This class is responsible for inserting prediction jobs to the database.'''
 
     def __init__(self, passwd = None, username = 'kortemmelab'):
+        if passwd:
+            passwd = passwd.strip()
         self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username)
         self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, use_utf = True)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
