@@ -52,10 +52,9 @@ from tools.general.strutil import remove_trailing_line_whitespace
 from tools.hash.md5 import get_hexdigest
 from tools.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
 
-#import analysis
-#from ddgfilters import PredictionResultSet, ExperimentResultSet, StructureResultSet
 
-#todo: dbfields = ddgdbapi.FieldNames()
+
+
 
 class MutationSet(object):
     def __init__(self):
@@ -70,29 +69,72 @@ class MutationSet(object):
 
 ### API function decorators. These are used to group functions together when printing the help text.
 
-def jobcreator(func):
-    func._helptype = 'Job creation API'
+functional_layer = {
+    0 : 'API warnings',
+    1 : 'Information layer',
+    2 : 'Prediction layer',
+    3 : 'Analysis layer',
+    4 : 'Application layer',
+    None: 'Miscellanous'
+}
+
+
+def alien(func):
+    func._helptype = 'Alien functions (these should be moved into another package)'
+    func._layer = 0
+    func._layer_order = 0
     return func
 
-def inputfiles(func):
-    func._helptype = 'Input file generation API'
-    return func
-
-def analysisfn(func):
-    func._helptype = 'Analysis API'
-    return func
-
-def pymolapi(func):
-    func._helptype = 'PyMOL API'
+def brokenfn(func):
+    func._helptype = 'Broken functions: this need to be fixed/updated'
+    func._layer = 0
+    func._layer_order = 1
     return func
 
 def deprecated(func):
     func._helptype = 'Deprecated functions'
+    func._layer = 0
+    func._layer_order = 2
     return func
 
-def alien(func):
-    func._helptype = 'Alien functions (these should be moved into another package)'
+def informational(func):
+    func._helptype = 'Information API'
+    func._layer = 1
+    func._layer_order = 0
     return func
+
+def jobcreator(func):
+    func._helptype = 'Job creation/management API'
+    func._layer = 2
+    func._layer_order = 0
+    return func
+
+def inputfiles(func):
+    func._helptype = 'Input file generation API'
+    func._layer = 2
+    func._layer_order = 1
+    return func
+
+def resultsfn(func):
+    func._helptype = 'Results API'
+    func._layer = 2
+    func._layer_order = 2
+    return func
+
+def analysisfn(func):
+    func._helptype = 'Analysis API'
+    func._layer = 3
+    func._layer_order = 0
+    return func
+
+def pymolapi(func):
+    func._helptype = 'PyMOL API'
+    func._layer = 4
+    func._layer_order = 0
+    return func
+
+
+
 
 class GenericUserInterface(object):
     '''This is the class that should be used to interface with the database. It hides functions that should only be called
@@ -130,45 +172,85 @@ class GenericUserInterface(object):
                 self.__dict__[fn_name] = GenericUserInterface.bind_object_function(getattr(self._ddg_interface, fn_name))
 
 
-    def help(self):
-        print(self.get_help())
+    def help(self, show_deprecated_functions = False):
+        print(self.get_help(show_deprecated_functions = show_deprecated_functions))
 
 
-    def get_help(self):
+    def get_help(self, show_deprecated_functions = False):
         helpstr = []
-        helpstr.append(colortext.mcyan('\n*****\n*** %s API\n*****\n' % self._ddg_interface.__class__.__name__))
+        title = ' %s API ' % self._ddg_interface.__class__.__name__
+        l = len(title)
+        helpstr.append(colortext.mcyan('\n' + ('*' * (l + 10)) + '\n' + ('*' * 5) + title + ('*' * 5) + '\n' + ('*' * (l + 10)) + '\n'))
 
         doc_strings = {}
         for fn_name in sorted(self._api_functions):
             fn = self.__dict__[fn_name]
-            function_class = 'Miscellanous'
+
+            function_layer, function_layer_order, function_class = None, None, None
+            function_layer_order = 0
+            try:
+                function_layer = fn._layer
+                function_layer_name = functional_layer[function_layer]
+                function_layer_order = fn._layer_order
+            except:
+                function_layer = None
+                function_layer_order = 0
             try:
                 function_class = fn._helptype
-            except: pass
-            doc_strings[function_class] = doc_strings.get(function_class, {})
-            doc_strings[function_class][fn_name] = fn.__doc__
+            except:
+                function_class = 'Miscellanous'
 
-        for function_class, fn_names in sorted(doc_strings.iteritems()):
-            helpstr.append(colortext.mlightpurple('* %s *\n' % function_class))
-            for fn_name, docstr in sorted(fn_names.iteritems()):
-                helpstr.append(colortext.mgreen('  %s(%s)' % (fn_name, ', '.join(self._api_function_args[fn_name]))))
-                if docstr:
-                    helpstr.append(colortext.myellow('    %s' % ('\n    '.join([s.strip() for s in docstr.split('\n') if s.strip()]))))
-                else:
-                    helpstr.append(colortext.mred('    <not documented>'))
-                helpstr.append('')
+            if function_class == 'Deprecated functions' and not show_deprecated_functions:
+                continue
+
+            doc_strings[function_layer] = doc_strings.get(function_layer, {})
+            doc_strings[function_layer][function_layer_order] = doc_strings[function_layer].get(function_layer_order, {})
+            doc_strings[function_layer][function_layer_order][function_class] = doc_strings[function_layer][function_layer_order].get(function_class, {})
+            doc_strings[function_layer][function_layer_order][function_class][fn_name] = fn.__doc__
+
+        for function_layer, function_layer_components in sorted(doc_strings.iteritems()):
+            function_layer_name = functional_layer[function_layer]
+            prefix = ''
+            if function_layer != None:
+                prefix = 'Layer %d: ' % function_layer
+            helpstr.append(colortext.mcyan('-------- %s%s --------\n' % (prefix, function_layer_name)))
+            for function_layer_order, function_classes in sorted(function_layer_components.iteritems()):
+                for function_class, fn_names in sorted(function_classes.iteritems()):
+                    helpstr.append(colortext.mlightpurple('  %s\n' % function_class))
+                    for fn_name, docstr in sorted(fn_names.iteritems()):
+                        helpstr.append(colortext.mgreen('  %s(%s)' % (fn_name, ', '.join(self._api_function_args[fn_name]))))
+                        if docstr:
+                            helpstr.append(colortext.myellow('    %s' % ('\n    '.join([s.strip() for s in docstr.split('\n') if s.strip()]))))
+                        else:
+                            helpstr.append(colortext.mred('    <not documented>'))
+                        helpstr.append('')
         return '\n'.join(helpstr)
 
 
+
 class ddG(object):
-    '''This class is responsible for inserting prediction jobs to the database.'''
+    '''This is the base database API class. It should not be used directly to create interface objects. Instead, use one
+       of the derived classes e.g. MonomericStabilityDDGInterface or the clean user API which hides internal functionality.
+       The clean API is instantiated as in the example below:
+
+            from ddglib.monomer_api import get_interface as get_protein_stability_interface
+            stability_api = get_protein_stability_interface(read_file('ddgdb.pw'))
+            stability_api.help()
+
+       Objects of this class and derived subclasses has three main members:
+
+          self.DDG_db - a database interface used to interact directly with the database via MySQL commands
+          self.DDG_db_utf - the same interface but with UTF support. This should be used when dealing with UTF fields e.g. publication data
+          self.prediction_data_path - this is the location on the file server where output form jobs of the derived class type (e.g. binding affinity jobs) should be stored.
+    '''
 
     def __init__(self, passwd = None, username = 'kortemmelab'):
         if passwd:
             passwd = passwd.strip()
         self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username)
         self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, use_utf = True)
-        self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
+        self.prediction_data_path = None
+
 
     def __del__(self):
         pass
@@ -220,80 +302,6 @@ class ddG(object):
         else:
             raise Exception("An error occurred creating a mutfile for the ddG job.")
 
-    def getData(self, predictionID):
-        job_data_path = os.path.join(self.prediction_data_path, '%d.zip' % predictionID)
-        if os.path.exists(job_data_path):
-            return read_file(job_data_path, binary = True)
-
-    def getPublications(self, result_set):
-        if result_set:
-            structures = None
-            experiments = None
-
-            if result_set.isOfClass(ExperimentResultSet):
-                experiments = result_set
-            elif ExperimentResultSet in result_set.__class__.allowed_restrict_sets:
-                experiments, experiment_map = result_set.getExperiments()
-
-            if result_set.isOfClass(StructureResultSet):
-                structures = result_set
-            elif StructureResultSet in result_set.__class__.allowed_restrict_sets:
-                structures, structure_map = result_set.getStructures()
-
-            if structures:
-                colortext.printf("\nRelated publications for structures:", "lightgreen")
-                for id in sorted(structures.IDs):
-                    pubs = self.DDG_db.callproc("GetPublications", parameters=(id,))
-                    print(id)
-                    for pub in pubs:
-                        print("\t%s: %s" % (pub["Type"], pub["PublicationID"]))
-
-            if experiments:
-                colortext.printf("\nRelated publications for experiments:", "lightgreen")
-                for id in sorted(experiments.IDs):
-                    pubs = self.DDG_db.callproc("GetExperimentPublications", parameters=(id,))
-                    print(id)
-                    for pub in pubs:
-                        print("\t%s: %s" % (pub["Type"], pub["SourceLocation.ID"]))
-
-                experimentsets = [e[0] for e in self.DDG_db.execute_select("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % ','.join(map(str, list(experiments.IDs))), cursorClass = ddgdbapi.StdCursor)]
-
-                if experimentsets:
-                    colortext.printf("\nRelated publications for experiment-set sources:", "lightgreen")
-                    for id in sorted(experimentsets):
-                        print(id)
-                        pubs = self.DDG_db.execute_select("SELECT ID, Type FROM SourceLocation WHERE SourceID=%s", parameters = (id,))
-                        for pub in pubs:
-                            print("\t%s: %s" % (pub["Type"], pub["ID"]))
-        else:
-            raise Exception("Empty result set.")
-
-
-
-    def dumpData(self, outfile, predictionID):
-        write_file(outfile, self.getData(predictionID))
-
-    @analysisfn
-    def analyze(self, prediction_result_set, outpath = os.getcwd()):
-        PredictionIDs = sorted(list(prediction_result_set.getFilteredIDs()))
-        colortext.printf("Analyzing %d records:" % len(PredictionIDs), "lightgreen")
-        #results = self.DDG_db.execute_select("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % join(map(str, PredictionIDs), ","))
-
-        #for r in results:
-        #	r["ddG"] = pickle.loads(r["ddG"])
-        #	predicted_score = r["ddG"]["data"]["ddG"]
-        #	experimental_scores = [expscore["ddG"] for expscore in self.DDG_db.callproc("GetScores", parameters = r["ExperimentID"])]
-        #	mean_experimental_score = float(sum(experimental_scores)) / float(len(experimental_scores))
-
-        results = self.DDG_db.execute_select("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % ','.join(map(str, PredictionIDs)))
-
-        analysis.plot(analysis._R_mean_unsigned_error, analysis._createMAEFile, results, "my_plot1.pdf", average_fn = analysis._mean)
-        analysis.plot(analysis._R_correlation_coefficient, analysis._createAveragedInputFile, results, "my_plot2.pdf", average_fn = analysis._mean)
-        colortext.printf("Done", "lightgreen")
-
-
-
-        #score.ddgTestScore
 
     def add_PDB_to_database(self, filepath = None, pdbID = None, contains_membrane_protein = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False, techniques = None):
         assert(file_source)
@@ -325,32 +333,7 @@ class ddG(object):
             raise Exception("An exception occurred committing %s to the database." % filepath)
 
 
-    @deprecated
-    def add_pdb_file(self, filepath, pdb_id):
-        #todo: use either this or add_PDB_to_database but not both
-        raise Exception('deprecated in favor of add_PDB_to_database')
-        existing_pdb = self.DDG_db.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))
-        if not existing_pdb:
-            pdb_contents = read_file(filepath)
-            p = PDB(pdb_contents)
 
-            fasta = []
-            for c, sequence in p.atom_sequences.iteritems():
-                fasta.append('>%s:%s|PDBID|CHAIN|SEQUENCE' % (pdb_id.replace(':', '_'), c))
-                fasta.append(str(sequence))
-            fasta = '\n'.join(fasta)
-
-            d = {
-                'ID' : pdb_id,
-                'FileSource' : 'Biosensor project',
-                'Content' : read_file(filepath),
-                'FASTA' : fasta,
-                'Resolution' : None,
-                'Techniques' : 'Rosetta model',
-                'BFactors' : '',
-                'Publication' : None
-            }
-            self.DDG_db.insertDictIfNew('PDBFile', d, ['ID'])
 
     def createDummyExperiment(self, pdbID, mutationset, chains, sourceID, ddG, ExperimentSetName = "DummySource"):
         #todo: elide createDummyExperiment, createDummyExperiment_ankyrin_repeat, and add_mutant
@@ -639,7 +622,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     def extract_data(output_dir, PredictionID):
         assert(os.path.exists(output_dir))
-        archive = self.getData(PredictionID)
+        archive = self.get_job_data(PredictionID)
         write_file(os.path.join(output_dir, '%d.zip' % PredictionID), archive, 'wb')
         p = Popen(output_dir, ['unzip', '%d.zip' % PredictionID])
         os.remove(os.path.join(output_dir, '%d.zip' % PredictionID))
@@ -739,7 +722,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         from io import BytesIO
 
         # Retrieve and unzip results
-        archive = self.getData(PredictionID)
+        archive = self.get_job_data(PredictionID)
         zipped_content = zipfile.ZipFile(BytesIO(archive), 'r', zipfile.ZIP_DEFLATED)
 
         try:
@@ -776,7 +759,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         from io import BytesIO
 
         # Retrieve and unzip results
-        archive = self.getData(PredictionID)
+        archive = self.get_job_data(PredictionID)
         zipped_content = zipfile.ZipFile(BytesIO(archive), 'r', zipfile.ZIP_DEFLATED)
 
         try:
@@ -991,39 +974,28 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     @deprecated
     def addPrediction(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True): raise Exception('This function has been deprecated. Use add_job instead.')
 
+    @deprecated
+    def add_pdb_file(self, filepath, pdb_id): raise Exception('This function has been deprecated. Use add_PDB_to_database instead.')
+
+    @deprecated
+    def getPublications(self, result_set): raise Exception('This function has been deprecated. Use get_publications_for_result_set instead.')
+
+    @deprecated
+    def getData(self, predictionID): raise Exception('This function has been deprecated. Use get_job_data instead.')
+
+    @deprecated
+    def dumpData(self, outfile, predictionID): raise Exception('This function has been deprecated. Use write_job_data_to_file instead (note the change in argument order).')
+
 
     ##### Misc functions
 
 
 
-    def get_prediction_table(self):
-        raise Exception('Use a concrete API for working with prediction tables.')
 
 
-
-    ##### PredictionSet functions
-
-
-
-    def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False):
-        raise Exception('This function needs to be rewritten.')
-
-        if halted:
-            Status = 'halted'
-        else:
-            Status = 'active'
-
-        if allow_existing_prediction_set == False and len(self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(PredictionSetID,))) > 0:
-            raise Exception('The PredictionSet %s already exists.' % PredictionSetID)
-        d = dict(
-            ID                  = PredictionSetID,
-            Status              = Status,
-            Priority            = Priority,
-            ProteinStability    = contains_protein_stability_predictions,
-            BindingAffinity     = contains_binding_affinity_predictions,
-            BatchSize           = BatchSize,
-        )
-        self.DDG_db.insertDictIfNew("PredictionSet", d, ['ID'])
+    @resultsfn
+    def get_prediction_data_path(self):
+        return self.prediction_data_path
 
 
 
@@ -1095,9 +1067,219 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         return self.add_file_content(pdb_content, rm_trailing_line_whitespace = True, forced_mime_type = 'chemical/x-pdb')
 
 
+
+
+
+
+
+
+
+
+
+
     ################################################
-    ## Private API
+    ## Broken API layer
     ################################################
+
+    # This section contains useful functions which need to be updated to work with the new schema or code
+
+    # filter API
+
+    #@informational
+    @brokenfn
+
+    def get_publications_for_result_set(self, result_set):
+        raise Exception('')
+        from ddgfilters import ExperimentResultSet, StructureResultSet
+        if result_set:
+            structures = None
+            experiments = None
+
+            if result_set.isOfClass(ExperimentResultSet):
+                experiments = result_set
+            elif ExperimentResultSet in result_set.__class__.allowed_restrict_sets:
+                experiments, experiment_map = result_set.getExperiments()
+
+            if result_set.isOfClass(StructureResultSet):
+                structures = result_set
+            elif StructureResultSet in result_set.__class__.allowed_restrict_sets:
+                structures, structure_map = result_set.getStructures()
+
+            if structures:
+                colortext.printf("\nRelated publications for structures:", "lightgreen")
+                for id in sorted(structures.IDs):
+                    pubs = self.DDG_db.callproc("GetPublications", parameters=(id,))
+                    print(id)
+                    for pub in pubs:
+                        print("\t%s: %s" % (pub["Type"], pub["PublicationID"]))
+
+            if experiments:
+                colortext.printf("\nRelated publications for experiments:", "lightgreen")
+                for id in sorted(experiments.IDs):
+                    pubs = self.DDG_db.callproc("GetExperimentPublications", parameters=(id,))
+                    print(id)
+                    for pub in pubs:
+                        print("\t%s: %s" % (pub["Type"], pub["SourceLocation.ID"]))
+
+                experimentsets = [e[0] for e in self.DDG_db.execute_select("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % ','.join(map(str, list(experiments.IDs))), cursorClass = ddgdbapi.StdCursor)]
+
+                if experimentsets:
+                    colortext.printf("\nRelated publications for experiment-set sources:", "lightgreen")
+                    for id in sorted(experimentsets):
+                        print(id)
+                        pubs = self.DDG_db.execute_select("SELECT ID, Type FROM SourceLocation WHERE SourceID=%s", parameters = (id,))
+                        for pub in pubs:
+                            print("\t%s: %s" % (pub["Type"], pub["ID"]))
+        else:
+            raise Exception("Empty result set.")
+
+
+
+    #@analysisfn
+    @brokenfn
+    def analyze(self, prediction_result_set, outpath = os.getcwd()):
+
+        raise Exception('The import of analysis was commented out - presumably some change in DB structure or API broke the import. This code probably needs to be fixed.')
+        import analysis
+
+        PredictionIDs = sorted(list(prediction_result_set.getFilteredIDs()))
+        colortext.printf("Analyzing %d records:" % len(PredictionIDs), "lightgreen")
+        #results = self.DDG_db.execute_select("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % join(map(str, PredictionIDs), ","))
+
+        #for r in results:
+        #	r["ddG"] = pickle.loads(r["ddG"])
+        #	predicted_score = r["ddG"]["data"]["ddG"]
+        #	experimental_scores = [expscore["ddG"] for expscore in self.DDG_db.callproc("GetScores", parameters = r["ExperimentID"])]
+        #	mean_experimental_score = float(sum(experimental_scores)) / float(len(experimental_scores))
+
+        results = self.DDG_db.execute_select("SELECT ID, ExperimentID, ddG FROM Prediction WHERE ID IN (%s)" % ','.join(map(str, PredictionIDs)))
+
+        analysis.plot(analysis._R_mean_unsigned_error, analysis._createMAEFile, results, "my_plot1.pdf", average_fn = analysis._mean)
+        analysis.plot(analysis._R_correlation_coefficient, analysis._createAveragedInputFile, results, "my_plot2.pdf", average_fn = analysis._mean)
+        colortext.printf("Done", "lightgreen")
+
+
+
+        #score.ddgTestScore
+
+    #########################################################################################
+    ## Information layer
+    ##
+    ## This layer is for functions which extract data from the database.
+    #########################################################################################
+
+
+    @informational
+    def get_job_data(self, prediction_id):
+        '''Returns (in memory) the contents of the zip file corresponding to the prediction.'''
+        job_data_path = os.path.join(self.prediction_data_path, '%d.zip' % prediction_id)
+        if os.path.exists(job_data_path):
+            return read_file(job_data_path, binary = True)
+
+
+    @informational
+    def write_job_data_to_file(self, prediction_id, output_filename):
+        '''Writes the contents of the zip file corresponding to the prediction.'''
+        write_file(output_filename, self.get_job_data(prediction_id))
+
+
+    #########################################################################################
+    ## Job creation/management API
+    ##
+    ## This part of the API is responsible for inserting prediction jobs in the database via
+    ## the trickle-down proteomics paradigm.
+    #########################################################################################
+
+    # PredictionSet interface
+
+    @jobcreator
+    def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False):
+        '''Adds a new PredictionSet (a construct used to group Predictions) to the database.'''
+        if halted:
+            Status = 'halted'
+        else:
+            Status = 'active'
+
+        if allow_existing_prediction_set == False and len(self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(PredictionSetID,))) > 0:
+            raise Exception('The PredictionSet %s already exists.' % PredictionSetID)
+        d = dict(
+            ID                  = PredictionSetID,
+            Status              = Status,
+            Priority            = Priority,
+            ProteinStability    = contains_protein_stability_predictions,
+            BindingAffinity     = contains_binding_affinity_predictions,
+            BatchSize           = BatchSize,
+        )
+        self.DDG_db.insertDictIfNew("PredictionSet", d, ['ID'])
+        return PredictionSetID
+
+
+    @jobcreator
+    def get_prediction_set_details(self, PredictionSetID):
+        results = self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(PredictionSetID,))
+        if len(results) == 1:
+            return results[0]
+        return None
+
+
+    @jobcreator
+    def get_prediction_ids(self, PredictionSetID):
+        '''Returns the list of Prediction IDs associated with the PredictionSet.'''
+        self._assert_prediction_set_is_correct_type(PredictionSetID)
+        qry = 'SELECT ID FROM %s WHERE PredictionSet=%%s ORDER BY ID' % self._get_prediction_table()
+        return [r['ID'] for r in self.DDG_db.execute_select(qry, parameters=(PredictionSetID,))]
+
+
+    @jobcreator
+    def start_prediction_set(self, PredictionSetID):
+        '''Sets the Status of a PredictionSet to "active".'''
+        self._set_prediction_set_status(PredictionSetID, 'active')
+
+
+    @jobcreator
+    def stop_prediction_set(self, PredictionSetID):
+        '''Sets the Status of a PredictionSet to "halted".'''
+        self._set_prediction_set_status(PredictionSetID, 'halted')
+
+
+
+
+    ################################################
+    ## Private API layer
+    ################################################
+
+
+    #####
+    # Subclassing functions
+    #####
+
+    # Abstract functions. These functions need to be implemented by subclasses
+
+    def _get_prediction_table(self): return None
+    def _get_prediction_type(self): return None
+    def _get_prediction_type_description(self): return None
+
+
+    #####
+    # Job creation/management API
+    # This part of the API is responsible for inserting prediction jobs in the database via the trickle-down proteomics paradigm.
+    #####
+
+    # PredictionSet interface
+
+
+    def _assert_prediction_set_is_correct_type(self, PredictionSetID):
+        '''Returns the list of Prediction IDs associated with the PredictionSet.'''
+        assert(self._get_prediction_type() and self._get_prediction_type_description())
+        if (self.get_prediction_set_details(PredictionSetID) or {}).get(self._get_prediction_type()) != 1:
+            raise Exception('This PredictionSet either does not exist or else contains no %s predictions.' % self.self._get_prediction_type_description())
+
+
+    def _set_prediction_set_status(self, PredictionSetID, status):
+        '''Sets the Status of a PredictionSet.'''
+        assert(status == 'halted' or status == 'active')
+        assert(self.get_prediction_set_details(PredictionSetID))
+        self.DDG_db.execute('UPDATE PredictionSet SET Status=%s WHERE ID=%s', parameters=(status, PredictionSetID))
 
 
     ##### File-related functions
@@ -1106,7 +1288,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     def _add_prediction_file(self, prediction_id, file_content, filename, filetype, filerole, stage, rm_trailing_line_whitespace = False, forced_mime_type = None):
 
-        prediction_table = self.get_prediction_table()
+        prediction_table = self._get_prediction_table()
 
         # Add the file contents to the database
         if filetype == 'PDB':

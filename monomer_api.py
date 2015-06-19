@@ -30,10 +30,25 @@ class MonomericStabilityDDGInterface(ddG):
 
     def __init__(self, passwd = None, username = 'kortemmelab'):
         super(MonomericStabilityDDGInterface, self).__init__(passwd = passwd, username = username)
+        self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
 
 
-    def get_prediction_table(self):
-        return 'Prediction'
+
+    ##### Public API: PredictionSet functions
+
+    #####
+    # Job creation/management API
+    # This part of the API is responsible for inserting prediction jobs in the database via the trickle-down proteomics paradigm.
+    #####
+
+    # PredictionSet interface
+
+    @jobcreator
+    def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False):
+        '''Adds a new PredictionSet (a construct used to group Predictions) to the database.'''
+        return super(MonomericStabilityDDGInterface, self).add_prediction_set(PredictionSetID, halted = halted, Priority = Priority, BatchSize = BatchSize, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False)
+
+
 
 
     ##### Public API: Rosetta-related functions
@@ -57,16 +72,6 @@ class MonomericStabilityDDGInterface(ddG):
     def get_pdb_chains_for_prediction(self, prediction_id):
         '''Returns the PDB file ID and a list of chains for the prediction.'''
         raise Exception('This needs to be implemented.')
-
-
-
-    ##### Public API: PredictionSet functions
-
-
-
-    def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False):
-        raise Exception('need to implement this')
-        #call super function with contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False
 
 
 
@@ -734,6 +739,22 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
 
         # Returned the scaled matrix
         return radii_ratios.apply(lambda x: x * scalar)
+
+
+    ################################################
+    ## Private API
+    ################################################
+
+
+    #####
+    # Subclassing functions
+    #####
+
+    # Concrete functions
+
+    def _get_prediction_table(self): return 'Prediction'
+    def _get_prediction_type(self): return 'ProteinStability'
+    def _get_prediction_type_description(self): return 'monomeric stability'
 
 
 
