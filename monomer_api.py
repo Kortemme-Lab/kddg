@@ -15,7 +15,8 @@ Created by Shane O'Connor 2015.
 Copyright (c) 2015 __UCSF__. All rights reserved.
 """
 
-from dbapi import ddG, jobcreator, inputfiles, analysisfn, pymolapi, deprecated, GenericUserInterface
+from api_layers import *
+from dbapi import ddG
 from tools import colortext
 
 
