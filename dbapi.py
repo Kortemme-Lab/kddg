@@ -1,7 +1,7 @@
 #!/usr/bin/python2.4
 # encoding: utf-8
 """
-dbapi.py
+db_api.py
 High-level functions for interacting with the ddG database.
 
 Created by Shane O'Connor 2012.

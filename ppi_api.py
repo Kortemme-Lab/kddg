@@ -15,7 +15,7 @@ from tools import colortext
 import ddgdbapi
 import pprint
 from api_layers import *
-from dbapi import ddG
+from db_api import ddG
 
 
 

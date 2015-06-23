@@ -8,7 +8,7 @@ Classes:
 MonomericStabilityDDGInterface - an class used to interface with the database
 AnalysisBreakdown - an class used to run analyses on the data
 
-Note: I moved this code from dbapi.py during a large refactor and have not tested it yet.
+Note: I moved this code from db_api.py during a large refactor and have not tested it yet.
       A lot of functionality is currently broken but all the pieces are there. See Trac ticket #1375.
 
 Created by Shane O'Connor 2015.
@@ -20,7 +20,7 @@ import os
 import zipfile
 
 from api_layers import *
-from dbapi import ddG
+from db_api import ddG
 from tools import colortext
 from tools.bio.alignment import ScaffoldModelChainMapper
 
