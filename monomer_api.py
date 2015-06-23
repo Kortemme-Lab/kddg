@@ -446,16 +446,6 @@ class MonomericStabilityDDGInterface(ddG):
     def get_ddg_scores_per_structure(self, prediction_id):
         # At present, we only use ddg_monomer
         raise Exception('Reimplement using the database records.')
-        return self.get_ddg_monomer_scores_per_structure(prediction_id)
-
-
-    @job_results
-    def get_ddg_monomer_scores_per_structure(self, prediction_id):
-        '''Returns a dict mapping the DDG scores from a ddg_monomer run to a list of structure numbers.'''
-
-        # Get the ddg_monomer output for the prediction
-        sge_stdout = self.extract_sge_job_stdout_from_archive(prediction_id)['ddG']
-        return MonomericStabilityDDGInterface._parse_ddg_monomer_scores_per_structure(sge_stdout)
 
 
     ###########################################################################################
