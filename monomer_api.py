@@ -15,9 +15,14 @@ Created by Shane O'Connor 2015.
 Copyright (c) 2015 __UCSF__. All rights reserved.
 """
 
+from io import BytesIO
+import os
+import zipfile
+
 from api_layers import *
 from dbapi import ddG
 from tools import colortext
+from tools.bio.alignment import ScaffoldModelChainMapper
 
 
 def get_interface(passwd, username = 'kortemmelab'):
@@ -455,59 +460,81 @@ class MonomericStabilityDDGInterface(ddG):
     ###########################################################################################
 
 
+    @analysis_api
+    def determine_best_pair(self, prediction_id, score_method_id = 1):
+        # Iterates over the (wildtype, mutant) pairs in the PredictionStructureScore table and returns the structure ID
+        # for the pair with the lowest energy mutant
+        # Note: There are multiple ways to select the best pair. For example, if multiple mutants have the same minimal total
+        # score, we could have multiple wildtype structures to choose from. In this case, we choose a pair where the wildtype
+        # structure has the minimal total score.
+        lowest_mutant_score = self.DDG_db.execute_select('SELECT total FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" ORDER BY total LIMIT 1', parameters=(prediction_id, score_method_id))
+        if lowest_mutant_score:
+            lowest_mutant_score = lowest_mutant_score[0]['total']
+            mutant_structure_ids = [r['StructureID'] for r in self.DDG_db.execute_select('SELECT StructureID FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" AND total=%s', parameters=(prediction_id, score_method_id, lowest_mutant_score))]
+            if len(mutant_structure_ids) > 1:
+                return self.DDG_db.execute_select(('SELECT StructureID FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="WildType" AND StructureID IN (' + ','.join(map(str, mutant_structure_ids)) + ') ORDER BY total LIMIT 1'), parameters=(prediction_id, score_method_id ))[0]['StructureID']
+            else:
+                return mutant_structure_ids[0]
+        return None
+
 
     ################################################################################################
-    ## Private API layer
-    ## These are helper functions used internally by the class but which are not intended for export
+    ## Application layer
+    ## These functions combine the database and prediction data with useful tools
     ################################################################################################
 
 
-    def _charge_prediction_set_by_residue_count(self, PredictionSet):
-        '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
-        raise Exception('This function needs to be rewritten.')
-        from tools.bio.rcsb import parseFASTAs
-
-        DDG_db = self.DDG_db
-        predictions = DDG_db.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
-
-        PDB_chain_lengths ={}
-        for prediction in predictions:
-            chain_records = DDG_db.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
-            num_residues = 0
-            for chain_record in chain_records:
-                key = (chain_record['PDBFileID'], chain_record['Chain'])
-
-                if PDB_chain_lengths.get(key) == None:
-                    fasta = DDG_db.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
-                    assert(len(fasta) == 1)
-                    fasta = fasta[0]['FASTA']
-                    f = parseFASTAs(fasta)
-                    PDB_chain_lengths[key] = len(f[chain_record['PDBFileID']][chain_record['Chain']])
-                chain_length = PDB_chain_lengths[key]
-                num_residues += chain_length
-
-            print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
-
-            predictions = DDG_db.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
+    #== PyMOL API ===========================================================
 
 
+    @app_pymol
+    def create_pymol_session_in_memory(self, prediction_id, task_number, pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol'):
+        '''Create a PyMOL session for a pair of structures.'''
 
+        # Retrieve and unzip results
+        archive = self.get_job_data(prediction_id)
+        zipped_content = zipfile.ZipFile(BytesIO(archive), 'r', zipfile.ZIP_DEFLATED)
 
+        try:
+            # Get the name of the files from the zip
+            wildtype_filename = os.path.join(str(prediction_id), 'repacked_wt_round_%d.pdb' % task_number)
+            mutant_filename = None
+            for filepath in sorted(zipped_content.namelist()):
+                filename = os.path.split(filepath)[1]
+                if filename.startswith('mut_') and filename.endswith('_round_%d.pdb' % task_number):
+                    mutant_filename = os.path.join(str(prediction_id), filename)
+                    break
 
+            PyMOL_session = None
+            file_list = zipped_content.namelist()
 
+            # If both files exist in the zip, extract their contents in memory and create a PyMOL session pair (PSE, script)
+            if (mutant_filename in file_list) and (wildtype_filename in file_list):
+                wildtype_pdb = zipped_content.open(wildtype_filename, 'r').read()
+                mutant_pdb = zipped_content.open(mutant_filename, 'U').read()
+                chain_mapper = ScaffoldModelChainMapper.from_file_contents(wildtype_pdb, mutant_pdb)
+                PyMOL_session = chain_mapper.generate_pymol_session(pymol_executable = pymol_executable)
 
+            zipped_content.close()
+            return PyMOL_session
 
-
-
-
-
+        except Exception, e:
+            zipped_content.close()
+            raise Exception(str(e))
 
 
 
 
 
 
+    ################################################################################################
+    ## Subclass-specific API layer
+    ## These are functions written specifically for this class which are not necessarily available
+    ## in sibling classes
+    ################################################################################################
 
+
+    @analysis_api
     def get_predictionset_data(self, predictionset, userdataset_textid, cached_pdb_details = None, only_single = False):
         '''
             A helper function for analysis / generating graphs.
@@ -772,6 +799,7 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
     ### Dataset stats functions
 
 
+    @analysis_api
     def get_analysis_set_overlap_by_Experiment(self, restrict_to_subsets = set(), UserDataSetID = 1):
         ''' Returns the overlap between analysis sets of a UserDataSet where overlap is determined by the set of ExperimentIDs.
             Caveat: This assumes that the Experiments do not overlap. While this is mostly true at present, there are probably
@@ -802,6 +830,7 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
         return df
 
 
+    @analysis_api
     def get_analysis_set_disjoint_by_Experiment(self, primary_subset, other_subsets = set(), UserDataSetID = 1):
         ''' Returns the overlap between analysis sets of a UserDataSet where overlap is determined by the set of ExperimentIDs.
             Caveat: This assumes that the Experiments do not overlap. While this is mostly true at present, there are probably
@@ -873,6 +902,7 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
         return df
 
 
+    @analysis_api
     def get_analysis_set_overlap_by_Experiment_as_radii(self, max_radius, restrict_to_subsets = set(), UserDataSetID = 1):
         import numpy
         df = self.get_analysis_set_overlap_by_Experiment(restrict_to_subsets = restrict_to_subsets, UserDataSetID = UserDataSetID)
@@ -888,20 +918,94 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
         return radii_ratios.apply(lambda x: x * scalar)
 
 
-    ################################################
-    ## Private API
-    ################################################
 
 
-    #####
-    # Subclassing functions
-    #####
+
+
+
+
+    ################################################################################################
+    ## Private API layer
+    ## These are helper functions used internally by the class but which are not intended for export
+    ################################################################################################
+
+
+    ###########################################################################################
+    ## Subclass layer
+    ##
+    ## These functions need to be implemented by subclasses
+    ###########################################################################################
 
     # Concrete functions
+
 
     def _get_prediction_table(self): return 'Prediction'
     def _get_prediction_type(self): return 'ProteinStability'
     def _get_prediction_type_description(self): return 'monomeric stability'
+
+
+    ###########################################################################################
+    ## Prediction layer
+    ##
+    ## This part of the API is responsible for inserting prediction jobs in the database via
+    ## the trickle-down proteomics paradigm.
+    ###########################################################################################
+
+
+    #== Job creation API ===========================================================
+    #
+    # This part of the API is responsible for inserting prediction jobs in the database via
+    # the trickle-down proteomics paradigm.
+
+
+    def _charge_prediction_set_by_residue_count(self, PredictionSet):
+        '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
+        raise Exception('This function needs to be rewritten.')
+        from tools.bio.rcsb import parseFASTAs
+
+        DDG_db = self.DDG_db
+        predictions = DDG_db.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
+
+        PDB_chain_lengths ={}
+        for prediction in predictions:
+            chain_records = DDG_db.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
+            num_residues = 0
+            for chain_record in chain_records:
+                key = (chain_record['PDBFileID'], chain_record['Chain'])
+
+                if PDB_chain_lengths.get(key) == None:
+                    fasta = DDG_db.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
+                    assert(len(fasta) == 1)
+                    fasta = fasta[0]['FASTA']
+                    f = parseFASTAs(fasta)
+                    PDB_chain_lengths[key] = len(f[chain_record['PDBFileID']][chain_record['Chain']])
+                chain_length = PDB_chain_lengths[key]
+                num_residues += chain_length
+
+            print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
+
+            predictions = DDG_db.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

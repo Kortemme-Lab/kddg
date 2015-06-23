@@ -453,6 +453,9 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def add_pdb_file_content(self, pdb_content): raise Exception('This function may never have been used and should be removed.') # return self._add_file_content(pdb_content, rm_trailing_line_whitespace = True, forced_mime_type = 'chemical/x-pdb')
 
     @deprecated
+    def create_pymol_session(self, download_dir, prediction_id, task_number, keep_files = True): raise Exception('This function has been deprecated. Use create_pymol_session_in_memory and write_pymol_session instead.''')
+
+    @deprecated
     def createDummyExperiment(self, pdbID, mutationset, chains, sourceID, ddG, ExperimentSetName = "DummySource"):
         #todo: elide createDummyExperiment, createDummyExperiment_ankyrin_repeat, and add_mutant
         raise Exception("Out of date function.")
@@ -721,7 +724,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     # This part of the API is responsible for creating input files for predictions
 
 
-     @job_input
+    @job_input
     def create_resfile(self, prediction_id):
         '''Abstract function.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
@@ -812,14 +815,14 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @job_results
-    def get_prediction_data_path(self):
-        '''Returns the file server path to the where archived prediction data is stored.'''
-        return self.prediction_data_path
+    def get_ddg_scores_per_structure(self, prediction_id):
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
     @job_results
-    def get_ddg_scores_per_structure(self, prediction_id):
-        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+    def get_prediction_data_path(self):
+        '''Returns the file server path to the where archived prediction data is stored.'''
+        return self.prediction_data_path
 
 
     @job_results
@@ -895,25 +898,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     @analysis_api
     def determine_best_pair(self, prediction_id, score_method_id = 1):
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
-
-
-    @analysis_api
-    def determine_best_pair(self, prediction_id, score_method_id = 1):
-        # Iterates over the (wildtype, mutant) pairs in the PredictionStructureScore table and returns the structure ID
-        # for the pair with the lowest energy mutant
-        # Note: There are multiple ways to select the best pair. For example, if multiple mutants have the same minimal total
-        # score, we could have multiple wildtype structures to choose from. In this case, we choose a pair where the wildtype
-        # structure has the minimal total score.
-        raise Exception('Abstract method. This needs to be overridden by a subclass.')
-        lowest_mutant_score = self.DDG_db.execute_select('SELECT total FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" ORDER BY total LIMIT 1', parameters=(prediction_id, score_method_id))
-        if lowest_mutant_score:
-            lowest_mutant_score = lowest_mutant_score[0]['total']
-            mutant_structure_ids = [r['StructureID'] for r in self.DDG_db.execute_select('SELECT StructureID FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" AND total=%s', parameters=(prediction_id, score_method_id, lowest_mutant_score))]
-            if len(mutant_structure_ids) > 1:
-                return self.DDG_db.execute_select(('SELECT StructureID FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="WildType" AND StructureID IN (' + ','.join(map(str, mutant_structure_ids)) + ') ORDER BY total LIMIT 1'), parameters=(prediction_id, score_method_id ))[0]['StructureID']
-            else:
-                return mutant_structure_ids[0]
-        return None
 
 
     @analysis_api
@@ -1004,82 +988,16 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @app_pymol
-    def create_pymol_session(self, download_dir, prediction_id, task_number, keep_files = True):
-        '''Create a PyMOL session for a pair of structures.'''
+    def create_pymol_session_in_memory(self, prediction_id, task_number, pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol'):
+        '''Returns (in memory) a PyMOL session for a pair of structures.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
-        # Retrieve and unzip results
-        if not(os.path.exists(download_dir)):
-            os.mkdir(download_dir)
-        working_dir = os.path.join(os.path.join(download_dir, str(prediction_id)))
-        if not(os.path.exists(working_dir)) or not(os.path.exists(os.path.join(working_dir, 'repacked_wt_round_%d.pdb' % task_number))):
-            self.write_job_data_to_disk(prediction_id, download_dir)
-        if not(os.path.exists(working_dir)) or not(os.path.exists(os.path.join(working_dir, 'repacked_wt_round_%d.pdb' % task_number))):
-            raise Exception('Could not extract the models for task #%d of Prediction #%d.' % (task_number, prediction_id))
-
-        # Retrieve the two structures corresponding to the task_number
-        files = sorted(glob.glob(os.path.join(working_dir, '*_round_%d.pdb' % task_number)), reverse = True)
-        assert(os.path.split(files[0])[1].startswith('repacked_wt_'))
-        assert(os.path.split(files[1])[1].startswith('mut_'))
-
-        # Creator the alignment object and write the PSE file
-        chain_mapper = ScaffoldModelChainMapper.from_file_paths(files[0], files[1])
-
-        # Remove the downloaded files
-        if not keep_files:
-            shutil.rmtree(download_dir)
-        return chain_mapper.generate_pymol_session()
-
 
     @app_pymol
-    def create_pymol_session_in_memory(self, prediction_id, task_number):
-        '''Create a PyMOL session for a pair of structures.
-        '''
-        # todo: This should replace create_pymol_session since creating a PyMOL session should be a separate task from extracting an archive. write_pymol_session should be changed to use this function
-
-        from io import BytesIO
-
-        # Retrieve and unzip results
-        archive = self.get_job_data(prediction_id)
-        zipped_content = zipfile.ZipFile(BytesIO(archive), 'r', zipfile.ZIP_DEFLATED)
-
-        try:
-            # Get the name of the files from the zip
-            wildtype_filename = os.path.join(str(prediction_id), 'repacked_wt_round_%d.pdb' % task_number)
-            mutant_filename = None
-            for filepath in sorted(zipped_content.namelist()):
-                filename = os.path.split(filepath)[1]
-                if filename.startswith('mut_') and filename.endswith('_round_%d.pdb' % task_number):
-                    mutant_filename = os.path.join(str(prediction_id), filename)
-                    break
-
-            PyMOL_session = None
-            file_list = zipped_content.namelist()
-
-            # If both files exist in the zip, extract their contents in memory and create a PyMOL session pair (PSE, script)
-            if (mutant_filename in file_list) and (wildtype_filename in file_list):
-                wildtype_pdb = zipped_content.open(wildtype_filename, 'r').read()
-                mutant_pdb = zipped_content.open(mutant_filename, 'U').read()
-                chain_mapper = ScaffoldModelChainMapper.from_file_contents(wildtype_pdb, mutant_pdb)
-                PyMOL_session = chain_mapper.generate_pymol_session(pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol')
-
-            zipped_content.close()
-            return PyMOL_session
-
-        except Exception, e:
-            zipped_content.close()
-            raise Exception(str(e))
-
-
-    @app_pymol
-    def write_pymol_session(download_dir, PredictionID, task_number, keep_files = True):
-        PSE_file = create_pymol_session(download_dir, PredictionID, task_number, keep_files = keep_files)
-        write_file(output_filepath, PSE_file[0], 'wb')
-
-
-
-
-
+    def write_pymol_session(self, prediction_id, task_number, output_filepath, pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol'):
+        '''Writes the PyMOL session for a pair of structures to disk.'''
+        PSE_file_contents = self.create_pymol_session_in_memory(prediction_id, task_number, pymol_executable = pymol_executable)
+        write_file(output_filepath, PSE_file_contents, 'wb')
 
 
     ################################################################################################
