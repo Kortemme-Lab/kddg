@@ -35,158 +35,51 @@ class MonomericStabilityDDGInterface(ddG):
 
 
 
-    ##### Public API: PredictionSet functions
-
-    #####
-    # Job creation/management API
-    # This part of the API is responsible for inserting prediction jobs in the database via the trickle-down proteomics paradigm.
-    #####
-
-    # PredictionSet interface
-
-    @jobcreator
-    def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False):
-        '''Adds a new PredictionSet (a construct used to group Predictions) to the database.'''
-        return super(MonomericStabilityDDGInterface, self).add_prediction_set(PredictionSetID, halted = halted, Priority = Priority, BatchSize = BatchSize, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False)
+    ###########################################################################################
+    ## Information layer
+    ##
+    ## This layer is for functions which extract data from the database.
+    ###########################################################################################
 
 
+    #== Information API =======================================================================
 
 
-    ##### Public API: Rosetta-related functions
-
-
-
-    def create_resfile(self, prediction_id):
-        raise Exception('This needs to be implemented.')
-
-
-
-    def create_mutfile(self, prediction_id):
-        raise Exception('This needs to be implemented.')
-
-
-
-    ##### Public API: PDB-related functions
-
-
-
+    @informational_pdb
     def get_pdb_chains_for_prediction(self, prediction_id):
         '''Returns the PDB file ID and a list of chains for the prediction.'''
         raise Exception('This needs to be implemented.')
 
 
-
-    ##### Private API: Job insertion helper functions
-
-
-
-    def _charge_prediction_set_by_residue_count(self, PredictionSet):
-        '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
-        raise Exception('This function needs to be rewritten.')
-        from tools.bio.rcsb import parseFASTAs
-
-        DDG_db = self.DDG_db
-        predictions = DDG_db.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
-
-        PDB_chain_lengths ={}
-        for prediction in predictions:
-            chain_records = DDG_db.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
-            num_residues = 0
-            for chain_record in chain_records:
-                key = (chain_record['PDBFileID'], chain_record['Chain'])
-
-                if PDB_chain_lengths.get(key) == None:
-                    fasta = DDG_db.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
-                    assert(len(fasta) == 1)
-                    fasta = fasta[0]['FASTA']
-                    f = parseFASTAs(fasta)
-                    PDB_chain_lengths[key] = len(f[chain_record['PDBFileID']][chain_record['Chain']])
-                chain_length = PDB_chain_lengths[key]
-                num_residues += chain_length
-
-            print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
-
-            predictions = DDG_db.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
+    @informational_pdb
+    def get_pdb_chains_used_for_prediction_set(self, prediction_set):
+        return self.DDG_db.execute_select('''
+            SELECT Prediction.ID, Experiment.PDBFileID, Chain
+            FROM Prediction
+            INNER JOIN Experiment ON Experiment.ID=Prediction.ExperimentID
+            INNER JOIN ExperimentChain ON ExperimentChain.ExperimentID=Prediction.ExperimentID
+            WHERE PredictionSet=%s''', parameters=(prediction_set,))
 
 
-
-    ##### Public API: Job insertion functions
-
-
-
-    def add_prediction_set_jobs(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
-        raise Exception('This function needs to be rewritten.')
-
-        assert(self.DDG_db.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
-
-        #results = self.DDG_db.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
-        results = self.DDG_db.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
-        if not results:
-            return False
-
-        if not(quiet):
-            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, ProtocolID))
-            colortext.message("%d records found in the UserDataSet" % len(results))
-
-        count = 0
-        showprogress = not(quiet) and len(results) > 300
-        if showprogress:
-            print("|" + ("*" * (int(len(results)/100)-2)) + "|")
-        for r in results:
-
-            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
-            if len(existing_results) > 0:
-                #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
-                continue
-
-            PredictionID = self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
-            count += 1
-            if showprogress:
-                if count > 100:
-                    colortext.write(".", "cyan", flush = True)
-                    count = 0
-            if shortrun and count > 4:
-                break
-        print("")
-        return(True)
+    ###########################################################################################
+    ## Prediction creation/management layer
+    ##
+    ###########################################################################################
 
 
-    def add_jobs_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True):
-        ''' This function adds predictions for all Experiments corresponding to pdb_ID to the specified prediction set.
-            This is useful for custom runs e.g. when we are using the DDG scheduler for design rather than for benchmarking.
-        '''
-        raise Exception('This function needs to be rewritten.')
-        colortext.printf("\nAdding any mutations for this structure which have not been queued/run in the %s prediction set." % PredictionSet, "lightgreen")
-
-        d = {
-            'ID' : PredictionSet,
-            'Status' : status,
-            'Priority' : priority,
-            'BatchSize' : 40,
-            'EntryDate' : datetime.datetime.now(),
-        }
-        self.DDG_db.insertDictIfNew('PredictionSet', d, ['ID'])
-
-        # Update the priority and activity if necessary
-        self.DDG_db.execute('UPDATE PredictionSet SET Status=%s, Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
-
-        # Determine the set of experiments to add
-        ExperimentIDs = set([r['ID'] for r in self.DDG_db.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
-        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in self.DDG_db.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
-        experiment_IDs_to_add = sorted(ExperimentIDs.difference(ExperimentIDsInPredictionSet))
-
-        if experiment_IDs_to_add:
-            colortext.printf("\nAdding %d jobs to the prediction set." % len(experiment_IDs_to_add), "lightgreen")
-            count = 0
-            for experiment_ID in experiment_IDs_to_add:
-                colortext.write('.', "lightgreen")
-                self.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True, strip_other_chains = strip_other_chains)
-                count +=1
-        else:
-            colortext.printf("\nAll jobs are already in the queue or have been run.", "lightgreen")
-        print('')
+    #== Job creation API ===========================================================
+    #
+    # This part of the API is responsible for inserting prediction jobs in the database via
+    # the trickle-down proteomics paradigm.
 
 
+    @job_creator
+    def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False):
+        '''Adds a new PredictionSet (a construct used to group Predictions) to the database.'''
+        return super(MonomericStabilityDDGInterface, self).add_prediction_set(PredictionSetID, halted = halted, Priority = Priority, BatchSize = BatchSize, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False)
+
+
+    @job_creator
     def add_job(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True):
         '''This function inserts a prediction into the database.
             The parameters define:
@@ -198,6 +91,7 @@ class MonomericStabilityDDGInterface(ddG):
             We then add the prediction record, including the stripped PDB and the inverse mapping
             from Rosetta residue numbering to PDB residue numbering.'''
         raise Exception('This function needs to be rewritten.')
+        raise Exception('Make sure to call charge by residue function, _charge_prediction_set_by_residue_count')
 
         parameters = (experimentID,)
         assert(ReverseMutation == False) # todo: allow this later
@@ -320,45 +214,307 @@ class MonomericStabilityDDGInterface(ddG):
             return predictionID
 
 
-    def clone_prediction_set(self, existing_prediction_set, new_prediction_set):
+    @job_creator
+    def add_jobs_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True):
+        ''' This function adds predictions for all Experiments corresponding to pdb_ID to the specified prediction set.
+            This is useful for custom runs e.g. when we are using the DDG scheduler for design rather than for benchmarking.
+        '''
+        raise Exception('This function needs to be rewritten.')
+        colortext.printf("\nAdding any mutations for this structure which have not been queued/run in the %s prediction set." % PredictionSet, "lightgreen")
+
+        d = {
+            'ID' : PredictionSet,
+            'Status' : status,
+            'Priority' : priority,
+            'BatchSize' : 40,
+            'EntryDate' : datetime.datetime.now(),
+        }
+        self.DDG_db.insertDictIfNew('PredictionSet', d, ['ID'])
+
+        # Update the priority and activity if necessary
+        self.DDG_db.execute('UPDATE PredictionSet SET Status=%s, Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
+
+        # Determine the set of experiments to add
+        ExperimentIDs = set([r['ID'] for r in self.DDG_db.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
+        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in self.DDG_db.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
+        experiment_IDs_to_add = sorted(ExperimentIDs.difference(ExperimentIDsInPredictionSet))
+
+        if experiment_IDs_to_add:
+            colortext.printf("\nAdding %d jobs to the prediction set." % len(experiment_IDs_to_add), "lightgreen")
+            count = 0
+            for experiment_ID in experiment_IDs_to_add:
+                colortext.write('.', "lightgreen")
+                self.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True, strip_other_chains = strip_other_chains)
+                count +=1
+        else:
+            colortext.printf("\nAll jobs are already in the queue or have been run.", "lightgreen")
+        print('')
+
+
+    @job_creator
+    def add_prediction_run(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
+        raise Exception('This function needs to be rewritten.')
+
+        assert(self.DDG_db.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
+
+        #results = self.DDG_db.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
+        results = self.DDG_db.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
+        if not results:
+            return False
+
+        if not(quiet):
+            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, ProtocolID))
+            colortext.message("%d records found in the UserDataSet" % len(results))
+
+        count = 0
+        showprogress = not(quiet) and len(results) > 300
+        if showprogress:
+            print("|" + ("*" * (int(len(results)/100)-2)) + "|")
+        for r in results:
+
+            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
+            if len(existing_results) > 0:
+                #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
+                continue
+
+            PredictionID = self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
+            count += 1
+            if showprogress:
+                if count > 100:
+                    colortext.write(".", "cyan", flush = True)
+                    count = 0
+            if shortrun and count > 4:
+                break
+        print("")
+        return(True)
+
+
+    @job_creator
+    def clone_prediction_run(self, existing_prediction_set, new_prediction_set):
         raise Exception('not implemented yet')
         #assert(existing_prediction_set exists and has records)
         #assert(new_prediction_set is empty)
         #for each prediction record, add the record and all associated predictionfile records,
 
 
-
-    ##### Private API: Job completion functions
-
-
-
-    def _add_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores, is_wildtype):
-        raise Exception('not implemented yet')
-        #if ScoreMethodID is None, raise an exception but report the score method id for the default score method
-        #assert(scores fields match db fields)
+    #== Input file generation API ===========================================================
+    #
+    # This part of the API is responsible for creating input files for predictions
 
 
-
-    ##### Public API: Job completion functions
-
-
-
-    def add_ddg_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
-        raise Exception('not implemented yet')
-        #if ScoreMethodID is None, raise an exception but report the score method id for the default score method
-        #assert(scores fields match db fields)
+    @job_input
+    def create_resfile(self, prediction_id):
+        raise Exception('This needs to be implemented.')
 
 
-    def add_wildtype_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
-        raise Exception('not implemented yet')
+    @job_input
+    def create_mutfile(self, prediction_id):
+        raise Exception('This needs to be implemented.')
 
 
-    def add_mutant_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
-        raise Exception('not implemented yet')
+    #== Job execution/completion API ===========================================================
+    #
+    # This part of the API is responsible for starting jobs and setting them as failed or
+    # completed
+
+
+    @job_execution
+    def get_job(self, prediction_set):
+        '''Abstract function.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
+        #returns None if no queued jobs exist or if the PredictionSet is halted otherwise return details necessary to run the job
+
+
+    @job_execution
+    def start_job(self, prediction_id, prediction_set):
+        '''Abstract function.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
+         # sets the job status to 'active'
+
+
+    @job_completion
+    def fail_job(self, prediction_id, prediction_set, maxvmem, ddgtime):
+        '''Abstract function.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
+        # sets a job to 'failed'. prediction_set is redundant but acts as a sanity check
+
+
+    @job_completion
+    def parse_prediction_scores(self, stdout):
+        '''Returns a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
+        self._parse_ddg_monomer_scores_per_structure(stdout)
+
+
+    @job_completion
+    def store_scores(self, scores, prediction_set, prediction_id):
+        '''Stores a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @job_completion
+    def complete_job(self, prediction_id, prediction_set, scores, maxvmem, ddgtime):
+        '''Abstract function.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
+        # sets a job to 'completed' and stores scores using self.store_scores. prediction_set is redundant but acts as a sanity check
+
+
+    @staticmethod
+    def _parse_ddg_monomer_scores_per_structure(stdout):
+        '''Returns a dict mapping the DDG scores from a ddg_monomer run to a list of structure numbers.'''
+
+        # Parse the stdout into two mappings (one for wildtype structures, one for mutant structures) mapping
+        # structure IDs to a dict containing the score components
+        wildtype_scores = {}
+        mutant_scores = {}
+        s1 = 'score before mutation: residue'
+        s1_len = len(s1)
+        s2 = 'score after mutation: residue'
+        s2_len = len(s2)
+        for line in stdout.split('\n'):
+            idx = line.find(s1)
+            if idx != -1:
+                idx += s1_len
+                mtchs = re.match('.*?(\d+) %s' % s1, line)
+                structure_id = int(mtchs.group(1))
+                assert(structure_id not in wildtype_scores)
+                tokens = line[idx:].split()
+                d = {'total' : float(tokens[0])}
+                for x in range(1, len(tokens), 2):
+                    component_name = tokens[x].replace(':', '')
+                    assert(rosetta_weights.get(component_name))
+                    component_value = float(tokens[x + 1])
+                    d[component_name] = component_value
+                wildtype_scores[structure_id] = d
+            else:
+                idx = line.find(s2)
+                if idx != -1:
+                    idx += s2_len
+                    mtchs = re.match('.*?(\d+) %s' % s2, line)
+                    structure_id = int(mtchs.group(1))
+                    assert(structure_id not in mutant_scores)
+                    tokens = line[idx:].split()
+                    d = {'total' : float(tokens[1])}
+                    for x in range(2, len(tokens), 2):
+                        component_name = tokens[x].replace(':', '')
+                        assert(rosetta_weights.get(component_name))
+                        component_value = float(tokens[x + 1])
+                        d[component_name] = component_value
+                    mutant_scores[structure_id] = d
+
+        # Sanity checks
+        num_structures = max(wildtype_scores.keys())
+        expected_keys = set(range(1, num_structures + 1))
+        assert(expected_keys == set(wildtype_scores.keys()))
+        assert(expected_keys == set(mutant_scores.keys()))
+
+        # Create a list of lists - MutantScoreOrder - of structure IDs e.g. [[5,1,34], [23], [12,3], ...] which is ordered
+        # by increasing energy so that each sublist contains structure IDs of equal energy and if structures have the same
+        # energy then their IDs are in the same sublist
+        d = {}
+        for structure_id, scores in sorted(mutant_scores.iteritems()):
+            d[scores['total']] = d.get(scores['total'], [])
+            d[scores['total']].append(structure_id)
+        MutantScoreOrder = []
+        for score, structure_ids in sorted(d.iteritems()):
+            MutantScoreOrder.append(structure_ids)
+
+        # Sanity check - make sure that MutantScoreOrder is really ordered such that each set of structure IDs contains
+        # structures of the same energy and of a lower energy than the following set of structure IDs in the list
+        for x in range(len(MutantScoreOrder) - 1):
+            s1 = set([mutant_scores[n]['total'] for n in MutantScoreOrder[x]])
+            assert(len(s1) == 1)
+            if x + 1 < len(MutantScoreOrder):
+                s2 = set([mutant_scores[n]['total'] for n in MutantScoreOrder[x + 1]])
+                assert(len(s2) == 1)
+                assert(s1.pop() < s2.pop())
+
+        return dict(
+            WildType = wildtype_scores,
+            Mutant = mutant_scores,
+            MutantScoreOrder = MutantScoreOrder,
+        )
+
+
+    ###########################################################################################
+    ## Prediction results layer
+    ##
+    ## This part of the API for returning data about completed predictions.
+    ###########################################################################################
+
+
+    @job_results
+    def get_ddg_scores_per_structure(self, prediction_id):
+        # At present, we only use ddg_monomer
+        raise Exception('Reimplement using the database records.')
+        return self.get_ddg_monomer_scores_per_structure(prediction_id)
+
+
+    @job_results
+    def get_ddg_monomer_scores_per_structure(self, prediction_id):
+        '''Returns a dict mapping the DDG scores from a ddg_monomer run to a list of structure numbers.'''
+
+        # Get the ddg_monomer output for the prediction
+        sge_stdout = self.extract_sge_job_stdout_from_archive(prediction_id)['ddG']
+        return MonomericStabilityDDGInterface._parse_ddg_monomer_scores_per_structure(sge_stdout)
+
+
+    ###########################################################################################
+    ## Analysis layer
+    ##
+    ## This part of the API is responsible for running analysis on completed predictions
+    ###########################################################################################
 
 
 
-    ##### Public API: Analysis helper functions
+    ################################################################################################
+    ## Private API layer
+    ## These are helper functions used internally by the class but which are not intended for export
+    ################################################################################################
+
+
+    def _charge_prediction_set_by_residue_count(self, PredictionSet):
+        '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
+        raise Exception('This function needs to be rewritten.')
+        from tools.bio.rcsb import parseFASTAs
+
+        DDG_db = self.DDG_db
+        predictions = DDG_db.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
+
+        PDB_chain_lengths ={}
+        for prediction in predictions:
+            chain_records = DDG_db.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
+            num_residues = 0
+            for chain_record in chain_records:
+                key = (chain_record['PDBFileID'], chain_record['Chain'])
+
+                if PDB_chain_lengths.get(key) == None:
+                    fasta = DDG_db.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
+                    assert(len(fasta) == 1)
+                    fasta = fasta[0]['FASTA']
+                    f = parseFASTAs(fasta)
+                    PDB_chain_lengths[key] = len(f[chain_record['PDBFileID']][chain_record['Chain']])
+                chain_length = PDB_chain_lengths[key]
+                num_residues += chain_length
+
+            print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
+
+            predictions = DDG_db.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -380,7 +536,7 @@ class MonomericStabilityDDGInterface(ddG):
         UserDataSetID = UserDataSetID[0]['ID']
 
         amino_acids = self.get_amino_acids_for_analysis()
-        prediction_chains = self.get_prediction_experiment_chains(predictionset)
+        prediction_chains = self.get_pdb_chains_used_for_prediction_set(predictionset)
 
         # Get the list of mutation predictions
         if only_single:

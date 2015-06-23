@@ -38,12 +38,12 @@ class BindingAffinityDDGInterface(ddG):
     ##### Public API: Rosetta-related functions
 
 
-    @inputfiles
+    @job_input
     def create_resfile(self, prediction_id):
         raise Exception('This needs to be implemented.')
 
 
-    @inputfiles
+    @job_input
     def create_mutfile(self, prediction_id):
         raise Exception('This needs to be implemented.')
 
@@ -59,8 +59,21 @@ class BindingAffinityDDGInterface(ddG):
 
 
 
-    ##### Public API: PredictionSet functions
+    ###########################################################################################
+    ## Prediction layer
+    ##
+    ## This part of the API is responsible for inserting prediction jobs in the database via
+    ## the trickle-down proteomics paradigm.
+    ###########################################################################################
 
+
+    #== Job creation/management API ===========================================================
+    #
+    # This part of the API is responsible for inserting prediction jobs in the database via the
+    # trickle-down proteomics paradigm.
+
+
+    #   PredictionSet interface
 
 
     def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False):
@@ -68,86 +81,13 @@ class BindingAffinityDDGInterface(ddG):
         return super(BindingAffinityDDGInterface, self).add_prediction_set(PredictionSetID, halted = halted, Priority = Priority, BatchSize = BatchSize, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = False, contains_binding_affinity_predictions = True)
 
 
-
-    ##### Private API: Job insertion helper functions
-
-
-
-    def _charge_prediction_set_by_residue_count(self, PredictionSet):
-        '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
-        raise Exception('This function needs to be rewritten.')
-        from tools.bio.rcsb import parseFASTAs
-
-        DDG_db = self.DDG_db
-        predictions = DDG_db.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
-
-        PDB_chain_lengths ={}
-        for prediction in predictions:
-            chain_records = DDG_db.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
-            num_residues = 0
-            for chain_record in chain_records:
-                key = (chain_record['PDBFileID'], chain_record['Chain'])
-
-                if PDB_chain_lengths.get(key) == None:
-                    fasta = DDG_db.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
-                    assert(len(fasta) == 1)
-                    fasta = fasta[0]['FASTA']
-                    f = parseFASTAs(fasta)
-                    PDB_chain_lengths[key] = len(f[chain_record['PDBFileID']][chain_record['Chain']])
-                chain_length = PDB_chain_lengths[key]
-                num_residues += chain_length
-
-            print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
-
-            predictions = DDG_db.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
+    @job_creator
+    def add_job_command_lines(self, *args, **kwargs):
+        '''Abstract function.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
-
-    #####
-    # Job creation/management API
-    # This part of the API is responsible for inserting prediction jobs in the database via the trickle-down proteomics paradigm.
-    #####
-
-
-    @jobcreator
-    def add_prediction_set_jobs(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
-        raise Exception('This function needs to be rewritten.')
-
-        assert(self.DDG_db.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
-
-        #results = self.DDG_db.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
-        results = self.DDG_db.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
-        if not results:
-            return False
-
-        if not(quiet):
-            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, ProtocolID))
-            colortext.message("%d records found in the UserDataSet" % len(results))
-
-        count = 0
-        showprogress = not(quiet) and len(results) > 300
-        if showprogress:
-            print("|" + ("*" * (int(len(results)/100)-2)) + "|")
-        for r in results:
-
-            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
-            if len(existing_results) > 0:
-                #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
-                continue
-
-            PredictionID = self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
-            count += 1
-            if showprogress:
-                if count > 100:
-                    colortext.write(".", "cyan", flush = True)
-                    count = 0
-            if shortrun and count > 4:
-                break
-        print("")
-        return(True)
-
-
-    @jobcreator
+    @job_creator
     def add_jobs_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True):
         ''' This function adds predictions for all Experiments corresponding to pdb_ID to the specified prediction set.
             This is useful for custom runs e.g. when we are using the DDG scheduler for design rather than for benchmarking.
@@ -184,7 +124,55 @@ class BindingAffinityDDGInterface(ddG):
         print('')
 
 
-    @jobcreator
+    @job_creator
+    def add_prediction_run(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
+        raise Exception('This function needs to be rewritten.')
+
+        assert(self.DDG_db.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
+
+        #results = self.DDG_db.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
+        results = self.DDG_db.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
+        if not results:
+            return False
+
+        if not(quiet):
+            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, ProtocolID))
+            colortext.message("%d records found in the UserDataSet" % len(results))
+
+        count = 0
+        showprogress = not(quiet) and len(results) > 300
+        if showprogress:
+            print("|" + ("*" * (int(len(results)/100)-2)) + "|")
+        for r in results:
+
+            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
+            if len(existing_results) > 0:
+                #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
+                continue
+
+            PredictionID = self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
+            count += 1
+            if showprogress:
+                if count > 100:
+                    colortext.write(".", "cyan", flush = True)
+                    count = 0
+            if shortrun and count > 4:
+                break
+        print("")
+        return(True)
+
+
+    @job_creator
+    def clone_prediction_run(self, existing_prediction_set, new_prediction_set):
+        raise Exception('not implemented yet')
+        #assert(existing_prediction_set exists and has records)
+        #assert(new_prediction_set is empty)
+        #for each prediction record, add the record and all associated predictionfile records,
+
+
+
+
+    @job_creator
     def add_job(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True):
         '''This function inserts a prediction into the database.
             The parameters define:
@@ -318,7 +306,7 @@ class BindingAffinityDDGInterface(ddG):
             return predictionID
 
 
-    @jobcreator
+    @job_creator
     def clone_prediction_set(self, existing_prediction_set, new_prediction_set):
         raise Exception('not implemented yet')
         #assert(existing_prediction_set exists and has records)
@@ -372,6 +360,39 @@ class BindingAffinityDDGInterface(ddG):
     def _get_prediction_type(self): return 'BindingAffinity'
     def _get_prediction_type_description(self): return 'binding affinity'
 
+
+
+    ##### Private API: Job insertion helper functions
+
+
+
+    def _charge_prediction_set_by_residue_count(self, PredictionSet):
+        '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
+        raise Exception('This function needs to be rewritten.')
+        from tools.bio.rcsb import parseFASTAs
+
+        DDG_db = self.DDG_db
+        predictions = DDG_db.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
+
+        PDB_chain_lengths ={}
+        for prediction in predictions:
+            chain_records = DDG_db.execute_select('SELECT PDBFileID, Chain FROM Experiment INNER JOIN ExperimentChain ON ExperimentID=Experiment.ID WHERE ExperimentID=%s', parameters=(prediction['ExperimentID']))
+            num_residues = 0
+            for chain_record in chain_records:
+                key = (chain_record['PDBFileID'], chain_record['Chain'])
+
+                if PDB_chain_lengths.get(key) == None:
+                    fasta = DDG_db.execute_select("SELECT FASTA FROM PDBFile WHERE ID=%s", parameters = (chain_record['PDBFileID'],))
+                    assert(len(fasta) == 1)
+                    fasta = fasta[0]['FASTA']
+                    f = parseFASTAs(fasta)
+                    PDB_chain_lengths[key] = len(f[chain_record['PDBFileID']][chain_record['Chain']])
+                chain_length = PDB_chain_lengths[key]
+                num_residues += chain_length
+
+            print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
+
+            predictions = DDG_db.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
 
 
 

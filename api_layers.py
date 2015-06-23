@@ -19,8 +19,9 @@ functional_layer = {
     0 : 'API warnings',
     1 : 'Information layer',
     2 : 'Prediction layer',
-    3 : 'Analysis layer',
-    4 : 'Application layer',
+    3 : 'Results layer',
+    4 : 'Analysis layer',
+    5 : 'Application layer',
     None: 'Miscellanous'
 }
 
@@ -42,39 +43,69 @@ def deprecated(func):
     func._layer_order = 2
     return func
 
-def informational(func):
-    func._helptype = 'Information API'
+def informational_misc(func):
+    func._helptype = 'Miscellaneous information API'
     func._layer = 1
     func._layer_order = 0
     return func
 
-def jobcreator(func):
-    func._helptype = 'Job creation/management API'
+def informational_file(func):
+    func._helptype = 'File information API'
+    func._layer = 1
+    func._layer_order = 1
+    return func
+
+def informational_pdb(func):
+    func._helptype = 'Structure information API'
+    func._layer = 1
+    func._layer_order = 2
+    return func
+
+def informational_job(func):
+    func._helptype = 'Prediction information API'
+    func._layer = 1
+    func._layer_order = 3
+    return func
+
+def job_creator(func):
+    func._helptype = 'Job creation API'
     func._layer = 2
     func._layer_order = 0
     return func
 
-def inputfiles(func):
+def job_input(func):
     func._helptype = 'Input file generation API'
     func._layer = 2
     func._layer_order = 1
     return func
 
-def resultsfn(func):
-    func._helptype = 'Results API'
+def job_execution(func):
+    func._helptype = 'Job execution API'
     func._layer = 2
     func._layer_order = 2
     return func
 
-def analysisfn(func):
-    func._helptype = 'Analysis API'
+def job_completion(func):
+    func._helptype = 'Job completion API'
+    func._layer = 2
+    func._layer_order = 3
+    return func
+
+def job_results(func):
+    func._helptype = 'Results API'
     func._layer = 3
     func._layer_order = 0
     return func
 
-def pymolapi(func):
-    func._helptype = 'PyMOL API'
+def analysis_api(func):
+    func._helptype = 'Analysis API'
     func._layer = 4
+    func._layer_order = 0
+    return func
+
+def app_pymol(func):
+    func._helptype = 'PyMOL API'
+    func._layer = 5
     func._layer_order = 0
     return func
 
