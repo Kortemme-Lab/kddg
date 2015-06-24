@@ -274,16 +274,6 @@ class BindingAffinityDDGInterface(ddG):
             return predictionID
 
 
-    @job_creator
-    def clone_prediction_set(self, existing_prediction_set, new_prediction_set):
-        raise Exception('not implemented yet')
-        #assert(existing_prediction_set exists and has records)
-        #assert(new_prediction_set is empty)
-        #for each prediction record, add the record and all associated predictionfile records,
-
-
-
-
 
 
     @job_completion
