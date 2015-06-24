@@ -65,7 +65,6 @@ class MonomericStabilityDDGInterface(ddG):
 
     @informational_pdb
     def get_pdb_chains_for_prediction(self, prediction_id):
-        '''Returns the PDB file ID and a list of chains for the prediction.'''
         raise Exception('This needs to be implemented.')
 
 
@@ -83,7 +82,6 @@ class MonomericStabilityDDGInterface(ddG):
 
     @job_creator
     def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False):
-        '''Adds a new PredictionSet (a construct used to group Predictions) to the database.'''
         return super(MonomericStabilityDDGInterface, self).add_prediction_set(PredictionSetID, halted = halted, Priority = Priority, BatchSize = BatchSize, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False)
 
 
@@ -224,9 +222,6 @@ class MonomericStabilityDDGInterface(ddG):
 
     @job_creator
     def add_jobs_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True):
-        ''' This function adds predictions for all Experiments corresponding to pdb_ID to the specified prediction set.
-            This is useful for custom runs e.g. when we are using the DDG scheduler for design rather than for benchmarking.
-        '''
         raise Exception('This function needs to be rewritten.')
         colortext.printf("\nAdding any mutations for this structure which have not been queued/run in the %s prediction set." % PredictionSet, "lightgreen")
 
@@ -343,19 +338,18 @@ class MonomericStabilityDDGInterface(ddG):
 
     @job_completion
     def parse_prediction_scores(self, stdout):
-        '''Returns a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
+        '''Returns a list of dicts suitable for database storage e.g. PredictionStructureScore records.'''
         self._parse_ddg_monomer_scores_per_structure(stdout)
 
 
     @job_completion
     def store_scores(self, scores, prediction_set, prediction_id):
-        '''Stores a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
+        '''Stores a list of dicts suitable for database storage e.g. PredictionStructureScore records.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
     @job_completion
     def complete_job(self, prediction_id, prediction_set, scores, maxvmem, ddgtime):
-        '''Sets a job to 'completed' and stores scores. prediction_set must be passed and is used as a sanity check.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
@@ -485,7 +479,6 @@ class MonomericStabilityDDGInterface(ddG):
 
     @app_pymol
     def create_pymol_session_in_memory(self, prediction_id, task_number, pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol'):
-        '''Create a PyMOL session for a pair of structures.'''
 
         # Retrieve and unzip results
         archive = self.get_job_data(prediction_id)

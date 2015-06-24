@@ -704,8 +704,10 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @job_creator
     def add_jobs_by_pdb_id(self, *args, **kwargs):
-        '''Variants of this function were used before for CypA and ubiquitin runs. This is unimplemented but ask Shane
-           if we need this functionality again.'''
+        ''' This function adds predictions for all Experiments corresponding to pdb_ID to the specified prediction set.
+            This is useful for custom runs e.g. when we are using the DDG scheduler for design rather than for benchmarking.
+            Variants of this function were used before for CypA and ubiquitin runs.
+            This is currently unimplemented but ask Shane if we need this functionality again.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 

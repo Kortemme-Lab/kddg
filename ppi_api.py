@@ -337,6 +337,17 @@ class BindingAffinityDDGInterface(ddG):
     ##### Private API: Job completion functions
 
 
+    @job_completion
+    def parse_prediction_scores(self, stdout):
+        '''Returns a list of dicts suitable for database storage e.g. PredictionPPIStructureScore records.'''
+        raise Exception('not implemented yet')
+
+
+    @job_completion
+    def store_scores(self, scores, prediction_set, prediction_id):
+        '''Stores a list of dicts suitable for database storage e.g. PredictionPPIStructureScore records.'''
+        raise Exception('not implemented yet')
+
 
     def _add_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores, is_wildtype):
         raise Exception('not implemented yet')
