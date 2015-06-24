@@ -1,6 +1,8 @@
 # This file exists as a placeholder for old code used to generate statistics. Yes, it's bad practice but it should
 # save time later. The data will be pulled from the database rather than the raw files and used to create graphs.
 
+# THESE FUNCTIONS SHOULD BE MERGED WITH analysis.py AND monomer_analysis.py TO FORM AN ANALYSIS LAYER OF THE API
+
 def getEmptyMutationMatrix(self):
 	smallAminoAcids = set(['A', 'C', 'D', 'G', 'N', 'P', 'S', 'T', 'V'])
 	largeAminoAcids = set(["E", "F", "H", "I", "K", "L", "M", "Q", "R", "W", "Y"])

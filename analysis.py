@@ -6,6 +6,8 @@ This module contains functions used to create the LaTeX reports I used to genera
 It may need to be updated due to recent changes to the database and we may want to redo the analysis functions
 entirely.
 
+THESE FUNCTIONS SHOULD BE MERGED WITH dbstats.py AND monomer_analysis.py TO FORM AN ANALYSIS LAYER OF THE API
+
 Created by Shane O'Connor 2012.
 Copyright (c) 2012 __UCSF__. All rights reserved.
 """

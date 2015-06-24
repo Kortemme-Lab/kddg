@@ -3,6 +3,8 @@
 """
 score.py
 
+THIS FILE SHOULD BE REMOVED ONCE THE DDG SCHEDULER HAS BEEN REWRITTEN.
+
 Created by Shane O'Connor 2012.
 Copyright (c) 2012 __UCSF__. All rights reserved.
 """

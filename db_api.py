@@ -340,6 +340,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     #@informational or part of a filter API
     @brokenfn
     def get_publications_for_result_set(self, result_set):
+        '''This should be fixed once the filter API has been rewritten to work with the new DB schema. It returns a list of publications associated with the filter result set.'''
         raise Exception('')
         from ddgfilters import ExperimentResultSet, StructureResultSet
         if result_set:
@@ -388,7 +389,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     #@analysis_api
     @brokenfn
     def analyze(self, prediction_result_set, outpath = os.getcwd()):
-
+        '''This function needs to be rewritten and renamed. It calls the analysis module (which creates LaTeX reports) to generate correlation and MAE graphs.'''
         raise Exception('The import of analysis was commented out - presumably some change in DB structure or API broke the import. This code probably needs to be fixed.')
         import analysis
 
@@ -557,6 +558,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @informational_misc
     def get_amino_acid_details(self):
+        '''This function returns a dictionary of canonical amino acid details e.g. polarity, aromaticity, size etc.'''
         amino_acids = {}
         polarity_map = {'polar' : 'P', 'charged' : 'C', 'hydrophobic' : 'H'}
         aromaticity_map = {'aliphatic' : 'L', 'aromatic' : 'R', 'neither' : '-'}
@@ -571,7 +573,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                     Size = r['Size'],
                     van_der_Waals_volume = r['Volume']
                 )
-        amino_acids['Y']['Polarity'] = 'H'
+        amino_acids['Y']['Polarity'] = 'H' # tyrosine is a special case
         return amino_acids
 
 
@@ -600,8 +602,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @informational_pdb
     def get_pdb_details(self, pdb_ids, cached_pdb_details = None):
-        pdb_chain_lengths = {}
-        pdb_os = {}
+        '''Returns the details stored in the database about the PDB files associated with pdb_ids e.g. chains, resolution,
+           technique used to determine the structure etc.'''
         pdbs = {}
         cached_pdb_ids = []
         if cached_pdb_details:
@@ -615,6 +617,9 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 pdb_chain_lengths = {}
                 for chain_id, s in p.atom_sequences.iteritems():
                     pdb_chain_lengths[chain_id] = len(s)
+                # todo: get the list of protein chains and PDB residues from the database and assert that they are the same
+                #       as what were extracted from the PDB file.
+                #       maybe change 'chains' below to 'protein_chains'
                 pdbs[pdb_id] = dict(
                     chains = pdb_chain_lengths,
                     TM = record['Transmembrane'],
@@ -628,6 +633,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @informational_job
     def get_prediction_set_details(self, PredictionSetID):
+        '''Returns the PredictionSet record from the database.'''
         results = self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(PredictionSetID,))
         if len(results) == 1:
             return results[0]
@@ -691,24 +697,31 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @job_creator
     def add_job(self, *args, **kwargs):
-        '''Abstract function.'''
+        '''Add a single prediction job to a prediction set. This should not typically be called - add_prediction_run
+           is generally what should be called instead.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
     @job_creator
     def add_jobs_by_pdb_id(self, *args, **kwargs):
-        '''Abstract function.'''
+        '''Variants of this function were used before for CypA and ubiquitin runs. This is unimplemented but ask Shane
+           if we need this functionality again.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
     @job_creator
     def add_prediction_run(self, *args, **kwargs):
-        '''Abstract function.'''
+        '''Adds all jobs corresponding to a user dataset e.g. add_prediction_run("my first run", "AllBindingAffinityData", tagged_subset = "ZEMu").'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
     @job_creator
-    def clone_prediction_run(self, existing_prediction_set, new_prediction_set):
+    def clone_prediction_run(self, existing_prediction_set, new_prediction_set, *args, **kwargs):
+        '''add_prediction_run sets up a full run of dataset predictions but is slow as it needs to perform a lot of
+           calculations and parsing. If you want to test the same dataset with slightly different parameters (e.g. a
+           different protocol) then these calculations can be reused which reduces the overhead considerably.
+           clone_prediction_run was written with this in mind. It copies the list of predictions and their setup (input
+           files etc.) from an existing prediction set to an empty prediction set.'''
         raise Exception('not implemented yet')
 
 
@@ -719,13 +732,15 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @job_input
     def create_resfile(self, prediction_id):
-        '''Abstract function.'''
+        '''This function returns the resfile content for the prediction. It is usually not called directly by the user but
+           is available for convenience and debugging.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
     @job_input
     def create_mutfile(self, prediction_id):
-        '''Abstract function.'''
+        '''This function returns the mutfile content for the prediction. It is usually not called directly by the user but
+           is available for convenience and debugging.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
