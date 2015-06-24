@@ -86,14 +86,14 @@ class MonomericStabilityDDGInterface(ddG):
 
 
     @job_creator
-    def add_job(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True):
+    def add_job(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, keep_hetatm_lines, PDB_ID = None, ReverseMutation = False, InputFiles = {}, testonly = False, strip_other_chains = True):
         '''This function inserts a prediction into the database.
             The parameters define:
                 the experiment we are running the prediction for;
                 the name of the set of predictions for later grouping;
                 the short description of the Command to be used for prediction;
                 whether HETATM lines are to be kept or not.
-            We strip the PDB based on the chains used for the experiment and KeepHETATMLines.
+            We strip the PDB based on the chains used for the experiment and keep_hetatm_lines.
             We then add the prediction record, including the stripped PDB and the inverse mapping
             from Rosetta residue numbering to PDB residue numbering.'''
         raise Exception('This function needs to be rewritten.')
@@ -150,9 +150,9 @@ class MonomericStabilityDDGInterface(ddG):
             # Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
             chains = [result['Chain'] for result in self.DDG_db.call_select_proc("GetChains", parameters = parameters)]
             if strip_other_chains:
-                pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
+                pdb.stripForDDG(chains, keep_hetatm_lines, numberOfModels = 1)
             else:
-                pdb.stripForDDG(True, KeepHETATMLines, numberOfModels = 1)
+                pdb.stripForDDG(True, keep_hetatm_lines, numberOfModels = 1)
 
             #print('\n'.join(pdb.lines))
             # - Post stripping checks -
@@ -189,7 +189,6 @@ class MonomericStabilityDDGInterface(ddG):
 
         ExtraParameters = {}
         InputFiles = pickle.dumps(InputFiles)
-        Description = pickle.dumps(Description)
         ExtraParameters = pickle.dumps(ExtraParameters)
 
         PredictionFieldNames = self.DDG_db.FieldNames.Prediction
@@ -198,14 +197,12 @@ class MonomericStabilityDDGInterface(ddG):
             PredictionFieldNames.UserDataSetExperimentID : UserDataSetExperimentID,
             PredictionFieldNames.PredictionSet		: PredictionSet,
             PredictionFieldNames.ProtocolID			: ProtocolID,
-            PredictionFieldNames.KeptHETATMLines	: KeepHETATMLines,
+            PredictionFieldNames.KeptHETATMLines	: keep_hetatm_lines,
             PredictionFieldNames.StrippedPDB		: strippedPDB,
             PredictionFieldNames.ResidueMapping		: pickle.dumps(pdb.get_ddGInverseResmap()),
             PredictionFieldNames.InputFiles			: InputFiles,
-            PredictionFieldNames.Description		: Description,
             PredictionFieldNames.Status 			: "queued",
             PredictionFieldNames.ExtraParameters	: ExtraParameters,
-            PredictionFieldNames.StoreOutput		: StoreOutput,
         }
         if not testonly:
             self.DDG_db.insertDict('Prediction', params)
@@ -221,7 +218,7 @@ class MonomericStabilityDDGInterface(ddG):
 
 
     @job_creator
-    def add_jobs_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True):
+    def add_jobs_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, keep_hetatm_lines = False, strip_other_chains = True):
         raise Exception('This function needs to be rewritten.')
         colortext.printf("\nAdding any mutations for this structure which have not been queued/run in the %s prediction set." % PredictionSet, "lightgreen")
 
@@ -247,7 +244,7 @@ class MonomericStabilityDDGInterface(ddG):
             count = 0
             for experiment_ID in experiment_IDs_to_add:
                 colortext.write('.', "lightgreen")
-                self.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True, strip_other_chains = strip_other_chains)
+                self.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, keep_hetatm_lines, strip_other_chains = strip_other_chains)
                 count +=1
         else:
             colortext.printf("\nAll jobs are already in the queue or have been run.", "lightgreen")
@@ -255,18 +252,18 @@ class MonomericStabilityDDGInterface(ddG):
 
 
     @job_creator
-    def add_prediction_run(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
+    def add_prediction_run(self, user_dataset_name, prediction_set_id, protocol_id, keep_hetatm_lines, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
         raise Exception('This function needs to be rewritten.')
 
-        assert(self.DDG_db.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
+        assert(self.DDG_db.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(prediction_set_id,)))
 
-        #results = self.DDG_db.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
-        results = self.DDG_db.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
+        #results = self.DDG_db.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(user_dataset_name,))
+        results = self.DDG_db.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(user_dataset_name,))
         if not results:
             return False
 
         if not(quiet):
-            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, ProtocolID))
+            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (user_dataset_name, protocol_id))
             colortext.message("%d records found in the UserDataSet" % len(results))
 
         count = 0
@@ -275,12 +272,12 @@ class MonomericStabilityDDGInterface(ddG):
             print("|" + ("*" * (int(len(results)/100)-2)) + "|")
         for r in results:
 
-            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
+            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(prediction_set_id, r["ID"]))
             if len(existing_results) > 0:
                 #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
                 continue
 
-            PredictionID = self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
+            PredictionID = self.addPrediction(r["ExperimentID"], r["ID"], prediction_set_id, protocol_id, keep_hetatm_lines, PDB_ID = r["PDBFileID"], ReverseMutation = False, InputFiles = {}, testonly = testonly)
             count += 1
             if showprogress:
                 if count > 100:

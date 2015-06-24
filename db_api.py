@@ -658,12 +658,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             uds['MutagenesisCount'] = self.DDG_db.execute_select(qry, parameters=(uds['ID'],))[0]['MutagenesisCount']
             d[uds['TextID']] = uds
 
+            subsets = {}
             if self._get_user_dataset_experiment_tag_table():
-                subsets = {}
                 qry = 'SELECT Tag, COUNT(Tag) AS MutagenesisCount FROM %s INNER JOIN %s ON %sID=%s.ID WHERE UserDataSetID=%%s GROUP BY Tag' % (self._get_user_dataset_experiment_tag_table(), self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table())
                 for tagged_subset in self.DDG_db.execute_select(qry, parameters=(uds['ID'],)):
                     subsets[tagged_subset['Tag']] = dict(MutagenesisCount = tagged_subset['MutagenesisCount'])
-                uds['Subsets'] = subsets
+            uds['Subsets'] = subsets
 
         return d
 
@@ -742,6 +742,22 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             Variants of this function were used before for CypA and ubiquitin runs.
             This is currently unimplemented but ask Shane if we need this functionality again.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
+
+
+    def _add_prediction_run_preconditions(self, prediction_set_id, user_dataset_name, tagged_subset):
+        '''Check to make sure that the prediction set, user dataset, and optional tagged subset make sense for this API.'''
+        qry = 'SELECT %s FROM PredictionSet WHERE ID=%%s' % (self._get_prediction_type())
+        prediction_set = self.DDG_db.execute_select(qry, parameters=(prediction_set_id,))
+        if not prediction_set:
+            raise colortext.Exception('The prediction set "%s" does not exist in the database.' % prediction_set_id)
+        elif prediction_set[0][self._get_prediction_type()] != 1:
+            raise colortext.Exception('The prediction set "%s" is not the correct type ("%s") for this API.' % (prediction_set_id, self._get_prediction_type()))
+
+        allowed_user_datasets = self.get_defined_user_datasets()
+        if user_dataset_name not in allowed_user_datasets:
+            raise colortext.Exception('The user dataset "%s" does not exist in the database.' % user_dataset_name)
+        if tagged_subset and tagged_subset not in allowed_user_datasets[user_dataset_name]['Subsets']:
+            raise colortext.Exception('The tagged subset "%s" of user dataset "%s" does not exist in the database.' % (tagged_subset, user_dataset_name))
 
 
     @job_creator

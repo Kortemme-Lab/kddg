@@ -94,10 +94,19 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_prediction_run(self, userdatasetTextID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = False, Description = {}, InputFiles = {}, quiet = False, testonly = False, only_single_mutations = False, shortrun = False):
-        raise Exception('This function needs to be rewritten.')
+    def add_prediction_run(self, prediction_set_id, user_dataset_name, protocol_id = None, tagged_subset = None, keep_hetatm_lines = False, input_files = {}, quiet = False, test_only = False, only_single_mutations = False, short_run = False):
+        '''Adds all jobs corresponding to a user dataset e.g. add_prediction_run("my first run", "AllBindingAffinityData", tagged_subset = "ZEMu").
+           If keep_hetatm_lines is False then all HETATM records for the PDB prediction chains will be removed. Otherwise, they are kept.
+           input_files is a global parameter for the run which is generally empty. Any files added here will be associated to all predictions in the run.
+        '''
 
-        assert(self.DDG_db.execute_select("SELECT ID FROM PredictionSet WHERE ID=%s", parameters=(PredictionSet,)))
+        # Check preconditions
+        assert(not(input_files)) # todo: do something with input_files when we use that here - call self._add_file_content, associate the filenames with the FileContent IDs, and pass that dict to add_job which will create PredictionPPIFile records
+        assert(only_single_mutations == False) # todo: support this later? it may make more sense to just define new UserDataSets
+        self._add_prediction_run_preconditions(prediction_set_id, user_dataset_name, tagged_subset)
+
+        sys.exit(0)
+        raise Exception('This function needs to be rewritten.')
 
         #results = self.DDG_db.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
         results = self.DDG_db.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
@@ -105,7 +114,7 @@ class BindingAffinityDDGInterface(ddG):
             return False
 
         if not(quiet):
-            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, ProtocolID))
+            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, protocol_id))
             colortext.message("%d records found in the UserDataSet" % len(results))
 
         count = 0
@@ -114,18 +123,18 @@ class BindingAffinityDDGInterface(ddG):
             print("|" + ("*" * (int(len(results)/100)-2)) + "|")
         for r in results:
 
-            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(PredictionSet, r["ID"]))
+            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(prediction_set_id, r["ID"]))
             if len(existing_results) > 0:
                 #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
                 continue
 
-            PredictionID = self.addPrediction(r["ExperimentID"], r["ID"], PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = r["PDBFileID"], StoreOutput = StoreOutput, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = testonly)
+            PredictionID = self.add_job(r["ExperimentID"], r["ID"], prediction_set_id, protocol_id, keep_hetatm_lines, PDB_ID = r["PDBFileID"], ReverseMutation = False, input_files = input_files, test_only = test_only)
             count += 1
             if showprogress:
                 if count > 100:
                     colortext.write(".", "cyan", flush = True)
                     count = 0
-            if shortrun and count > 4:
+            if short_run and count > 4:
                 break
         print("")
         return(True)
@@ -140,14 +149,14 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_job(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True):
+    def add_job(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, keep_hetatm_lines, PDB_ID = None, ReverseMutation = False, input_files = {}, test_only = False, strip_other_chains = True):
         '''This function inserts a prediction into the database.
             The parameters define:
                 the experiment we are running the prediction for;
                 the name of the set of predictions for later grouping;
                 the short description of the Command to be used for prediction;
                 whether HETATM lines are to be kept or not.
-            We strip the PDB based on the chains used for the experiment and KeepHETATMLines.
+            We strip the PDB based on the chains used for the experiment and keep_hetatm_lines.
             We then add the prediction record, including the stripped PDB and the inverse mapping
             from Rosetta residue numbering to PDB residue numbering.'''
         raise Exception('This function needs to be rewritten.')
@@ -203,9 +212,9 @@ class BindingAffinityDDGInterface(ddG):
             # Strip the PDB to the list of chains. This also renumbers residues in the PDB for Rosetta.
             chains = [result['Chain'] for result in self.DDG_db.call_select_proc("GetChains", parameters = parameters)]
             if strip_other_chains:
-                pdb.stripForDDG(chains, KeepHETATMLines, numberOfModels = 1)
+                pdb.stripForDDG(chains, keep_hetatm_lines, numberOfModels = 1)
             else:
-                pdb.stripForDDG(True, KeepHETATMLines, numberOfModels = 1)
+                pdb.stripForDDG(True, keep_hetatm_lines, numberOfModels = 1)
 
             #print('\n'.join(pdb.lines))
             # - Post stripping checks -
@@ -237,12 +246,10 @@ class BindingAffinityDDGInterface(ddG):
             colortext.error(traceback.format_exc())
             raise colortext.Exception("An exception occurred retrieving the experimental data for Experiment ID #%s." % experimentID)
 
-        #InputFiles["RESFILE"] = resfile
-        InputFiles["MUTFILE"] = mutfile
+        # todo: do something with input_files when we use that here - see add_prediction_run
+        assert(not(input_files))
 
         ExtraParameters = {}
-        InputFiles = pickle.dumps(InputFiles)
-        Description = pickle.dumps(Description)
         ExtraParameters = pickle.dumps(ExtraParameters)
 
         PredictionFieldNames = self.DDG_db.FieldNames.Prediction
@@ -251,16 +258,13 @@ class BindingAffinityDDGInterface(ddG):
             PredictionFieldNames.UserDataSetExperimentID : UserDataSetExperimentID,
             PredictionFieldNames.PredictionSet		: PredictionSet,
             PredictionFieldNames.ProtocolID			: ProtocolID,
-            PredictionFieldNames.KeptHETATMLines	: KeepHETATMLines,
+            PredictionFieldNames.KeptHETATMLines	: keep_hetatm_lines,
             PredictionFieldNames.StrippedPDB		: strippedPDB,
             PredictionFieldNames.ResidueMapping		: pickle.dumps(pdb.get_ddGInverseResmap()),
-            PredictionFieldNames.InputFiles			: InputFiles,
-            PredictionFieldNames.Description		: Description,
             PredictionFieldNames.Status 			: "queued",
             PredictionFieldNames.ExtraParameters	: ExtraParameters,
-            PredictionFieldNames.StoreOutput		: StoreOutput,
         }
-        if not testonly:
+        if not test_only:
             self.DDG_db.insertDict('Prediction', params)
 
             # Add cryptID string
