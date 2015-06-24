@@ -136,6 +136,7 @@ class GenericUserInterface(object):
         self._api_function_args = {}
         self.DDG_db = self._ddg_interface.DDG_db
         self.DDG_db_utf = self._ddg_interface.DDG_db_utf
+        self.cls = cls
 
         for m in inspect.getmembers(cls, predicate=inspect.ismethod):
             if m[0][0] != '_':
@@ -148,6 +149,18 @@ class GenericUserInterface(object):
 
     def help(self, show_deprecated_functions = False):
         print(self.get_help(show_deprecated_functions = show_deprecated_functions))
+
+
+    def get_help_str(self, fn, fn_name):
+
+        if fn.__doc__:
+            return fn.__doc__
+
+        # Wind up the hierarchy until we find the class where this function was last defined
+        for parent in self.cls.__mro__[1:]:
+            overridden = getattr(parent, fn_name, None)
+            if overridden: break
+        return overridden.__doc__
 
 
     def get_help(self, show_deprecated_functions = False):
@@ -179,7 +192,7 @@ class GenericUserInterface(object):
             doc_strings[function_layer] = doc_strings.get(function_layer, {})
             doc_strings[function_layer][function_layer_order] = doc_strings[function_layer].get(function_layer_order, {})
             doc_strings[function_layer][function_layer_order][function_class] = doc_strings[function_layer][function_layer_order].get(function_class, {})
-            doc_strings[function_layer][function_layer_order][function_class][fn_name] = fn.__doc__
+            doc_strings[function_layer][function_layer_order][function_class][fn_name] = self.get_help_str(fn, fn_name)
 
         for function_layer, function_layer_components in sorted(doc_strings.iteritems()):
             function_layer_name = functional_layer[function_layer]

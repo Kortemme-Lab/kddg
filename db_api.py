@@ -752,23 +752,23 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @job_execution
     def get_job(self, prediction_set):
-        '''Abstract function.'''
+        '''Returns None if no queued jobs exist or if the PredictionSet is halted otherwise return details necessary to run the job.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
         #returns None if no queued jobs exist or if the PredictionSet is halted otherwise return details necessary to run the job
 
 
     @job_execution
     def start_job(self, prediction_id, prediction_set):
-        '''Abstract function.'''
+        '''Sets the job status to "active". prediction_set must be passed and is used as a sanity check.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
-         # sets the job status to 'active'
+
 
 
     @job_completion
     def fail_job(self, prediction_id, prediction_set, maxvmem, ddgtime):
-        '''Abstract function.'''
+        '''Sets the job status to "failed". prediction_set must be passed and is used as a sanity check.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
-        # sets a job to 'failed'. prediction_set is redundant but acts as a sanity check
+        # sets a job to 'failed'.
 
 
     @job_completion
@@ -785,19 +785,19 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @job_completion
     def complete_job(self, prediction_id, prediction_set, scores, maxvmem, ddgtime):
-        '''Abstract function.'''
+        '''Sets a job to 'completed' and stores scores. prediction_set must be passed and is used as a sanity check.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
-        # sets a job to 'completed' and stores scores. prediction_set is redundant but acts as a sanity check
 
 
     @job_results
     def add_ddg_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
-        '''Add an inThis function parses the output and stores scores. Most users will only need to call this function.'''
+        '''Add the DDG scores for a given score method for a prediction.'''
         raise Exception('not implemented yet. This should only need to be implemented for the base class')
 
 
     @job_results
     def _add_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores, is_wildtype):
+        '''Add the scores for a given score method for one structure of a prediction.'''
         raise Exception('not implemented yet. This should only need to be implemented for the base class')
         #if ScoreMethodID is None, raise an exception but report the score method id for the default score method
         #assert(scores fields match db fields)
@@ -805,12 +805,14 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @job_results
     def add_wildtype_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
+        '''Add the scores for a given score method for one wildtype structure of a prediction.'''
         return self._add_structure_score(prediction_set, prediction_id, structure_id, ScoreMethodID, scores, True)
         raise Exception('not implemented yet. This should only need to be implemented for the base class')
 
 
     @job_results
     def add_mutant_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
+        '''Add the scores for a given score method for one mutant structure of a prediction.'''
         return self._add_structure_score(prediction_set, prediction_id, structure_id, ScoreMethodID, scores, False)
         raise Exception('not implemented yet. This should only need to be implemented for the base class')
 
@@ -824,6 +826,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @job_results
     def get_ddg_scores_per_structure(self, prediction_id):
+        '''Returns the list of all DDG scores for a prediction_id. NOTE: Consider allowing the score method to be passed as a parameter.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
@@ -851,6 +854,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @job_results
     def write_job_data_to_disk(self, prediction_id, output_path):
+        '''Saves the job output for the prediction to the specified path.'''
         assert(os.path.exists(output_path))
         assert(output_path != self.prediction_data_path) # do not overwrite the existing file or allow to extract in place
         archive = self.get_job_data(prediction_id)
@@ -905,6 +909,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @analysis_api
     def determine_best_pair(self, prediction_id, score_method_id = 1):
+        '''This returns the best wildtype/mutant pair for a prediction given a scoring method. NOTE: Consider generalising this to the n best pairs.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 

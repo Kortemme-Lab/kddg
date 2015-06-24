@@ -328,23 +328,17 @@ class MonomericStabilityDDGInterface(ddG):
 
     @job_execution
     def get_job(self, prediction_set):
-        '''Abstract function.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
-        #returns None if no queued jobs exist or if the PredictionSet is halted otherwise return details necessary to run the job
 
 
     @job_execution
     def start_job(self, prediction_id, prediction_set):
-        '''Abstract function.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
-         # sets the job status to 'active'
 
 
     @job_completion
     def fail_job(self, prediction_id, prediction_set, maxvmem, ddgtime):
-        '''Abstract function.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
-        # sets a job to 'failed'. prediction_set is redundant but acts as a sanity check
 
 
     @job_completion
@@ -361,9 +355,8 @@ class MonomericStabilityDDGInterface(ddG):
 
     @job_completion
     def complete_job(self, prediction_id, prediction_set, scores, maxvmem, ddgtime):
-        '''Abstract function.'''
+        '''Sets a job to 'completed' and stores scores. prediction_set must be passed and is used as a sanity check.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
-        # sets a job to 'completed' and stores scores using self.store_scores. prediction_set is redundant but acts as a sanity check
 
 
     @staticmethod
@@ -907,6 +900,7 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
 
     @analysis_api
     def get_analysis_set_overlap_by_Experiment_as_radii(self, max_radius, restrict_to_subsets = set(), UserDataSetID = 1):
+        '''Todo: look at where this was called and figure out what I was doing. I think this was used to decide on the relative sizes of overlaps between datasets in a Venn diagram.'''
         import numpy
         df = self.get_analysis_set_overlap_by_Experiment(restrict_to_subsets = restrict_to_subsets, UserDataSetID = UserDataSetID)
 
