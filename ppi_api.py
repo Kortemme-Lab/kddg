@@ -98,24 +98,34 @@ class BindingAffinityDDGInterface(ddG):
         '''Adds all jobs corresponding to a user dataset e.g. add_prediction_run("my first run", "AllBindingAffinityData", tagged_subset = "ZEMu").
            If keep_hetatm_lines is False then all HETATM records for the PDB prediction chains will be removed. Otherwise, they are kept.
            input_files is a global parameter for the run which is generally empty. Any files added here will be associated to all predictions in the run.
-        '''
+
+           Returns False if no predictions were added to the run else return True if all predictions (and there were some) were added to the run.'''
 
         # Check preconditions
         assert(not(input_files)) # todo: do something with input_files when we use that here - call self._add_file_content, associate the filenames with the FileContent IDs, and pass that dict to add_job which will create PredictionPPIFile records
         assert(only_single_mutations == False) # todo: support this later? it may make more sense to just define new UserDataSets
         self._add_prediction_run_preconditions(prediction_set_id, user_dataset_name, tagged_subset)
 
-        sys.exit(0)
-        raise Exception('This function needs to be rewritten.')
-
-        #results = self.DDG_db.execute_select("SELECT * FROM UserDataSet WHERE TextID=%s", parameters=(userdatasetTextID,))
-        results = self.DDG_db.execute_select("SELECT UserDataSetExperiment.* FROM UserDataSetExperiment INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%s", parameters=(userdatasetTextID,))
-        if not results:
+        # Get the list of user dataset experiment records
+        user_dataset_experiments = self.get_user_dataset_experiment_ids(user_dataset_name, tagged_subset = tagged_subset)
+        assert(set([u['IsComplex'] for u in user_dataset_experiments]) == set([1,]))
+        if not user_dataset_experiments:
             return False
 
-        if not(quiet):
-            colortext.message("Creating predictions for UserDataSet %s using protocol %s" % (userdatasetTextID, protocol_id))
-            colortext.message("%d records found in the UserDataSet" % len(results))
+        # Count the number of individual PDB files
+        pdb_file_ids = set([u['PDBFileID'] for u in user_dataset_experiments])
+        if not quiet:
+            tagged_subset_str = ''
+            if tagged_subset:
+                tagged_subset_str = 'subset "%s" of ' % tagged_subset
+            colortext.message('Adding %d predictions spanning %d PDB files for %suser dataset "%s" using protocol %s.' % (len(user_dataset_experiments), len(pdb_file_ids), tagged_subset_str, user_dataset_name, str(protocol_id or 'N/A')))
+
+        import sys; sys.exit(0)
+
+        #SetNumber
+        #PPMutagenesisID
+        #PPComplexID
+        #PDBFileID
 
         count = 0
         showprogress = not(quiet) and len(results) > 300

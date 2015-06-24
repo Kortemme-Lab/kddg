@@ -648,9 +648,10 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         return [r['ID'] for r in self.DDG_db.execute_select(qry, parameters=(PredictionSetID,))]
 
 
-    @job_creator
+    @informational_job
     def get_defined_user_datasets(self):
-        '''Return the set of defined UserDataSets.'''
+        '''Return a dict detailing the defined UserDataSets, their tagged subsets (if any), and the mutagenesis counts
+          (i.e. the number of prediction cases) of both the user datasets and the associated tagged subsets .'''
         d = {}
         user_datasets = self.DDG_db.execute_select('SELECT * FROM UserDataSet WHERE DatasetType=%s', parameters=(self._get_prediction_dataset_type(),))
         for uds in user_datasets:
@@ -664,8 +665,18 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 for tagged_subset in self.DDG_db.execute_select(qry, parameters=(uds['ID'],)):
                     subsets[tagged_subset['Tag']] = dict(MutagenesisCount = tagged_subset['MutagenesisCount'])
             uds['Subsets'] = subsets
-
         return d
+
+
+    @informational_job
+    def get_user_dataset_experiment_ids(self, user_dataset_name, tagged_subset = None):
+        '''Returns a list of UserDataSet experiment records for the given user dataset.'''
+        if tagged_subset:
+            qry = 'SELECT %s.* FROM %s INNER JOIN %s ON %sID=%s.ID INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%%s AND Tag=%%s' % (self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_tag_table(), self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table())
+            return self.DDG_db.execute_select(qry, parameters=(user_dataset_name, tagged_subset))
+        else:
+            qry = 'SELECT %s.* FROM %s INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%%s' % (self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table())
+            return self.DDG_db.execute_select(qry, parameters=(user_dataset_name,))
 
 
     ###########################################################################################
