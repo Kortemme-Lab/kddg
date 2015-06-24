@@ -38,7 +38,7 @@ def brokenfn(func):
     return func
 
 def deprecated(func):
-    func._helptype = 'Deprecated functions'
+    func._helptype = 'Deprecated functions. These should be removed but exist for now to print errors upon use'
     func._layer = 0
     func._layer_order = 2
     return func
@@ -174,7 +174,7 @@ class GenericUserInterface(object):
             except:
                 function_class = 'Miscellanous'
 
-            if function_class == 'Deprecated functions' and not show_deprecated_functions:
+            if function_class.startswith('Deprecated functions') and not show_deprecated_functions:
                 continue
 
             doc_strings[function_layer] = doc_strings.get(function_layer, {})

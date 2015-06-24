@@ -81,8 +81,8 @@ class MonomericStabilityDDGInterface(ddG):
 
 
     @job_creator
-    def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False):
-        return super(MonomericStabilityDDGInterface, self).add_prediction_set(PredictionSetID, halted = halted, Priority = Priority, BatchSize = BatchSize, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False)
+    def add_prediction_set(self, prediction_set_id, halted = True, priority = 5, batch_size = 40, allow_existing_prediction_set = False):
+        return super(MonomericStabilityDDGInterface, self).add_prediction_set(prediction_set_id, halted = halted, priority = priority, batch_size = batch_size, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False)
 
 
     @job_creator
@@ -329,6 +329,11 @@ class MonomericStabilityDDGInterface(ddG):
     @job_execution
     def start_job(self, prediction_id, prediction_set):
         raise Exception('This function needs to be implemented by subclasses of the API.')
+
+
+    @job_execution
+    def get_max_number_of_cluster_jobs(self, prediction_set_id, priority):
+        return self.DDG_db.execute_select('SELECT Value FROM _DBCONSTANTS WHERE VariableName="MaxStabilityClusterJobs"')['Value']
 
 
     @job_completion
@@ -931,7 +936,9 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
 
     def _get_prediction_table(self): return 'Prediction'
     def _get_prediction_type(self): return 'ProteinStability'
+    def _get_prediction_dataset_type(self): return 'Protein stability'
     def _get_prediction_type_description(self): return 'monomeric stability'
+    def _get_user_dataset_experiment_table(self): return 'UserDataSetExperiment'
 
 
     ###########################################################################################

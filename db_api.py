@@ -648,6 +648,25 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         return [r['ID'] for r in self.DDG_db.execute_select(qry, parameters=(PredictionSetID,))]
 
 
+    @job_creator
+    def get_defined_user_datasets(self):
+        '''Return the set of defined UserDataSets.'''
+        d = {}
+        user_datasets = self.DDG_db.execute_select('SELECT * FROM UserDataSet WHERE DatasetType=%s', parameters=(self._get_prediction_dataset_type(),))
+        for uds in user_datasets:
+            qry = 'SELECT COUNT(ID) AS MutagenesisCount FROM %s WHERE UserDataSetID=%%s' % self._get_user_dataset_experiment_table()
+            uds['MutagenesisCount'] = self.DDG_db.execute_select(qry, parameters=(uds['ID'],))[0]['MutagenesisCount']
+            d[uds['TextID']] = uds
+
+            if self._get_user_dataset_experiment_tag_table():
+                subsets = {}
+                qry = 'SELECT Tag, COUNT(Tag) AS MutagenesisCount FROM %s INNER JOIN %s ON %sID=%s.ID WHERE UserDataSetID=%%s GROUP BY Tag' % (self._get_user_dataset_experiment_tag_table(), self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table())
+                for tagged_subset in self.DDG_db.execute_select(qry, parameters=(uds['ID'],)):
+                    subsets[tagged_subset['Tag']] = dict(MutagenesisCount = tagged_subset['MutagenesisCount'])
+                uds['Subsets'] = subsets
+
+        return d
+
 
     ###########################################################################################
     ## Prediction creation/management layer
@@ -662,25 +681,39 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @job_creator
-    def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False):
-        '''Adds a new PredictionSet (a construct used to group Predictions) to the database.'''
+    def add_prediction_set(self, prediction_set_id, halted = True, priority = 5, batch_size = 40, allow_existing_prediction_set = False, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False):
+        '''Adds a new PredictionSet (a construct used to group Predictions) to the database.
+           If a PredictionSet is halted then running schedulers will not kick off the jobs. Otherwise, they will be queued
+           depending on the priority of the PredictionSet (higher numbers mean higher priority).
+           batch_size defines the number of jobs to be added as once as an array job.
+           Returns True if a PredictionSet with the same ID did not previously exist.
+           The priority and batch size can be modified while a scheduler is running and will affect the next round of
+           predictions to be queued.
+           Raises an exception or returns False otherwise depending on the value of allow_existing_prediction_set.'''
+
         if halted:
             Status = 'halted'
         else:
             Status = 'active'
 
-        if allow_existing_prediction_set == False and len(self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(PredictionSetID,))) > 0:
-            raise Exception('The PredictionSet %s already exists.' % PredictionSetID)
+        existing_record = self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(prediction_set_id,))
+        if len(existing_record) > 0:
+            assert(len(existing_record) == 1)
+            if allow_existing_prediction_set == False:
+                raise Exception('The PredictionSet %s already exists.' % prediction_set_id)
+            else:
+                return False
+
         d = dict(
-            ID                  = PredictionSetID,
+            ID                  = prediction_set_id,
             Status              = Status,
-            Priority            = Priority,
+            Priority            = priority,
             ProteinStability    = contains_protein_stability_predictions,
             BindingAffinity     = contains_binding_affinity_predictions,
-            BatchSize           = BatchSize,
+            BatchSize           = batch_size,
         )
         self.DDG_db.insertDictIfNew("PredictionSet", d, ['ID'])
-        return PredictionSetID
+        return True
 
 
     @job_creator
@@ -764,6 +797,35 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         '''Sets the job status to "active". prediction_set must be passed and is used as a sanity check.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
+
+    @job_execution
+    def get_max_number_of_cluster_jobs(self, prediction_set_id, priority):
+        '''Returns the maximum number of cluster jobs that schedulers should run for this interface.'''
+        return self.DDG_db.execute_select('SELECT Value FROM _DBCONSTANTS WHERE VariableName="MaxClusterJobs"')['Value']
+
+
+    def _assert_prediction_set_exists(self, prediction_set_id):
+        if len(self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(prediction_set_id,))) != 1:
+            raise Exception('The PredictionSet %s does not exist.' % prediction_set_id)
+
+
+    @job_execution
+    def alter_prediction_set_priority(self, prediction_set_id, priority):
+        '''Modify the priority for a PredictionSet. Higher values give the PredictionSet more priority over other running PredictionSets.'''
+        priority = int(priority)
+        assert(priority > 0)
+        self._assert_prediction_set_exists(prediction_set_id)
+        self.DDG_db.execute_select('UPDATE PredictionSet SET Priority=%s WHERE ID=%s', parameters=(priority, prediction_set_id,))
+
+
+    @job_execution
+    def alter_prediction_set_batch_size(self, prediction_set_id, batch_size):
+        '''Modify the batch size for a PredictionSet. The batch size is the number of jobs which will be submitted together
+           during subsequent job submissions.'''
+        batch_size = int(batch_size)
+        assert(batch_size > 0)
+        self._assert_prediction_set_exists(prediction_set_id)
+        self.DDG_db.execute_select('UPDATE PredictionSet SET BatchSize=%s WHERE ID=%s', parameters=(batch_size, prediction_set_id,))
 
 
     @job_completion
@@ -1030,7 +1092,10 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     def _get_prediction_table(self): return None
     def _get_prediction_type(self): return None
+    def _get_prediction_dataset_type(self): return None
     def _get_prediction_type_description(self): return None
+    def _get_user_dataset_experiment_table(self): return None
+    def _get_user_dataset_experiment_tag_table(self): return None
 
 
     ###########################################################################################

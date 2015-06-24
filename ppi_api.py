@@ -50,6 +50,7 @@ class BindingAffinityDDGInterface(ddG):
 
     @informational_pdb
     def get_pdb_chains_for_prediction(self, prediction_id):
+        # look up the complex associated with the dataset record for the list of chains
         raise Exception('This needs to be implemented.')
 
 
@@ -82,9 +83,9 @@ class BindingAffinityDDGInterface(ddG):
 
     #   PredictionSet interface
 
-
-    def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False):
-        return super(BindingAffinityDDGInterface, self).add_prediction_set(PredictionSetID, halted = halted, Priority = Priority, BatchSize = BatchSize, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = False, contains_binding_affinity_predictions = True)
+    @job_creator
+    def add_prediction_set(self, prediction_set_id, halted = True, priority = 5, batch_size = 40, allow_existing_prediction_set = False):
+        return super(BindingAffinityDDGInterface, self).add_prediction_set(prediction_set_id, halted = halted, priority = priority, batch_size = batch_size, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = False, contains_binding_affinity_predictions = True)
 
 
     @job_creator
@@ -136,8 +137,6 @@ class BindingAffinityDDGInterface(ddG):
         #assert(existing_prediction_set exists and has records)
         #assert(new_prediction_set is empty)
         #for each prediction record, add the record and all associated predictionfile records,
-
-
 
 
     @job_creator
@@ -274,6 +273,9 @@ class BindingAffinityDDGInterface(ddG):
             return predictionID
 
 
+    @job_execution
+    def get_max_number_of_cluster_jobs(self, prediction_set_id, priority):
+        return self.DDG_db.execute_select('SELECT Value FROM _DBCONSTANTS WHERE VariableName="MaxStabilityClusterJobs"')['Value']
 
 
     @job_completion
@@ -306,8 +308,10 @@ class BindingAffinityDDGInterface(ddG):
 
     def _get_prediction_table(self): return 'PredictionPPI'
     def _get_prediction_type(self): return 'BindingAffinity'
+    def _get_prediction_dataset_type(self): return 'Binding affinity'
     def _get_prediction_type_description(self): return 'binding affinity'
-
+    def _get_user_dataset_experiment_table(self): return 'UserPPDataSetExperiment'
+    def _get_user_dataset_experiment_tag_table(self): return 'UserPPDataSetExperimentTag'
 
     ###########################################################################################
     ## Information layer
