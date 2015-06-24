@@ -3,21 +3,24 @@
 """
 ppi_api.py
 High-level functions for interacting with the protein-protein interaction sections of the ddG database.
-The API for the database is overgrown and all over the place. It should be refactored properly but for now I am
-separating out the protein-protein functionality so that we can at least design that from a clean slate.
+
+Classes:
+BindingAffinityDDGInterface - an class used to interface with the database. Call get_interface to get a user API based on this class.
 
 Created by Shane O'Connor 2015.
 Copyright (c) 2015 __UCSF__. All rights reserved.
 """
 
-from tools.fs.fsio import read_file
-from tools import colortext
-import ddgdbapi
 import pprint
+from io import BytesIO
+import os
+import zipfile
+
 from api_layers import *
 from db_api import ddG
-
-
+from tools import colortext
+from tools.bio.alignment import ScaffoldModelChainMapper
+from tools.fs.fsio import read_file
 
 
 def get_interface(passwd, username = 'kortemmelab'):
@@ -33,6 +36,22 @@ class BindingAffinityDDGInterface(ddG):
     def __init__(self, passwd = None, username = 'kortemmelab'):
         super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
+
+
+    ###########################################################################################
+    ## Information layer
+    ##
+    ## This layer is for functions which extract data from the database.
+    ###########################################################################################
+
+
+    #== Information API =======================================================================
+
+
+    @informational_pdb
+    def get_pdb_chains_for_prediction(self, prediction_id):
+        '''Returns the PDB file ID and a list of chains for the prediction.'''
+        raise Exception('This needs to be implemented.')
 
 
     ##### Public API: Rosetta-related functions

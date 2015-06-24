@@ -447,9 +447,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def get_pdb_details_for_analysis(self, pdb_ids, cached_pdb_details = None): raise Exception('This function has been deprecated. Use get_pdb_details instead.')
 
     @deprecated
-    def get_prediction_experiment_chains(self, predictionset): raise Exception('This function has been deprecated. Use get_pdb_chains_used_for_prediction_set instead.')
-
-    @deprecated
     def add_pdb_file_content(self, pdb_content): raise Exception('This function may never have been used and should be removed.') # return self._add_file_content(pdb_content, rm_trailing_line_whitespace = True, forced_mime_type = 'chemical/x-pdb')
 
     @deprecated
@@ -598,10 +595,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     @informational_pdb
     def get_pdb_chains_for_prediction(self, prediction_id):
         '''Returns the PDB file ID and a list of chains for the prediction.'''
-        raise Exception('Abstract method. This needs to be overridden by a subclass.')
-
-    @informational_pdb
-    def get_pdb_chains_used_for_prediction_set(self, prediction_set):
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
