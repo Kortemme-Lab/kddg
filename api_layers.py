@@ -151,18 +151,6 @@ class GenericUserInterface(object):
         print(self.get_help(show_deprecated_functions = show_deprecated_functions))
 
 
-    def get_help_str(self, fn, fn_name):
-
-        if fn.__doc__:
-            return fn.__doc__
-
-        # Wind up the hierarchy until we find the class where this function was last defined
-        for parent in self.cls.__mro__[1:]:
-            overridden = getattr(parent, fn_name, None)
-            if overridden: break
-        return overridden.__doc__
-
-
     def get_help(self, show_deprecated_functions = False):
         helpstr = []
         title = ' %s API ' % self._ddg_interface.__class__.__name__
@@ -192,7 +180,7 @@ class GenericUserInterface(object):
             doc_strings[function_layer] = doc_strings.get(function_layer, {})
             doc_strings[function_layer][function_layer_order] = doc_strings[function_layer].get(function_layer_order, {})
             doc_strings[function_layer][function_layer_order][function_class] = doc_strings[function_layer][function_layer_order].get(function_class, {})
-            doc_strings[function_layer][function_layer_order][function_class][fn_name] = self.get_help_str(fn, fn_name)
+            doc_strings[function_layer][function_layer_order][function_class][fn_name] = self._get_fn_docstring(fn, fn_name)
 
         for function_layer, function_layer_components in sorted(doc_strings.iteritems()):
             function_layer_name = functional_layer[function_layer]
@@ -211,3 +199,17 @@ class GenericUserInterface(object):
                             helpstr.append(colortext.mred('    <not documented>'))
                         helpstr.append('')
         return '\n'.join(helpstr)
+
+
+    def _get_fn_docstring(self, fn, fn_name, default_name = ''):
+        '''Returns the docstring for a function, winding up the inheritance tree until we find a non-empty docstring.
+           If no docstring is found, default_name is returned.'''
+        if fn.__doc__:
+            return fn.__doc__
+
+        # Wind up the hierarchy until we find the class where this function was last defined
+        for parent in self.cls.__mro__[1:]:
+            overridden = getattr(parent, fn_name, None)
+            if overridden:
+                return overridden.__doc__
+        return default_name
