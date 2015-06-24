@@ -50,7 +50,6 @@ class BindingAffinityDDGInterface(ddG):
 
     @informational_pdb
     def get_pdb_chains_for_prediction(self, prediction_id):
-        '''Returns the PDB file ID and a list of chains for the prediction.'''
         raise Exception('This needs to be implemented.')
 
 
@@ -65,17 +64,6 @@ class BindingAffinityDDGInterface(ddG):
     @job_input
     def create_mutfile(self, prediction_id):
         raise Exception('This needs to be implemented.')
-
-
-
-    ##### Public API: PDB-related functions
-
-
-
-    def get_pdb_chains_for_prediction(self, prediction_id):
-        '''<!Job insertion>Returns the PDB file ID and a list of chains for the prediction.'''
-        raise Exception('This needs to be implemented.')
-
 
 
     ###########################################################################################
@@ -96,51 +84,12 @@ class BindingAffinityDDGInterface(ddG):
 
 
     def add_prediction_set(self, PredictionSetID, halted = True, Priority = 5, BatchSize = 40, allow_existing_prediction_set = False):
-        '''Adds a new PredictionSet (a construct used to group Predictions) to the database.'''
         return super(BindingAffinityDDGInterface, self).add_prediction_set(PredictionSetID, halted = halted, Priority = Priority, BatchSize = BatchSize, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = False, contains_binding_affinity_predictions = True)
 
 
     @job_creator
     def add_job_command_lines(self, *args, **kwargs):
-        '''Abstract function.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
-
-
-    @job_creator
-    def add_jobs_by_pdb_id(self, pdb_ID, PredictionSet, ProtocolID, status = 'active', priority = 5, KeepHETATMLines = False, strip_other_chains = True):
-        ''' This function adds predictions for all Experiments corresponding to pdb_ID to the specified prediction set.
-            This is useful for custom runs e.g. when we are using the DDG scheduler for design rather than for benchmarking.
-        '''
-        raise Exception('This function needs to be rewritten.')
-        colortext.printf("\nAdding any mutations for this structure which have not been queued/run in the %s prediction set." % PredictionSet, "lightgreen")
-
-        d = {
-            'ID' : PredictionSet,
-            'Status' : status,
-            'Priority' : priority,
-            'BatchSize' : 40,
-            'EntryDate' : datetime.datetime.now(),
-        }
-        self.DDG_db.insertDictIfNew('PredictionSet', d, ['ID'])
-
-        # Update the priority and activity if necessary
-        self.DDG_db.execute('UPDATE PredictionSet SET Status=%s, Priority=%s WHERE ID=%s', parameters = (status, priority, PredictionSet))
-
-        # Determine the set of experiments to add
-        ExperimentIDs = set([r['ID'] for r in self.DDG_db.execute_select('SELECT ID FROM Experiment WHERE PDBFileID=%s', parameters=(pdb_ID,))])
-        ExperimentIDsInPredictionSet = set([r['ExperimentID'] for r in self.DDG_db.execute_select('SELECT ExperimentID FROM Prediction WHERE PredictionSet=%s', parameters=(PredictionSet,))])
-        experiment_IDs_to_add = sorted(ExperimentIDs.difference(ExperimentIDsInPredictionSet))
-
-        if experiment_IDs_to_add:
-            colortext.printf("\nAdding %d jobs to the prediction set." % len(experiment_IDs_to_add), "lightgreen")
-            count = 0
-            for experiment_ID in experiment_IDs_to_add:
-                colortext.write('.', "lightgreen")
-                self.addPrediction(experiment_ID, None, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True, strip_other_chains = strip_other_chains)
-                count +=1
-        else:
-            colortext.printf("\nAll jobs are already in the queue or have been run.", "lightgreen")
-        print('')
 
 
     @job_creator
@@ -334,7 +283,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
 
-    ##### Private API: Job completion functions
+
 
 
     @job_completion
@@ -349,51 +298,59 @@ class BindingAffinityDDGInterface(ddG):
         raise Exception('not implemented yet')
 
 
-    def _add_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores, is_wildtype):
-        raise Exception('not implemented yet')
-        #if ScoreMethodID is None, raise an exception but report the score method id for the default score method
-        #assert(scores fields match db fields)
+
+    ################################################################################################
+    ## Private API layer
+    ## These are helper functions used internally by the class but which are not intended for export
+    ################################################################################################
 
 
-
-    ##### Public API: Job completion functions
-
-
-
-    def add_ddg_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
-        raise Exception('not implemented yet')
-        #if ScoreMethodID is None, raise an exception but report the score method id for the default score method
-        #assert(scores fields match db fields)
-
-
-    def add_wildtype_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
-        raise Exception('not implemented yet')
-
-
-    def add_mutant_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
-        raise Exception('not implemented yet')
-
-
-
-    ################################################
-    ## Private API
-    ################################################
-
-
-    #####
-    # Subclassing functions
-    #####
+    ###########################################################################################
+    ## Subclass layer
+    ##
+    ## These functions need to be implemented by subclasses
+    ###########################################################################################
 
     # Concrete functions
+
 
     def _get_prediction_table(self): return 'PredictionPPI'
     def _get_prediction_type(self): return 'BindingAffinity'
     def _get_prediction_type_description(self): return 'binding affinity'
 
 
+    ###########################################################################################
+    ## Information layer
+    ##
+    ## This layer is for functions which extract data from the database.
+    ###########################################################################################
 
-    ##### Private API: Job insertion helper functions
 
+    #== Information API =======================================================================
+
+    @informational_pdb
+    def _get_pdb_chains_used_for_prediction_set(self, prediction_set):
+        raise Exception('not implemented yet')
+        return self.DDG_db.execute_select('''
+            SELECT Prediction.ID, Experiment.PDBFileID, Chain
+            FROM Prediction
+            INNER JOIN Experiment ON Experiment.ID=Prediction.ExperimentID
+            INNER JOIN ExperimentChain ON ExperimentChain.ExperimentID=Prediction.ExperimentID
+            WHERE PredictionSet=%s''', parameters=(prediction_set,))
+
+
+    ###########################################################################################
+    ## Prediction layer
+    ##
+    ## This part of the API is responsible for inserting prediction jobs in the database via
+    ## the trickle-down proteomics paradigm.
+    ###########################################################################################
+
+
+    #== Job creation API ===========================================================
+    #
+    # This part of the API is responsible for inserting prediction jobs in the database via
+    # the trickle-down proteomics paradigm.
 
 
     def _charge_prediction_set_by_residue_count(self, PredictionSet):
