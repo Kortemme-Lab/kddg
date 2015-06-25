@@ -187,33 +187,14 @@ class BindingAffinityDDGInterface(ddG):
 
 
     def _add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, user_dataset_experiment_id = None, keep_hetatm_lines = False, input_files = {}, test_only = False):
-        '''This is the general function which adds a prediction job to the database. We separate it out from add_job as jobs
-           added using that function should have no associated user dataset experiment ID.'''
+        '''This is the internal function which adds a prediction job to the database. We distinguish it from add_job as
+           prediction jobs added using that function should have no associated user dataset experiment ID.'''
         raise Exception('This function needs to be rewritten.')
-
-        a='''
-PredictionPPIFile
-  PredictionPPIID
-  FileContentID
-  Filename
-  Filetype
-  FileRole
-  Stage = 'Input' '''
-
-        b='''
-
-PredictionSet
-PPMutagenesisID
-UserPPDataSetExperimentID
-ProtocolID
-TemporaryProtocolField
-Status = 'queued'
-Cost = ?
-KeptHETATMLines = keep_hetatm_lines'''
-
 
         # todo: do something with input_files when we use that here - see add_prediction_run
         assert(not(input_files))
+
+        # use pp_complex_id, pdb_file_id, pp_complex_pdb_set_number to create a stripped pdb, resfile/mutfile, and residue mapping
 
 
         parameters = (experimentID,)
@@ -304,29 +285,49 @@ KeptHETATMLines = keep_hetatm_lines'''
         ExtraParameters = {}
         ExtraParameters = pickle.dumps(ExtraParameters)
 
-        PredictionFieldNames = self.DDG_db.FieldNames.Prediction
-        params = {
-            PredictionFieldNames.ExperimentID		: experimentID,
-            PredictionFieldNames.UserDataSetExperimentID : UserDataSetExperimentID,
-            PredictionFieldNames.PredictionSet		: PredictionSet,
-            PredictionFieldNames.ProtocolID			: ProtocolID,
-            PredictionFieldNames.KeptHETATMLines	: keep_hetatm_lines,
-            PredictionFieldNames.StrippedPDB		: strippedPDB,
-            PredictionFieldNames.ResidueMapping		: pickle.dumps(pdb.get_ddGInverseResmap()),
-            PredictionFieldNames.Status 			: "queued",
-            PredictionFieldNames.ExtraParameters	: ExtraParameters,
-        }
-        if not test_only:
-            self.DDG_db.insertDict('Prediction', params)
+        prediction_id = None
+        try:
+            raise Exception('test')
+            # Check to see whether the user dataset experiment/protocol combination already exists for this prediction set in which case we early-out
+            qry = 'SELECT * FROM %s WHERE PredictionSet=%%s AND UserPPDataSetExperimentID=%ss AND ProtocolID=%ss' % self._get_prediction_table()
+            existing_record = self.DDG_db.execute_select(qry, parameters=(prediction_set_id, user_dataset_experiment_id, protocol_id))
+            if existing_record:
+                assert(len(existing_record) == 1)
+                return existing_record[0]['ID']
 
-            # Add cryptID string
-            predictionID = self.DDG_db.getLastRowID()
-            entryDate = self.DDG_db.execute_select("SELECT EntryDate FROM Prediction WHERE ID=%s", parameters = (predictionID,))[0]["EntryDate"]
-            rdmstring = ''.join(random.sample('0123456789abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 16))
-            cryptID = "%(predictionID)s%(experimentID)s%(PredictionSet)s%(ProtocolID)s%(entryDate)s%(rdmstring)s" % vars()
-            cryptID = md5.new(cryptID.encode('utf-8')).hexdigest()
-            entryDate = self.DDG_db.execute("UPDATE Prediction SET cryptID=%s WHERE ID=%s", parameters = (cryptID, predictionID))
-            return predictionID
+            prediction_record = dict(
+                PredictionSet = prediction_set_id,
+                PPMutagenesisID = pp_mutagenesis_id,
+                UserPPDataSetExperimentID = user_dataset_experiment_id,
+                ProtocolID = protocol_id,
+                TemporaryProtocolField = None,
+                Status = 'queued',
+                Cost = read_number_of_residues(),
+                KeptHETATMLines = keep_hetatm_lines,
+            )
+            if not test_only:
+                self.DDG_db.insertDictIfNew(self._get_prediction_table(), prediction_record, ['PredictionSet', 'UserPPDataSetExperimentID', 'ProtocolID'])
+                existing_record = self.DDG_db.execute_select(qry, parameters=(prediction_set_id, user_dataset_experiment_id, protocol_id))
+                assert(len(existing_record) == 1)
+                prediction_id = existing_record[0]['ID']
+
+                # add the stripped pdb, resfile/mutfile, and residue mapping associations
+
+                prediction_file_record = dict(
+                    PredictionPPIID = prediction_id,
+                    FileContentID = None,
+                    Filename = None,
+                    Filetype = None,
+                    FileRole = None,
+                    Stage = 'Input'
+                )
+                #self.DDG_db.insertDictIfNew('PredictionPPIFile', prediction_file_record, ['PredictionPPIID', 'Filename', 'Stage'])
+        except:
+            if prediction_id:
+                pass # delete all associated file records and then the prediction record
+            prediction_id = None
+
+        return prediction_id
 
 
     @job_execution
