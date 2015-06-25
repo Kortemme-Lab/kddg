@@ -120,34 +120,29 @@ class BindingAffinityDDGInterface(ddG):
                 tagged_subset_str = 'subset "%s" of ' % tagged_subset
             colortext.message('Adding %d predictions spanning %d PDB files for %suser dataset "%s" using protocol %s.' % (len(user_dataset_experiments), len(pdb_file_ids), tagged_subset_str, user_dataset_name, str(protocol_id or 'N/A')))
 
-        import sys; sys.exit(0)
+        # Progress counter setup
+        count, records_per_dot = 0, 50
+        showprogress = not(quiet) and len(user_dataset_experiments) > 300
+        if showprogress: print("|" + ("*" * (int(len(user_dataset_experiments)/records_per_dot)-2)) + "|")
 
-        #SetNumber
-        #PPMutagenesisID
-        #PPComplexID
-        #PDBFileID
+        # Add the individual predictions
+        for ude in user_dataset_experiments:
 
-        count = 0
-        showprogress = not(quiet) and len(results) > 300
-        if showprogress:
-            print("|" + ("*" * (int(len(results)/100)-2)) + "|")
-        for r in results:
-
-            existing_results = self.DDG_db.execute_select("SELECT * FROM Prediction WHERE PredictionSet=%s AND UserDataSetExperimentID=%s", parameters=(prediction_set_id, r["ID"]))
+            # If the mutagenesis already exists in the prediction set, do not add it again
+            existing_results = self.DDG_db.execute_select("SELECT * FROM PredictionPPI WHERE PredictionSet=%s AND UserPPDataSetExperimentID=%s AND ProtocolID=%s", parameters=(prediction_set_id, ude['ID'], protocol_id))
             if len(existing_results) > 0:
-                #colortext.warning('There already exist records for this UserDataSetExperimentID. You probably do not want to proceed. Skipping this entry.')
                 continue
 
-            PredictionID = self.add_job(r["ExperimentID"], r["ID"], prediction_set_id, protocol_id, keep_hetatm_lines, PDB_ID = r["PDBFileID"], ReverseMutation = False, input_files = input_files, test_only = test_only)
+            # Add the prediction
+            prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
+
+            # Progress counter
             count += 1
-            if showprogress:
-                if count > 100:
-                    colortext.write(".", "cyan", flush = True)
-                    count = 0
-            if short_run and count > 4:
-                break
-        print("")
-        return(True)
+            if showprogress and count % records_per_dot == 0: colortext.write(".", "cyan", flush = True)
+            if short_run and count > 4: break
+
+        if not quiet: print('')
+        return True
 
 
     @job_creator
@@ -159,20 +154,69 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_job(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, keep_hetatm_lines, PDB_ID = None, ReverseMutation = False, input_files = {}, test_only = False, strip_other_chains = True):
+    def add_job_by_user_dataset_record(self, prediction_set_id, user_dataset_name, user_dataset_experiment_id, protocol_id, keep_hetatm_lines = False, input_files = {}, test_only = False):
+        '''Add a prediction job based on a user dataset record. This is typically called during add_prediction_run rather than directly by the user.
+           user_dataset_name is implied by user_dataset_experiment_id but we include it for sanity checking errors in data-entry.'''
+
+        try:
+            user_dataset_id = self.get_defined_user_datasets()[user_dataset_name]['ID']
+        except:
+            raise colortext.Exception('The user dataset "%s" does not exist for this API.' % user_dataset_name)
+
+        ude = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s AND UserDataSetID=%s', parameters=(user_dataset_experiment_id, user_dataset_id))
+        if not len(ude) == 1:
+            raise colortext.Exception('User dataset experiment %d does not exist for/correspond to this user dataset.' % user_dataset_experiment_id)
+        ude = ude[0]
+
+        return self._add_job(prediction_set_id, protocol_id, ude['PPMutagenesisID'], ude['PPComplexID'], ude['PDBFileID'], ude['SetNumber'], user_dataset_experiment_id = user_dataset_experiment_id, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
+
+
+    @job_creator
+    def add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, keep_hetatm_lines = False, input_files = {}, test_only = False):
         '''This function inserts a prediction into the database.
             The parameters define:
-                the experiment we are running the prediction for;
-                the name of the set of predictions for later grouping;
-                the short description of the Command to be used for prediction;
-                whether HETATM lines are to be kept or not.
-            We strip the PDB based on the chains used for the experiment and keep_hetatm_lines.
-            We then add the prediction record, including the stripped PDB and the inverse mapping
-            from Rosetta residue numbering to PDB residue numbering.'''
+                - the prediction set id used to group this prediction with other predictions for analysis;
+                - the protocol to be used to run the prediction;
+                - the set of mutations and PDB complex associated with the mutagenesis experiment;
+                - whether HETATM lines are to be kept or not.
+            We strip the PDB based on the chains defined by the complex and keep_hetatm_lines and store the PDB in the database.
+            Next, the mapping from Rosetta numbering to PDB numbering is determined and stored in the database.
+            Then, the appropriate input files e.g. resfiles or mutfiles are generated and stored in the database.
+            Finally, we add the prediction record and associate it with the generated files.'''
+        return self._add_job(prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
+
+
+    def _add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, user_dataset_experiment_id = None, keep_hetatm_lines = False, input_files = {}, test_only = False):
+        '''This is the general function which adds a prediction job to the database. We separate it out from add_job as jobs
+           added using that function should have no associated user dataset experiment ID.'''
         raise Exception('This function needs to be rewritten.')
 
+        a='''
+PredictionPPIFile
+  PredictionPPIID
+  FileContentID
+  Filename
+  Filetype
+  FileRole
+  Stage = 'Input' '''
+
+        b='''
+
+PredictionSet
+PPMutagenesisID
+UserPPDataSetExperimentID
+ProtocolID
+TemporaryProtocolField
+Status = 'queued'
+Cost = ?
+KeptHETATMLines = keep_hetatm_lines'''
+
+
+        # todo: do something with input_files when we use that here - see add_prediction_run
+        assert(not(input_files))
+
+
         parameters = (experimentID,)
-        assert(ReverseMutation == False) # todo: allow this later
         try:
             predictionPDB_ID = None
 
@@ -256,8 +300,6 @@ class BindingAffinityDDGInterface(ddG):
             colortext.error(traceback.format_exc())
             raise colortext.Exception("An exception occurred retrieving the experimental data for Experiment ID #%s." % experimentID)
 
-        # todo: do something with input_files when we use that here - see add_prediction_run
-        assert(not(input_files))
 
         ExtraParameters = {}
         ExtraParameters = pickle.dumps(ExtraParameters)
