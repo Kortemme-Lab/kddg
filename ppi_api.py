@@ -19,7 +19,9 @@ import zipfile
 from api_layers import *
 from db_api import ddG
 from tools import colortext
+from tools.bio.pdb import PDB
 from tools.bio.alignment import ScaffoldModelChainMapper
+from tools.bio.basics import ChainMutation
 from tools.fs.fsio import read_file
 
 
@@ -167,7 +169,7 @@ class BindingAffinityDDGInterface(ddG):
         if not len(ude) == 1:
             raise colortext.Exception('User dataset experiment %d does not exist for/correspond to this user dataset.' % user_dataset_experiment_id)
         ude = ude[0]
-
+        #colortext.message(pprint.pformat(ude))
         return self._add_job(prediction_set_id, protocol_id, ude['PPMutagenesisID'], ude['PPComplexID'], ude['PDBFileID'], ude['SetNumber'], user_dataset_experiment_id = user_dataset_experiment_id, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
 
 
@@ -186,15 +188,119 @@ class BindingAffinityDDGInterface(ddG):
         return self._add_job(prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
 
 
+    @informational_pdb
+    def get_chain_sets_for_mutatagenesis(self, mutagenesis_id, complex_id = None):
+        '''Gets a list of possibilities for the associated complex and calls get_chains_for_mutatagenesis on each.
+             e.g. returns {('1KI1', 0) : {'L' : ['A','B'], 'R' : ['C']}, ('12AB', 2) : {'L' : ['L','H'], 'R' : ['A']}, ...}
+           This function assumes that a complex structure is required i.e. that all chains in the PDB chain set are in the same PDB file.'''
+
+        pp_mutagenesis = self.DDG_db.execute_select("SELECT * FROM PPMutagenesis WHERE ID=%s", parameters = (mutagenesis_id,))
+        # Sanity checks
+        assert(len(pp_mutagenesis) == 1)
+        if complex_id:
+            assert(pp_mutagenesis[0]['PPComplexID'] == complex_id)
+        else:
+            complex_id = pp_mutagenesis[0]['PPComplexID']
+
+        d = {}
+        for pdb_set in self.DDG_db.execute_select("SELECT * FROM PPIPDBSet WHERE PPComplexID=%s AND IsComplex=1", parameters = (complex_id,)):
+            pdb_set_number = pdb_set['SetNumber']
+            pdb_file_ids = self.DDG_db.execute_select("SELECT DISTINCT PDBFileID FROM PPIPDBPartnerChain WHERE PPComplexID=%s AND SetNumber=%s", parameters = (complex_id, pdb_set_number))
+            assert(len(pdb_file_ids) == 1)
+            pdb_file_id = pdb_file_ids[0]['PDBFileID']
+            d[(pdb_file_id, pdb_set_number)] = self.get_chains_for_mutatagenesis(mutagenesis_id, pdb_file_id, pdb_set_number)
+        return d
+
+
+    @informational_pdb
+    def get_chains_for_mutatagenesis(self, mutagenesis_id, pdb_file_id, pdb_set_number, complex_id = None):
+        '''Returns a dictionary mapping 'L' to the list of left chains and 'R' to the list of right chains.
+           This function assumes that a complex structure is required i.e. that all chains in the PDB chain set are in the same PDB file.
+        '''
+
+        pp_mutagenesis = self.DDG_db.execute_select("SELECT * FROM PPMutagenesis WHERE ID=%s", parameters = (mutagenesis_id,))
+
+        # Sanity checks
+        assert(len(pp_mutagenesis) == 1)
+        if complex_id:
+            assert(pp_mutagenesis[0]['PPComplexID'] == complex_id)
+            pdb_set = self.DDG_db.execute_select("SELECT * FROM PPIPDBSet WHERE PPComplexID=%s AND SetNumber=%s", parameters = (complex_id, pdb_set_number))
+            assert(len(pdb_set) == 1 and pdb_set[0]['IsComplex'] == 1) # complex structure check
+        else:
+            complex_id = pp_mutagenesis[0]['PPComplexID']
+
+        complex_chains = dict(L = [], R = [])
+        crecords = self.DDG_db.execute_select("SELECT * FROM PPIPDBPartnerChain WHERE PPComplexID=%s AND SetNumber=%s ORDER BY ChainIndex", parameters = (complex_id, pdb_set_number))
+        for c in crecords:
+            assert(c['PDBFileID'] == pdb_file_id) # complex structure check
+            complex_chains[c['Side']].append(c['Chain'])
+        assert(complex_chains['L'] and complex_chains['R'])
+        assert(len(set(complex_chains['L']).intersection(set(complex_chains['R']))) == 0) # in one unbound case, the same chain appears twice on one side (2CLR_DE|1CD8_AA, may be an error since this was published as 1CD8_AB but 1CD8 has no chain B) but it seems reasonable to assume that a chain should only appear on one side
+        return complex_chains
+
+
     def _add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, user_dataset_experiment_id = None, keep_hetatm_lines = False, input_files = {}, test_only = False):
         '''This is the internal function which adds a prediction job to the database. We distinguish it from add_job as
            prediction jobs added using that function should have no associated user dataset experiment ID.'''
-        raise Exception('This function needs to be rewritten.')
 
         # todo: do something with input_files when we use that here - see add_prediction_run
         assert(not(input_files))
 
-        # use pp_complex_id, pdb_file_id, pp_complex_pdb_set_number to create a stripped pdb, resfile/mutfile, and residue mapping
+        # Information for debugging
+        pp_complex = self.DDG_db.execute_select("SELECT * FROM PPComplex WHERE ID=%s", parameters = (pp_complex_id,))
+
+        # Determine the list of PDB chains that will be kept
+        pdb_chains = self.get_chains_for_mutatagenesis(pp_mutagenesis_id, pdb_file_id, pp_complex_pdb_set_number, complex_id = pp_complex_id)
+        pdb_chains_to_keep = set(pdb_chains['L'] + pdb_chains['R'])
+
+        # Retrieve the PDB file content, strip out the unused chains, and create a PDB object
+        pdb_file = self.DDG_db.execute_select("SELECT * FROM PDBFile WHERE ID=%s", parameters = (pdb_file_id,))
+        p = PDB(pdb_file[0]['Content'])
+        p.strip_to_chains(list(pdb_chains_to_keep))
+        if not keep_hetatm_lines:
+            p.strip_HETATMs()
+        stripped_p = PDB('\n'.join(p.lines))
+
+        # Check for CSE and MSE
+        try:
+            if 'CSE' in p.residue_types or 'MSE' in p.residue_types:
+                raise Exception('CSE and MSE residues are not currently handled but they exist for this case.')
+                # It looks like MSE (and CSE?) may now be handled - https://www.rosettacommons.org/content/pdb-files-rosetta-format
+        except Exception, e:
+            colortext.error('%s: %s, chains %s' % (str(e), str(stripped_p.pdb_id), str(pdb_chains_to_keep)))
+
+        # Assert that there are no empty sequences
+        assert(sorted(stripped_p.atom_sequences.keys()) == sorted(pdb_chains_to_keep))
+        for chain_id, sequence in stripped_p.atom_sequences.iteritems():
+            assert(len(sequence) > 0)
+
+        # Get the PDB mutations and check that they make sense in the context of the stripped PDB file
+        # Note: the schema assumes that at most one set of mutations can be specified per PDB file per complex per mutagenesis. We may want to relax that in future by adding the SetNumber to the PPMutagenesisPDBMutation table
+        complex_mutations = self.DDG_db.execute_select('SELECT * FROM PPMutagenesisMutation WHERE PPMutagenesisID=%s', parameters=(pp_mutagenesis_id,))
+        pdb_complex_mutations = self.DDG_db.execute_select('SELECT * FROM PPMutagenesisPDBMutation WHERE PPMutagenesisID=%s AND PPComplexID=%s AND PDBFileID=%s', parameters=(pp_mutagenesis_id, pp_complex_id, pdb_file_id))
+        assert(len(complex_mutations) == len(pdb_complex_mutations))
+        mutations = [ChainMutation(m['WildTypeAA'], m['ResidueID'], m['MutantAA'], Chain = m['Chain']) for m in pdb_complex_mutations]
+        try:
+            stripped_p.validate_mutations(mutations)
+        except Exception, e:
+            colortext.error('%s: %s' % (str(e), str(mutations)))
+            colortext.warning('PPMutagenesisID=%d, ComplexID=%d, PDBFileID=%s, SetNumber=%d, UserDatasetExperimentID=%d' % (pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, user_dataset_experiment_id))
+            colortext.warning('SKEMPI record: %s' % self.DDG_db.execute_select('SELECT * FROM PPMutagenesis WHERE ID=%s', parameters=(pp_mutagenesis_id,))[0]['SKEMPI_KEY'])
+            colortext.warning('PDB chains to keep: %s' % str(pdb_chains_to_keep))
+
+            colortext.warning('PPIPDBPartnerChain records: %s' % pprint.pformat(self.DDG_db.execute_select('SELECT PPIPDBPartnerChain.* FROM PPIPDBPartnerChain INNER JOIN PPIPDBSet ON PPIPDBSet.PPComplexID=PPIPDBPartnerChain.PPComplexID AND PPIPDBSet.SetNumber=PPIPDBPartnerChain.SetNumber WHERE PPIPDBPartnerChain.PPComplexID=%s AND IsComplex=1 ORDER BY PPIPDBPartnerChain.SetNumber, PPIPDBPartnerChain.ChainIndex', parameters=(pp_complex_id,))))
+
+
+            print('')
+
+
+        return
+        sys.exit(0)
+
+        # to create a stripped pdb, resfile/mutfile, and residue mapping
+
+        # The next main piece of work is rewritting the PDB object to return the residue mapping using the features reporter.
+        # This will involve replacing the stripForDDG function and will result in removing the dependency of PDB on BioPython.
 
 
         parameters = (experimentID,)

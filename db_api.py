@@ -601,6 +601,14 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @informational_pdb
+    def get_chains_for_mutatagenesis(self, mutagenesis_id, pdb_file_id, pdb_set_number, complex_id = None):
+        '''Returns the PDB chains used in the mutagenesis.
+           Note: At present, monomeric data e.g. protein stability does not have the notion of complex in our database
+           but this abstraction is planned so that multiple choices of PDB file and chain can be easily represented.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @informational_pdb
     def get_pdb_details(self, pdb_ids, cached_pdb_details = None):
         '''Returns the details stored in the database about the PDB files associated with pdb_ids e.g. chains, resolution,
            technique used to determine the structure etc.'''
