@@ -124,6 +124,9 @@ class BindingAffinityDDGInterface(ddG):
             if tagged_subset:
                 tagged_subset_str = 'subset "%s" of ' % tagged_subset
 
+        # Create a cache to speed up job insertion
+        pdb_residues_to_rosetta_cache = {}
+
         # Test all predictions before creating records
         if test_only or test_run_first:
             if not quiet:
@@ -139,7 +142,7 @@ class BindingAffinityDDGInterface(ddG):
 
                 # Test the prediction setup
                 print('%d/%d' % (count, len(user_dataset_experiments)))
-                prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = True)
+                prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = True, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
                 # Progress counter
                 count += 1
                 if showprogress and count % records_per_dot == 0: colortext.write(".", "cyan", flush = True)
@@ -168,7 +171,7 @@ class BindingAffinityDDGInterface(ddG):
                 continue
 
             # Add the prediction
-            prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags,  keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
+            prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags,  keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
 
             # Progress counter
             count += 1
@@ -188,7 +191,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_job_by_user_dataset_record(self, prediction_set_id, user_dataset_name, user_dataset_experiment_id, protocol_id, extra_rosetta_command_flags = None, keep_hetatm_lines = False, input_files = {}, test_only = False):
+    def add_job_by_user_dataset_record(self, prediction_set_id, user_dataset_name, user_dataset_experiment_id, protocol_id, extra_rosetta_command_flags = None, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = None):
         '''Add a prediction job based on a user dataset record. This is typically called during add_prediction_run rather than directly by the user.
            user_dataset_name is implied by user_dataset_experiment_id but we include it for sanity checking errors in data-entry.
 
@@ -204,11 +207,11 @@ class BindingAffinityDDGInterface(ddG):
             raise colortext.Exception('User dataset experiment %d does not exist for/correspond to this user dataset.' % user_dataset_experiment_id)
         ude = ude[0]
         #colortext.message(pprint.pformat(ude))
-        return self._add_job(prediction_set_id, protocol_id, ude['PPMutagenesisID'], ude['PPComplexID'], ude['PDBFileID'], ude['SetNumber'], extra_rosetta_command_flags = extra_rosetta_command_flags, user_dataset_experiment_id = user_dataset_experiment_id, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
+        return self._add_job(prediction_set_id, protocol_id, ude['PPMutagenesisID'], ude['PPComplexID'], ude['PDBFileID'], ude['SetNumber'], extra_rosetta_command_flags = extra_rosetta_command_flags, user_dataset_experiment_id = user_dataset_experiment_id, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
 
 
     @job_creator
-    def add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, keep_hetatm_lines = False, input_files = {}, test_only = False):
+    def add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = None):
         '''This function inserts a prediction into the database.
             The parameters define:
                 - the prediction set id used to group this prediction with other predictions for analysis;
@@ -220,7 +223,7 @@ class BindingAffinityDDGInterface(ddG):
             Next, the mapping from Rosetta numbering to PDB numbering is determined and stored in the database.
             Then, the appropriate input files e.g. resfiles or mutfiles are generated and stored in the database.
             Finally, we add the prediction record and associate it with the generated files.'''
-        return self._add_job(prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
+        return self._add_job(prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
 
 
     @informational_pdb
@@ -274,9 +277,11 @@ class BindingAffinityDDGInterface(ddG):
         return complex_chains
 
 
-    def _add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, user_dataset_experiment_id = None, keep_hetatm_lines = False, input_files = {}, test_only = False):
+    def _add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, user_dataset_experiment_id = None, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = {}):
         '''This is the internal function which adds a prediction job to the database. We distinguish it from add_job as
            prediction jobs added using that function should have no associated user dataset experiment ID.
+
+           pdb_residues_to_rosetta_cache can be used to speed up job insertion. When the same PDB/chains combination is used again, this cache uses the old mapping rather than run RosettaScripts again.
 
            The extra_rosetta_command_flags variable is used to add additional flags e.g. "-ignore_zero_occupancy false". These should be added if they are used in the protocol.
            '''
@@ -284,6 +289,7 @@ class BindingAffinityDDGInterface(ddG):
         # todo: do something with input_files when we use that here - see add_prediction_run
         assert(not(input_files))
 
+        # Preliminaries
         if not(self.rosetta_scripts_path and self.rosetta_database_path):
             raise Exception('The rosetta_scripts_path and rosetta_database_path API variables need to be set when adding predictions as we use the Features Reporter to create the mapping between PDB residues and Rosetta residues.')
         else:
@@ -291,6 +297,9 @@ class BindingAffinityDDGInterface(ddG):
                 raise Exception('The path "%s" to the RosettaScripts executable does not exist.' % self.rosetta_scripts_path)
             if not(os.path.exists(self.rosetta_database_path)):
                 raise Exception('The path "%s" to the Rosetta database does not exist.' % self.rosetta_database_path)
+        cache_maps = False
+        if isinstance(pdb_residues_to_rosetta_cache, dict):
+            cache_maps = True
 
         # Information for debugging
         pp_complex = self.DDG_db.execute_select("SELECT * FROM PPComplex WHERE ID=%s", parameters = (pp_complex_id,))
@@ -298,23 +307,24 @@ class BindingAffinityDDGInterface(ddG):
         # Determine the list of PDB chains that will be kept
         pdb_chains = self.get_chains_for_mutatagenesis(pp_mutagenesis_id, pdb_file_id, pp_complex_pdb_set_number, complex_id = pp_complex_id)
         pdb_chains_to_keep = set(pdb_chains['L'] + pdb_chains['R'])
+        cache_key = (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)), self.rosetta_scripts_path, self.rosetta_database_path, extra_rosetta_command_flags)
 
-        pdb_residues_to_rosetta_cache = {}
-        cache_key = (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)), self.rosetta_scripts_path, self.rosetta_database_path, extra_command_flags)
-
-        # Retrieve the PDB file content, strip out the unused chains, and create a PDB object
-        pdb_file = self.DDG_db.execute_select("SELECT * FROM PDBFile WHERE ID=%s", parameters = (pdb_file_id,))
-        p = PDB(pdb_file[0]['Content'])
-        p.strip_to_chains(list(pdb_chains_to_keep))
-        if not keep_hetatm_lines:
-            p.strip_HETATMs()
-        stripped_p = PDB('\n'.join(p.lines))
+        if cache_maps and pdb_residues_to_rosetta_cache.get(cache_key):
+            stripped_p = pdb_residues_to_rosetta_cache[cache_key]['stripped_p']
+        else:
+            # Retrieve the PDB file content, strip out the unused chains, and create a PDB object
+            pdb_file = self.DDG_db.execute_select("SELECT * FROM PDBFile WHERE ID=%s", parameters = (pdb_file_id,))
+            p = PDB(pdb_file[0]['Content'])
+            p.strip_to_chains(list(pdb_chains_to_keep))
+            if not keep_hetatm_lines:
+                p.strip_HETATMs()
+            stripped_p = PDB('\n'.join(p.lines))
 
         # Check for CSE and MSE
         try:
-            if 'CSE' in p.residue_types:
+            if 'CSE' in stripped_p.residue_types:
                 raise Exception('This case contains a CSE residue which may (or may not) cause an issue.')
-            elif 'MSE' in p.residue_types:
+            elif 'MSE' in stripped_p.residue_types:
                 raise Exception('This case contains an MSE residue which may (or may not) cause an issue.')
                 # It looks like MSE (and CSE?) may now be handled - https://www.rosettacommons.org/content/pdb-files-rosetta-format
         except Exception, e:
@@ -342,26 +352,32 @@ class BindingAffinityDDGInterface(ddG):
 
         # Determine the mapping from the stripped PDB to Rosetta numbering
         # Note: we assume that this stripped PDB will be the input to the Rosetta protocol and that
-        stripped_p.construct_pdb_to_rosetta_residue_map(self.rosetta_scripts_path, self.rosetta_database_path, extra_command_flags = extra_rosetta_command_flags)
-        rosetta_mutations = stripped_p.map_pdb_residues_to_rosetta_residues(mutations)
+
+
+        # Make JSON mappings
+        if cache_maps and pdb_residues_to_rosetta_cache.get(cache_key):
+            atom_to_rosetta_residue_map = pdb_residues_to_rosetta_cache[cache_key]['atom_to_rosetta_residue_map']
+            rosetta_to_atom_residue_map = pdb_residues_to_rosetta_cache[cache_key]['rosetta_to_atom_residue_map']
+        else:
+            stripped_p.construct_pdb_to_rosetta_residue_map(self.rosetta_scripts_path, self.rosetta_database_path, extra_command_flags = extra_rosetta_command_flags)
+            atom_to_rosetta_residue_map = stripped_p.get_atom_sequence_to_rosetta_json_map()
+            rosetta_to_atom_residue_map = stripped_p.get_rosetta_sequence_to_atom_json_map()
 
         # Make mutfile
+        rosetta_mutations = stripped_p.map_pdb_residues_to_rosetta_residues(mutations)
         mf = Mutfile.from_mutagenesis(rosetta_mutations)
-        colortext.warning(mf)
 
-        # Make JSON mapping
-        atom_to_rosetta_residue_map = stripped_p.get_atom_sequence_to_rosetta_json_map()
-        rosetta_to_atom_residue_map = stripped_p.get_rosetta_sequence_to_atom_json_map()
-
-        #pprint.pprint(stripped_p.rosetta_to_atom_sequence_maps)
-        #pprint.pprint(stripped_p.get_atom_sequence_to_rosetta_map())
+        if cache_maps and (not pdb_residues_to_rosetta_cache.get(cache_key)):
+            pdb_residues_to_rosetta_cache[cache_key] = dict(
+                stripped_p = stripped_p,
+                atom_to_rosetta_residue_map = atom_to_rosetta_residue_map,
+                rosetta_to_atom_residue_map = rosetta_to_atom_residue_map)
         return
 
 
         # get_atom_sequence_to_rosetta_json_map
 
         print('')
-        import sys
         sys.exit(0)
         #stripped_p.map_pdb_residues_to_rosetta_residues(mutations)
 
