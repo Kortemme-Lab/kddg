@@ -25,17 +25,17 @@ from tools import colortext
 from tools.bio.alignment import ScaffoldModelChainMapper
 
 
-def get_interface(passwd, username = 'kortemmelab'):
+def get_interface(passwd, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a MonomericStabilityDDGInterface interface object. It hides the
     private methods from the user so that a more traditional object-oriented API is created.'''
-    return GenericUserInterface.generate(MonomericStabilityDDGInterface, passwd = passwd, username = username)
+    return GenericUserInterface.generate(MonomericStabilityDDGInterface, passwd = passwd, username = username, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
 
 
 class MonomericStabilityDDGInterface(ddG):
 
 
-    def __init__(self, passwd = None, username = 'kortemmelab'):
-        super(MonomericStabilityDDGInterface, self).__init__(passwd = passwd, username = username)
+    def __init__(self, passwd = None, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
+        super(MonomericStabilityDDGInterface, self).__init__(passwd = passwd, username = username, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
 
 

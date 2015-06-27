@@ -23,20 +23,20 @@ from tools.bio.pdb import PDB
 from tools.bio.alignment import ScaffoldModelChainMapper
 from tools.bio.basics import ChainMutation
 from tools.fs.fsio import read_file
+from tools.rosetta.input_files import Mutfile
 
-
-def get_interface(passwd, username = 'kortemmelab'):
+def get_interface(passwd, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
-    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username)
+    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
 
 
 class BindingAffinityDDGInterface(ddG):
     '''This is the internal API class that should be NOT used to interface with the database.'''
 
 
-    def __init__(self, passwd = None, username = 'kortemmelab'):
-        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username)
+    def __init__(self, passwd = None, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
+        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
 
 
@@ -96,10 +96,13 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_prediction_run(self, prediction_set_id, user_dataset_name, protocol_id = None, tagged_subset = None, keep_hetatm_lines = False, input_files = {}, quiet = False, test_only = False, only_single_mutations = False, short_run = False):
+    def add_prediction_run(self, prediction_set_id, user_dataset_name, extra_rosetta_command_flags = None, protocol_id = None, tagged_subset = None, keep_hetatm_lines = False, input_files = {}, quiet = False, test_only = False, only_single_mutations = False, short_run = False, test_run_first = True):
         '''Adds all jobs corresponding to a user dataset e.g. add_prediction_run("my first run", "AllBindingAffinityData", tagged_subset = "ZEMu").
            If keep_hetatm_lines is False then all HETATM records for the PDB prediction chains will be removed. Otherwise, they are kept.
            input_files is a global parameter for the run which is generally empty. Any files added here will be associated to all predictions in the run.
+
+           The extra_rosetta_command_flags parameter e.g. "-ignore_zero_occupancy false" is used to determine the mapping
+           from PDB to Rosetta numbering. These flags should correspond to those used in the protocol otherwise errors could occur.
 
            Returns False if no predictions were added to the run else return True if all predictions (and there were some) were added to the run.'''
 
@@ -116,13 +119,42 @@ class BindingAffinityDDGInterface(ddG):
 
         # Count the number of individual PDB files
         pdb_file_ids = set([u['PDBFileID'] for u in user_dataset_experiments])
+        tagged_subset_str = ''
         if not quiet:
-            tagged_subset_str = ''
             if tagged_subset:
                 tagged_subset_str = 'subset "%s" of ' % tagged_subset
-            colortext.message('Adding %d predictions spanning %d PDB files for %suser dataset "%s" using protocol %s.' % (len(user_dataset_experiments), len(pdb_file_ids), tagged_subset_str, user_dataset_name, str(protocol_id or 'N/A')))
+
+        # Test all predictions before creating records
+        if test_only or test_run_first:
+            if not quiet:
+                colortext.message('Testing %d predictions spanning %d PDB files for %suser dataset "%s" using protocol %s.' % (len(user_dataset_experiments), len(pdb_file_ids), tagged_subset_str, user_dataset_name, str(protocol_id or 'N/A')))
+            # Progress counter setup
+            count, records_per_dot = 0, 50
+            showprogress = not(quiet) and len(user_dataset_experiments) > 300
+            if showprogress: print("|" + ("*" * (int(len(user_dataset_experiments)/records_per_dot)-2)) + "|")
+            for ude in user_dataset_experiments:
+                # If the mutagenesis already exists in the prediction set, do not test it again
+                existing_results = self.DDG_db.execute_select("SELECT * FROM PredictionPPI WHERE PredictionSet=%s AND UserPPDataSetExperimentID=%s AND ProtocolID=%s", parameters=(prediction_set_id, ude['ID'], protocol_id))
+                if len(existing_results) > 0: continue
+
+                # Test the prediction setup
+                print('%d/%d' % (count, len(user_dataset_experiments)))
+                prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = True)
+                # Progress counter
+                count += 1
+                if showprogress and count % records_per_dot == 0: colortext.write(".", "cyan", flush = True)
+                if short_run and count > 4: break
+            if not quiet: print('')
+            return True
+
+        if test_only:
+            return
+
+        return
 
         # Progress counter setup
+        if not quiet:
+            colortext.message('Adding %d predictions spanning %d PDB files for %suser dataset "%s" using protocol %s.' % (len(user_dataset_experiments), len(pdb_file_ids), tagged_subset_str, user_dataset_name, str(protocol_id or 'N/A')))
         count, records_per_dot = 0, 50
         showprogress = not(quiet) and len(user_dataset_experiments) > 300
         if showprogress: print("|" + ("*" * (int(len(user_dataset_experiments)/records_per_dot)-2)) + "|")
@@ -136,7 +168,7 @@ class BindingAffinityDDGInterface(ddG):
                 continue
 
             # Add the prediction
-            prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
+            prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags,  keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
 
             # Progress counter
             count += 1
@@ -156,9 +188,11 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_job_by_user_dataset_record(self, prediction_set_id, user_dataset_name, user_dataset_experiment_id, protocol_id, keep_hetatm_lines = False, input_files = {}, test_only = False):
+    def add_job_by_user_dataset_record(self, prediction_set_id, user_dataset_name, user_dataset_experiment_id, protocol_id, extra_rosetta_command_flags = None, keep_hetatm_lines = False, input_files = {}, test_only = False):
         '''Add a prediction job based on a user dataset record. This is typically called during add_prediction_run rather than directly by the user.
-           user_dataset_name is implied by user_dataset_experiment_id but we include it for sanity checking errors in data-entry.'''
+           user_dataset_name is implied by user_dataset_experiment_id but we include it for sanity checking errors in data-entry.
+
+           The extra_rosetta_command_flags variable is used to add additional flags e.g. "-ignore_zero_occupancy false". These should be added if they are used in the protocol.'''
 
         try:
             user_dataset_id = self.get_defined_user_datasets()[user_dataset_name]['ID']
@@ -170,22 +204,23 @@ class BindingAffinityDDGInterface(ddG):
             raise colortext.Exception('User dataset experiment %d does not exist for/correspond to this user dataset.' % user_dataset_experiment_id)
         ude = ude[0]
         #colortext.message(pprint.pformat(ude))
-        return self._add_job(prediction_set_id, protocol_id, ude['PPMutagenesisID'], ude['PPComplexID'], ude['PDBFileID'], ude['SetNumber'], user_dataset_experiment_id = user_dataset_experiment_id, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
+        return self._add_job(prediction_set_id, protocol_id, ude['PPMutagenesisID'], ude['PPComplexID'], ude['PDBFileID'], ude['SetNumber'], extra_rosetta_command_flags = extra_rosetta_command_flags, user_dataset_experiment_id = user_dataset_experiment_id, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
 
 
     @job_creator
-    def add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, keep_hetatm_lines = False, input_files = {}, test_only = False):
+    def add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, keep_hetatm_lines = False, input_files = {}, test_only = False):
         '''This function inserts a prediction into the database.
             The parameters define:
                 - the prediction set id used to group this prediction with other predictions for analysis;
                 - the protocol to be used to run the prediction;
                 - the set of mutations and PDB complex associated with the mutagenesis experiment;
                 - whether HETATM lines are to be kept or not.
+                - additional Rosetta flags e.g. "-ignore_zero_occupancy false" used to determine the mapping from PDB to Rosetta numbering. These flags should correspond to those used in the protocol otherwise errors could occur.
             We strip the PDB based on the chains defined by the complex and keep_hetatm_lines and store the PDB in the database.
             Next, the mapping from Rosetta numbering to PDB numbering is determined and stored in the database.
             Then, the appropriate input files e.g. resfiles or mutfiles are generated and stored in the database.
             Finally, we add the prediction record and associate it with the generated files.'''
-        return self._add_job(prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
+        return self._add_job(prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only)
 
 
     @informational_pdb
@@ -239,12 +274,23 @@ class BindingAffinityDDGInterface(ddG):
         return complex_chains
 
 
-    def _add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, user_dataset_experiment_id = None, keep_hetatm_lines = False, input_files = {}, test_only = False):
+    def _add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, user_dataset_experiment_id = None, keep_hetatm_lines = False, input_files = {}, test_only = False):
         '''This is the internal function which adds a prediction job to the database. We distinguish it from add_job as
-           prediction jobs added using that function should have no associated user dataset experiment ID.'''
+           prediction jobs added using that function should have no associated user dataset experiment ID.
+
+           The extra_rosetta_command_flags variable is used to add additional flags e.g. "-ignore_zero_occupancy false". These should be added if they are used in the protocol.
+           '''
 
         # todo: do something with input_files when we use that here - see add_prediction_run
         assert(not(input_files))
+
+        if not(self.rosetta_scripts_path and self.rosetta_database_path):
+            raise Exception('The rosetta_scripts_path and rosetta_database_path API variables need to be set when adding predictions as we use the Features Reporter to create the mapping between PDB residues and Rosetta residues.')
+        else:
+            if not(os.path.exists(self.rosetta_scripts_path)):
+                raise Exception('The path "%s" to the RosettaScripts executable does not exist.' % self.rosetta_scripts_path)
+            if not(os.path.exists(self.rosetta_database_path)):
+                raise Exception('The path "%s" to the Rosetta database does not exist.' % self.rosetta_database_path)
 
         # Information for debugging
         pp_complex = self.DDG_db.execute_select("SELECT * FROM PPComplex WHERE ID=%s", parameters = (pp_complex_id,))
@@ -252,6 +298,9 @@ class BindingAffinityDDGInterface(ddG):
         # Determine the list of PDB chains that will be kept
         pdb_chains = self.get_chains_for_mutatagenesis(pp_mutagenesis_id, pdb_file_id, pp_complex_pdb_set_number, complex_id = pp_complex_id)
         pdb_chains_to_keep = set(pdb_chains['L'] + pdb_chains['R'])
+
+        pdb_residues_to_rosetta_cache = {}
+        cache_key = (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)), self.rosetta_scripts_path, self.rosetta_database_path, extra_command_flags)
 
         # Retrieve the PDB file content, strip out the unused chains, and create a PDB object
         pdb_file = self.DDG_db.execute_select("SELECT * FROM PDBFile WHERE ID=%s", parameters = (pdb_file_id,))
@@ -263,8 +312,10 @@ class BindingAffinityDDGInterface(ddG):
 
         # Check for CSE and MSE
         try:
-            if 'CSE' in p.residue_types or 'MSE' in p.residue_types:
-                raise Exception('CSE and MSE residues are not currently handled but they exist for this case.')
+            if 'CSE' in p.residue_types:
+                raise Exception('This case contains a CSE residue which may (or may not) cause an issue.')
+            elif 'MSE' in p.residue_types:
+                raise Exception('This case contains an MSE residue which may (or may not) cause an issue.')
                 # It looks like MSE (and CSE?) may now be handled - https://www.rosettacommons.org/content/pdb-files-rosetta-format
         except Exception, e:
             colortext.error('%s: %s, chains %s' % (str(e), str(stripped_p.pdb_id), str(pdb_chains_to_keep)))
@@ -284,14 +335,41 @@ class BindingAffinityDDGInterface(ddG):
             stripped_p.validate_mutations(mutations)
         except Exception, e:
             colortext.error('%s: %s' % (str(e), str(mutations)))
-            colortext.warning('PPMutagenesisID=%d, ComplexID=%d, PDBFileID=%s, SetNumber=%d, UserDatasetExperimentID=%d' % (pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, user_dataset_experiment_id))
-            colortext.warning('SKEMPI record: %s' % self.DDG_db.execute_select('SELECT * FROM PPMutagenesis WHERE ID=%s', parameters=(pp_mutagenesis_id,))[0]['SKEMPI_KEY'])
-            colortext.warning('PDB chains to keep: %s' % str(pdb_chains_to_keep))
+            #colortext.warning('PPMutagenesisID=%d, ComplexID=%d, PDBFileID=%s, SetNumber=%d, UserDatasetExperimentID=%d' % (pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, user_dataset_experiment_id))
+            #colortext.warning('SKEMPI record: %s' % self.DDG_db.execute_select('SELECT * FROM PPMutagenesis WHERE ID=%s', parameters=(pp_mutagenesis_id,))[0]['SKEMPI_KEY'])
+            #colortext.warning('PDB chains to keep: %s' % str(pdb_chains_to_keep))
+            #colortext.warning('PPIPDBPartnerChain records: %s' % pprint.pformat(self.DDG_db.execute_select('SELECT PPIPDBPartnerChain.* FROM PPIPDBPartnerChain INNER JOIN PPIPDBSet ON PPIPDBSet.PPComplexID=PPIPDBPartnerChain.PPComplexID AND PPIPDBSet.SetNumber=PPIPDBPartnerChain.SetNumber WHERE PPIPDBPartnerChain.PPComplexID=%s AND IsComplex=1 ORDER BY PPIPDBPartnerChain.SetNumber, PPIPDBPartnerChain.ChainIndex', parameters=(pp_complex_id,))))
 
-            colortext.warning('PPIPDBPartnerChain records: %s' % pprint.pformat(self.DDG_db.execute_select('SELECT PPIPDBPartnerChain.* FROM PPIPDBPartnerChain INNER JOIN PPIPDBSet ON PPIPDBSet.PPComplexID=PPIPDBPartnerChain.PPComplexID AND PPIPDBSet.SetNumber=PPIPDBPartnerChain.SetNumber WHERE PPIPDBPartnerChain.PPComplexID=%s AND IsComplex=1 ORDER BY PPIPDBPartnerChain.SetNumber, PPIPDBPartnerChain.ChainIndex', parameters=(pp_complex_id,))))
+        # Determine the mapping from the stripped PDB to Rosetta numbering
+        # Note: we assume that this stripped PDB will be the input to the Rosetta protocol and that
+        stripped_p.construct_pdb_to_rosetta_residue_map(self.rosetta_scripts_path, self.rosetta_database_path, extra_command_flags = extra_rosetta_command_flags)
+        rosetta_mutations = stripped_p.map_pdb_residues_to_rosetta_residues(mutations)
+
+        # Make mutfile
+        mf = Mutfile.from_mutagenesis(rosetta_mutations)
+        colortext.warning(mf)
+
+        # Make JSON mapping
+        atom_to_rosetta_residue_map = stripped_p.get_atom_sequence_to_rosetta_json_map()
+        rosetta_to_atom_residue_map = stripped_p.get_rosetta_sequence_to_atom_json_map()
+
+        #pprint.pprint(stripped_p.rosetta_to_atom_sequence_maps)
+        #pprint.pprint(stripped_p.get_atom_sequence_to_rosetta_map())
+        return
 
 
-            print('')
+        # get_atom_sequence_to_rosetta_json_map
+
+        print('')
+        import sys
+        sys.exit(0)
+        #stripped_p.map_pdb_residues_to_rosetta_residues(mutations)
+
+        # Assert that there are no empty sequences in the Rosetta-processed PDB file
+        return
+        assert(sorted(stripped_p.atom_sequences.keys()) == sorted(pdb_chains_to_keep))
+        for chain_id, sequence in stripped_p.atom_sequences.iteritems():
+            assert(len(sequence) > 0)
 
 
         return
