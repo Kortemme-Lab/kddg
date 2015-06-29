@@ -85,6 +85,7 @@ class ddG(object):
           self.prediction_data_path - this is the location on the file server where output form jobs of the derived class type (e.g. binding affinity jobs) should be stored.
     '''
 
+    GET_JOB_FN_CALL_COUNTER_MAX = 10
 
     def __init__(self, passwd = None, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
         if passwd:
@@ -94,6 +95,11 @@ class ddG(object):
         self.prediction_data_path = None
         self.rosetta_scripts_path = rosetta_scripts_path
         self.rosetta_database_path = rosetta_database_path
+
+        # This counter is used to check the number of times get_job is called and raise an exception if this exceeds a certain amount
+        # If the API is misused then get_job may be called infinitely on one job - this is meant to protect against that
+        self._get_job_fn_call_counter = {}
+        self._get_job_fn_call_counter_max = ddG.GET_JOB_FN_CALL_COUNTER_MAX
 
 
     def __del__(self):
@@ -580,7 +586,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @informational_file
-    def get_file_id(self, content, hexdigest = None):
+    def get_file_id(self, content, db_cursor = None, hexdigest = None):
         '''Searches the database to see whether the FileContent already exists. The search uses the digest and filesize as
            heuristics to speed up the search. If a file has the same hex digest and file size then we do a straight comparison
            of the contents.
@@ -589,7 +595,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         existing_filecontent_id = None
         hexdigest = hexdigest or get_hexdigest(content)
         filesize = len(content)
-        for r in self.DDG_db.execute_select('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', parameters=(hexdigest, filesize)):
+        if db_cursor:
+            db_cursor.execute('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', (hexdigest, filesize))
+            results = db_cursor.fetchall()
+        else:
+            results = self.DDG_db.execute_select('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', parameters=(hexdigest, filesize))
+        for r in results:
             if r['Content'] == content:
                 assert(existing_filecontent_id == None) # content uniqueness check
                 existing_filecontent_id = r['ID']
@@ -599,6 +610,16 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     @informational_pdb
     def get_pdb_chains_for_prediction(self, prediction_id):
         '''Returns the PDB file ID and a list of chains for the prediction.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @informational_pdb
+    def get_chain_sets_for_mutatagenesis(self, mutagenesis_id, complex_id = None):
+        '''Gets a list of possibilities for the associated complex and calls get_chains_for_mutatagenesis on each.
+           This function assumes that a complex structure is required i.e. that all chains in the PDB chain set are in the same PDB file.
+
+           This is a useful method for listing the possible complexes to use in a prediction or to determine whether one
+           may be missing. and we need to update the database.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
@@ -738,6 +759,52 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @job_creator
+    def destroy_prediction_set(self, prediction_set_id):
+        '''This function removes the PredictionSet from the database.
+           THIS CANNOT BE UNDONE.
+           For safety, we should only allow PredictionSets with no corresponding scores to be removed.
+           It fits into the job_creator category since usually these empty PredictionSets will have been created while
+           setting up a job.'''
+
+        can_be_deleted = self.DDG_db.execute_select('SELECT CanBeDeleted FROM PredictionSet WHERE ID=%s', parameters=(prediction_set_id,))
+        if len(can_be_deleted) == 0:
+            raise colortext.Exception('The prediction set "%s" does not exist.' % prediction_set_id)
+        elif can_be_deleted[0]['CanBeDeleted'] == 0:
+            raise colortext.Exception('The prediction set "%s" is not allowed to be deleted. Change the CanBeDeleted property on its record first.' % prediction_set_id)
+
+        params = (self._get_prediction_table(), self._get_prediction_structure_scores_table())
+
+        qry = 'SELECT COUNT({0}.ID) AS NumRecords FROM {0} INNER JOIN {1} ON {0}.ID={1}.{0}ID WHERE PredictionSet=%s'.format(*params)
+        existing_scores = self.DDG_db.execute_select(qry, parameters=(prediction_set_id,))
+        if existing_scores[0]['NumRecords'] > 0:
+            raise colortext.Exception('Cannot remove a prediction set with associated scores.')
+
+        qry = 'SELECT COUNT(ID) AS NumRecords FROM {0} WHERE Status <> "queued" AND PredictionSet=%s'.format(*params)
+        jobs_in_flux = self.DDG_db.execute_select(qry, parameters=(prediction_set_id,))
+        if jobs_in_flux[0]['NumRecords'] > 0:
+            raise colortext.Exception('Cannot remove a prediction set unless all jobs are set as "queued".')
+
+        # Use a transaction to prevent a partial deletion
+        self.DDG_db._get_connection()
+        con = self.DDG_db.connection
+        try:
+            with con:
+                cur = con.cursor()
+
+                # Delete the associated file records
+                delete_files_qry = 'DELETE {0}File FROM {0}File INNER JOIN {0} ON {0}.ID={0}File.{0}ID WHERE PredictionSet=%s'.format(*params)
+                cur.execute(delete_files_qry, (prediction_set_id, ))
+
+                # Delete the predictions
+                delete_predictions_qry = 'DELETE FROM {0} WHERE PredictionSet=%s'.format(*params)
+                cur.execute(delete_predictions_qry, (prediction_set_id, ))
+
+                cur.execute('DELETE FROM PredictionSet WHERE ID=%s', (prediction_set_id, ))
+        except Exception, e:
+            raise colortext.Exception('An exception occurred removing the PredictionSet from the database: "%s".\n%s' % (str(e), traceback.format_exc()))
+
+
+    @job_creator
     def start_prediction_set(self, PredictionSetID):
         '''Sets the Status of a PredictionSet to "active".'''
         self._set_prediction_set_status(PredictionSetID, 'active')
@@ -788,6 +855,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @job_creator
+    def add_job_by_user_dataset_record(self, *args, **kwargs):
+        '''Uses the UserDataSet record to get most of the information needed to set up the job e.g. PDB complex, mutagenesis details.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
+
+
+    @job_creator
     def clone_prediction_run(self, existing_prediction_set, new_prediction_set, *args, **kwargs):
         '''add_prediction_run sets up a full run of dataset predictions but is slow as it needs to perform a lot of
            calculations and parsing. If you want to test the same dataset with slightly different parameters (e.g. a
@@ -823,14 +896,37 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @job_execution
-    def get_job(self, prediction_set):
+    def get_job(self, prediction_set_id):
         '''Returns None if no queued jobs exist or if the PredictionSet is halted otherwise return details necessary to run the job.'''
+        self._assert_prediction_set_exists(prediction_set_id)
+        next_job = self.get_queued_job(prediction_set_id)
+        if next_job:
+            assert(len(next_job) == 1)
+            job_id = next_job[0]['ID']
+            self._get_job_fn_call_counter[job_id] = self._get_job_fn_call_counter.get(job_id, 0)
+            self._get_job_fn_call_counter[job_id] += 1
+            if self._get_job_fn_call_counter[job_id] > self._get_job_fn_call_counter_max:
+                self.DDG_db = None
+                self.DDG_db_utf = None
+                raise Exception('get_job was called %d times for this prediction. This is probably a bug in the calling code.' % self._get_job_fn_call_counter[job_id])
+            return self._get_job_inner_fn(job_id)
+
+
+    def _get_job_inner_fn(self, job_id):
+        '''The workhorse function for get_job.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
-        #returns None if no queued jobs exist or if the PredictionSet is halted otherwise return details necessary to run the job
 
 
     @job_execution
-    def start_job(self, prediction_id, prediction_set):
+    def get_queued_job(self, prediction_set_id):
+        '''Returns the next queued Prediction record from the prediction set if one exists. Otherwise, None is returned.'''
+        params = (self._get_prediction_table(),)
+        qry = 'SELECT * FROM {0} WHERE PredictionSet=%s AND Status="queued" ORDER BY ID LIMIT 1'.format(*params)
+        return self.DDG_db.execute_select(qry, parameters=(prediction_set_id,)) or None
+
+
+    @job_execution
+    def start_job(self, prediction_id, prediction_set_id):
         '''Sets the job status to "active". prediction_set must be passed and is used as a sanity check.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
@@ -1142,7 +1238,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     ###########################################################################################
 
 
-    def _add_file_content(self, content, rm_trailing_line_whitespace = False, forced_mime_type = None):
+    def _add_file_content(self, content, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
         '''Takes file content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
            a new record if necessary, and returns the associated FileContent.ID value.'''
 
@@ -1151,7 +1247,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
         # Check to see whether the file has been uploaded before
         hexdigest = get_hexdigest(content)
-        existing_filecontent_id = self.get_file_id(content, hexdigest = hexdigest)
+        existing_filecontent_id = self.get_file_id(content, db_cursor = db_cursor, hexdigest = hexdigest)
 
         # Create the FileContent record if the file is a new file
         if existing_filecontent_id == None:
@@ -1171,8 +1267,13 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 Filesize = len(content),
                 MD5HexDigest = hexdigest
             )
-            self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
-            existing_filecontent_id = self.get_file_id(content, hexdigest = hexdigest)
+
+            if db_cursor:
+                sql, params = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
+                db_cursor.execute(sql, params)
+            else:
+                self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
+            existing_filecontent_id = self.get_file_id(content, db_cursor = db_cursor, hexdigest = hexdigest)
             assert(existing_filecontent_id != None)
         return existing_filecontent_id
 
@@ -1211,15 +1312,17 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     # Prediction setup interface
 
 
-    def _add_prediction_file(self, prediction_id, file_content, filename, filetype, filerole, stage, rm_trailing_line_whitespace = False, forced_mime_type = None):
-        '''This function adds file content to the database and then creates a record associating that content with a prediction.'''
+    def _add_prediction_file(self, prediction_id, file_content, filename, filetype, filerole, stage, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
+        '''This function adds file content to the database and then creates a record associating that content with a prediction.
+           If db_cursor is passed then we call that directly. This is crucial for transactions as many of the database functions
+           create new cursors which commit changes so transactions do not work properly.'''
         prediction_table = self._get_prediction_table()
 
         # Add the file contents to the database
         if filetype == 'PDB':
             forced_mime_type = forced_mime_type or 'chemical/x-pdb'
 
-        file_content_id = self._add_file_content(file_content, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
+        file_content_id = self._add_file_content(file_content, db_cursor = db_cursor, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
 
         # Link the file contents to the prediction
         d = dict(
@@ -1230,11 +1333,19 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             Stage = stage,
         )
         if prediction_table == 'Prediction':
-            d['PredictionID'] = prediction_id,
-            self.DDG_db.insertDictIfNew('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
+            d['PredictionID'] = prediction_id
+            if db_cursor:
+                sql, params = self.DDG_db.create_insert_dict_string('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
+                db_cursor.execute(sql, params)
+            else:
+                self.DDG_db.insertDictIfNew('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
         elif prediction_table == 'PredictionPPI':
-            d['PredictionPPIID'] = prediction_id,
-            self.DDG_db.insertDictIfNew('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
+            d['PredictionPPIID'] = prediction_id
+            if db_cursor:
+                sql, params = self.DDG_db.create_insert_dict_string('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
+                db_cursor.execute(sql, params)
+            else:
+                self.DDG_db.insertDictIfNew('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
         else:
             raise('Invalid table "%s" passed.' % prediction_table)
 

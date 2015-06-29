@@ -932,11 +932,12 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
 
 
     def _get_prediction_table(self): return 'Prediction'
+    def _get_prediction_structure_scores_table(self): return 'PredictionStructureScore'
     def _get_prediction_type(self): return 'ProteinStability'
     def _get_prediction_dataset_type(self): return 'Protein stability'
     def _get_prediction_type_description(self): return 'monomeric stability'
     def _get_user_dataset_experiment_table(self): return 'UserDataSetExperiment'
-
+    def _get_user_dataset_experiment_tag_table(self): raise Exception('To be added.')
 
     ###########################################################################################
     ## Information layer
