@@ -526,7 +526,8 @@ class BindingAffinityDDGInterface(ddG):
     # completed
 
 
-    def _get_job_details_inner_fn(self, prediction_id, include_files = True, truncate_content = None):
+    @informational_job
+    def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
         prediction_record = self.DDG_db.execute_select('SELECT * FROM PredictionPPI WHERE ID=%s', parameters=(prediction_id,))
         if not prediction_record:
             raise Exception('No details could be found for prediction #%d in the database.' % prediction_id)
@@ -543,6 +544,11 @@ class BindingAffinityDDGInterface(ddG):
             assert(k not in prediction_record)
             prediction_record[k] = v
         return prediction_record
+
+
+    @job_execution
+    def set_job_temporary_protocol_field(self, prediction_id, prediction_set_id, temporary_protocol_field):
+        raise Exception('not implemented yet')
 
 
     @job_execution

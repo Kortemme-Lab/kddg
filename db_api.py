@@ -675,6 +675,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @informational_job
+    def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
+        '''Returns the details necessary to run the job.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
+
+
+    @informational_job
     def get_job_files(self, prediction_id, truncate_content = None):
         '''Returns a dict mapping the stages (e.g. 'input', 'output', 'analysis') of a job with the files associated with
            that stage.
@@ -945,25 +951,11 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @job_execution
-    def get_queued_job(self, prediction_set_id, order_by = 'Cost', order_order_asc = False):
-        '''Returns the next queued Prediction record from the prediction set if one exists. Otherwise, None is returned.
-           Assuming Cost is filled in and is representative of the expected runtime, it makes sense to request jobs ordered
-           by Cost and order_order_asc = False rather than by ID as longer jobs can then be kicked off before shorter jobs.'''
-
-        assert((order_by in ['Cost', 'ID']) and isinstance(order_order_asc, bool))
-        if order_order_asc:
-            order_order_asc = 'ASC'
-        else:
-            order_order_asc = 'DESC'
-        params = (self._get_prediction_table(), order_by, order_order_asc)
-        qry = 'SELECT * FROM {0} WHERE PredictionSet=%s AND Status="queued" ORDER BY {1} {2} LIMIT 1'.format(*params)
-        return self.DDG_db.execute_select(qry, parameters=(prediction_set_id,)) or None
-
-
-    @job_execution
     def get_queued_jobs(self, prediction_set_id, order_by = 'Cost', order_order_asc = False, include_files = True, truncate_content = None):
         '''An iterator to return the details of the queued prediction records in this prediction set.
            An exception is raised if the prediction set is halted.
+           Assuming Cost is filled in and is representative of the expected runtime, it makes sense to request jobs ordered
+           by Cost and order_order_asc = False rather than by ID as longer jobs can then be kicked off before shorter jobs.
 
            Usage:
                for prediction_record in ppi_api.get_queued_jobs(prediction_set_id, include_files = True, truncate_content = 30):
@@ -981,21 +973,19 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                 self.DDG_db = None
                 self.DDG_db_utf = None
                 raise Exception('get_job was called %d times for this prediction. This is probably a bug in the calling code.' % self._get_job_fn_call_counter[job_id])
-            yield(self._get_job_details_inner_fn(job_id, include_files = include_files, truncate_content = truncate_content))
+            yield(self.get_job_details(job_id, include_files = include_files, truncate_content = truncate_content))
 
 
     @job_execution
     def get_queued_job_list(self, prediction_set_id, order_by = 'Cost', order_order_asc = False):
         '''An iterator to return the list of queued prediction records in this prediction set.
+           Assuming Cost is filled in and is representative of the expected runtime, it makes sense to request jobs ordered
+           by Cost and order_order_asc = False rather than by ID as longer jobs can then be kicked off before shorter jobs.
 
            Usage:
                for prediction_id in ppi_api.get_queued_job_list(prediction_set_id):
                    print(prediction_id)
         '''
-
-        '''Returns the next queued Prediction record from the prediction set if one exists. Otherwise, None is returned.
-           Assuming Cost is filled in and is representative of the expected runtime, it makes sense to request jobs ordered
-           by Cost and order_order_asc = False rather than by ID as longer jobs can then be kicked off before shorter jobs.'''
 
         assert((order_by in ['Cost', 'ID']) and isinstance(order_order_asc, bool))
         if order_order_asc:
@@ -1009,19 +999,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         while x < len(results):
             yield results[x]['ID']
             x += 1
-
-    #, include_files = False
-
-    #todo: move
-    @informational_job
-    def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
-        '''Returns None if no queued jobs exist or if the PredictionSet is halted otherwise return details necessary to run the job.'''
-        return self._get_job_details_inner_fn(prediction_id, include_files = include_files, truncate_content = truncate_content)
-
-
-    def _get_job_details_inner_fn(self, prediction_id, include_files = True, truncate_content = None):
-        '''The workhorse function for get_job. If include_files is set, the file information should be returned as well.'''
-        raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
     @job_execution
