@@ -632,6 +632,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @informational_pdb
+    def get_pdb_mutations_for_mutagenesis(self, mutagenesis_id, pdb_file_id, set_number, complex_id = None):
+        '''Returns the PDB mutations for a mutagenesis experiment as well as the PDB residue information.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @informational_pdb
     def get_pdb_details(self, pdb_ids, cached_pdb_details = None):
         '''Returns the details stored in the database about the PDB files associated with pdb_ids e.g. chains, resolution,
            technique used to determine the structure etc.'''
@@ -663,20 +669,57 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @informational_job
-    def get_prediction_set_details(self, PredictionSetID):
+    def get_complex_details(self, complex_id):
+        '''Returns the database record for the given complex.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @informational_job
+    def get_job_files(self, prediction_id, truncate_content = None):
+        '''Returns a dict mapping the stages (e.g. 'input', 'output', 'analysis') of a job with the files associated with
+           that stage.
+           If truncate_content is set, it should be an integer specifying the amount of characters to include. This is useful
+           to see if the file header is as expected.
+        '''
+        params = (self._get_prediction_table(),)
+        qry = 'SELECT {0}File.*, FileContent.Content, FileContent.MIMEType, FileContent.Filesize, FileContent.MD5HexDigest FROM {0}File INNER JOIN FileContent ON FileContentID=FileContent.ID WHERE {0}ID=%s'.format(*params)
+        results = self.DDG_db.execute_select(qry, parameters=(prediction_id,))
+        job_files = {}
+        for r in results:
+            if truncate_content and str(truncate_content).isdigit():
+                if len(r['Content']) > int(truncate_content):
+                    r['Content'] = '%s...' % r['Content'][:int(truncate_content)]
+            job_stage = r['Stage']
+            del r['Stage']
+            job_files[job_stage] = job_files.get(job_stage, [])
+            job_files[job_stage].append(r)
+        return job_files
+
+
+    @informational_job
+    def get_prediction_set_details(self, prediction_set_id):
         '''Returns the PredictionSet record from the database.'''
-        results = self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(PredictionSetID,))
+        results = self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(prediction_set_id,))
         if len(results) == 1:
+            results[0]['Job status summary'] = self._get_prediction_set_status_counts(prediction_set_id)
             return results[0]
         return None
 
 
+    def _get_prediction_set_status_counts(self, prediction_set_id):
+        '''Returns a summary of the prediction job statuses for the prediction set.'''
+        d = {}
+        for r in self.DDG_db.execute_select('SELECT Status, COUNT(Status) AS Count FROM {0} WHERE PredictionSet=%s GROUP BY Status'.format(self._get_prediction_table()), parameters=(prediction_set_id,)):
+            d[r['Status']] = r['Count']
+        return d
+
+
     @informational_job
-    def get_prediction_ids(self, PredictionSetID):
+    def get_prediction_ids(self, prediction_set_id):
         '''Returns the list of Prediction IDs associated with the PredictionSet.'''
-        self._assert_prediction_set_is_correct_type(PredictionSetID)
+        self._assert_prediction_set_is_correct_type(prediction_set_id)
         qry = 'SELECT ID FROM %s WHERE PredictionSet=%%s ORDER BY ID' % self._get_prediction_table()
-        return [r['ID'] for r in self.DDG_db.execute_select(qry, parameters=(PredictionSetID,))]
+        return [r['ID'] for r in self.DDG_db.execute_select(qry, parameters=(prediction_set_id,))]
 
 
     @informational_job
@@ -708,6 +751,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         else:
             qry = 'SELECT %s.* FROM %s INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%%s' % (self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table())
             return self.DDG_db.execute_select(qry, parameters=(user_dataset_name,))
+
+
+    @informational_job
+    def get_user_dataset_experiment_details(self, user_dataset_experiment_id, user_dataset_id = None):
+        '''Returns all the data relating to a user dataset experiment.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
     ###########################################################################################
@@ -896,33 +945,83 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @job_execution
-    def get_job(self, prediction_set_id):
-        '''Returns None if no queued jobs exist or if the PredictionSet is halted otherwise return details necessary to run the job.'''
+    def get_queued_job(self, prediction_set_id, order_by = 'Cost', order_order_asc = False):
+        '''Returns the next queued Prediction record from the prediction set if one exists. Otherwise, None is returned.
+           Assuming Cost is filled in and is representative of the expected runtime, it makes sense to request jobs ordered
+           by Cost and order_order_asc = False rather than by ID as longer jobs can then be kicked off before shorter jobs.'''
+
+        assert((order_by in ['Cost', 'ID']) and isinstance(order_order_asc, bool))
+        if order_order_asc:
+            order_order_asc = 'ASC'
+        else:
+            order_order_asc = 'DESC'
+        params = (self._get_prediction_table(), order_by, order_order_asc)
+        qry = 'SELECT * FROM {0} WHERE PredictionSet=%s AND Status="queued" ORDER BY {1} {2} LIMIT 1'.format(*params)
+        return self.DDG_db.execute_select(qry, parameters=(prediction_set_id,)) or None
+
+
+    @job_execution
+    def get_queued_jobs(self, prediction_set_id, order_by = 'Cost', order_order_asc = False, include_files = True, truncate_content = None):
+        '''An iterator to return the details of the queued prediction records in this prediction set.
+           An exception is raised if the prediction set is halted.
+
+           Usage:
+               for prediction_record in ppi_api.get_queued_jobs(prediction_set_id, include_files = True, truncate_content = 30):
+                   pprint.pprint(prediction_record)
+        '''
+
+        if self.get_prediction_set_details(prediction_set_id)['Status'] == 'halted':
+            raise Exception('The prediction set is halted so no job details can be returned.')
+
         self._assert_prediction_set_exists(prediction_set_id)
-        next_job = self.get_queued_job(prediction_set_id)
-        if next_job:
-            assert(len(next_job) == 1)
-            job_id = next_job[0]['ID']
+        for job_id in self.get_queued_job_list(prediction_set_id, order_by = order_by, order_order_asc = order_order_asc):
             self._get_job_fn_call_counter[job_id] = self._get_job_fn_call_counter.get(job_id, 0)
             self._get_job_fn_call_counter[job_id] += 1
             if self._get_job_fn_call_counter[job_id] > self._get_job_fn_call_counter_max:
                 self.DDG_db = None
                 self.DDG_db_utf = None
                 raise Exception('get_job was called %d times for this prediction. This is probably a bug in the calling code.' % self._get_job_fn_call_counter[job_id])
-            return self._get_job_inner_fn(job_id)
-
-
-    def _get_job_inner_fn(self, job_id):
-        '''The workhorse function for get_job.'''
-        raise Exception('This function needs to be implemented by subclasses of the API.')
+            yield(self._get_job_details_inner_fn(job_id, include_files = include_files, truncate_content = truncate_content))
 
 
     @job_execution
-    def get_queued_job(self, prediction_set_id):
-        '''Returns the next queued Prediction record from the prediction set if one exists. Otherwise, None is returned.'''
-        params = (self._get_prediction_table(),)
-        qry = 'SELECT * FROM {0} WHERE PredictionSet=%s AND Status="queued" ORDER BY ID LIMIT 1'.format(*params)
-        return self.DDG_db.execute_select(qry, parameters=(prediction_set_id,)) or None
+    def get_queued_job_list(self, prediction_set_id, order_by = 'Cost', order_order_asc = False):
+        '''An iterator to return the list of queued prediction records in this prediction set.
+
+           Usage:
+               for prediction_id in ppi_api.get_queued_job_list(prediction_set_id):
+                   print(prediction_id)
+        '''
+
+        '''Returns the next queued Prediction record from the prediction set if one exists. Otherwise, None is returned.
+           Assuming Cost is filled in and is representative of the expected runtime, it makes sense to request jobs ordered
+           by Cost and order_order_asc = False rather than by ID as longer jobs can then be kicked off before shorter jobs.'''
+
+        assert((order_by in ['Cost', 'ID']) and isinstance(order_order_asc, bool))
+        if order_order_asc:
+            order_order_asc = 'ASC'
+        else:
+            order_order_asc = 'DESC'
+        params = (self._get_prediction_table(), order_by, order_order_asc)
+        qry = 'SELECT ID FROM {0} WHERE PredictionSet=%s AND Status="queued" ORDER BY {1} {2}'.format(*params)
+        results = self.DDG_db.execute_select(qry, parameters=(prediction_set_id,))
+        x = 0
+        while x < len(results):
+            yield results[x]['ID']
+            x += 1
+
+    #, include_files = False
+
+    #todo: move
+    @informational_job
+    def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
+        '''Returns None if no queued jobs exist or if the PredictionSet is halted otherwise return details necessary to run the job.'''
+        return self._get_job_details_inner_fn(prediction_id, include_files = include_files, truncate_content = truncate_content)
+
+
+    def _get_job_details_inner_fn(self, prediction_id, include_files = True, truncate_content = None):
+        '''The workhorse function for get_job. If include_files is set, the file information should be returned as well.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
     @job_execution

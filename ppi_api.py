@@ -112,6 +112,61 @@ class BindingAffinityDDGInterface(ddG):
         return complex_chains
 
 
+    @informational_pdb
+    def get_pdb_mutations_for_mutagenesis(self, mutagenesis_id, pdb_file_id, set_number, complex_id = None):
+        '''Returns the PDB mutations for a mutagenesis experiment as well as the PDB residue information.'''
+        pdb_mutations = []
+        for pdb_mutation in self.DDG_db.execute_select('''
+            SELECT PPMutagenesisPDBMutation.*, PDBResidue.ResidueType, PDBResidue.BFactorMean,
+            PDBResidue.BFactorDeviation, PDBResidue.SecondaryStructurePosition, PDBResidue.AccessibleSurfaceArea, ComplexExposure, ComplexDSSP
+            FROM
+            PPMutagenesisPDBMutation
+            INNER JOIN
+            PDBResidue ON PPMutagenesisPDBMutation.PDBFileID = PDBResidue.PDBFileID AND PPMutagenesisPDBMutation.Chain = PDBResidue.Chain AND PPMutagenesisPDBMutation.ResidueID = PDBResidue.ResidueID AND PPMutagenesisPDBMutation.WildTypeAA = PDBResidue.ResidueAA
+            WHERE PPMutagenesisID=%s AND PDBResidue.PDBFileID=%s AND SetNumber=%s ORDER BY Chain, ResidueID''', parameters=(mutagenesis_id, pdb_file_id, set_number)):
+                if complex_id:
+                    assert(pdb_mutation['PPComplexID'] == complex_id)
+                pdb_mutations.append(pdb_mutation)
+        return pdb_mutations
+
+
+    @informational_job
+    def get_complex_details(self, complex_id):
+        results = self.DDG_db.execute_select('SELECT * FROM PPComplex WHERE ID=%s', parameters=(complex_id, ))
+        if len(results) == 1:
+            return results[0]
+        return None
+
+
+    @informational_job
+    def get_user_dataset_experiment_details(self, user_dataset_experiment_id, user_dataset_id = None):
+        if user_dataset_id:
+            ude = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s AND UserDataSetID=%s', parameters=(user_dataset_experiment_id, user_dataset_id))
+            if len(ude) != 1:
+                raise colortext.Exception('User dataset experiment %d does not exist for/correspond to the user dataset %s.' % (user_dataset_experiment_id, user_dataset_id))
+        else:
+            ude = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s', parameters=(user_dataset_experiment_id,))
+            if len(ude) != 1:
+                raise colortext.Exception('User dataset experiment %d does not exist.' % (user_dataset_experiment_id, ))
+        ude = ude[0]
+        user_dataset_id = ude['UserDataSetID']
+        assert(ude['IsComplex'] == 1)
+
+        pdb_mutations = self.get_pdb_mutations_for_mutagenesis(ude['PPMutagenesisID'], ude['PDBFileID'], ude['SetNumber'], complex_id = ude['PPComplexID'])
+        return dict(
+            Mutagenesis = dict(
+                PPMutagenesisID = ude['PPMutagenesisID'],
+            ),
+            Complex = self.get_complex_details(ude['PPComplexID']),
+            Structure = dict(
+                PDBFileID = ude['PDBFileID'],
+                SetNumber = ude['SetNumber'],
+                Partners = self.get_chains_for_mutatagenesis(ude['PPMutagenesisID'], ude['PDBFileID'], ude['SetNumber'], complex_id = ude['PPComplexID']),
+            ),
+            PDBMutations = pdb_mutations,
+        )
+
+
     ##### Public API: Rosetta-related functions
 
 
@@ -471,13 +526,34 @@ class BindingAffinityDDGInterface(ddG):
     # completed
 
 
-    def _get_job_inner_fn(self, job_id):
-        print(job_id)
+    def _get_job_details_inner_fn(self, prediction_id, include_files = True, truncate_content = None):
+        prediction_record = self.DDG_db.execute_select('SELECT * FROM PredictionPPI WHERE ID=%s', parameters=(prediction_id,))
+        if not prediction_record:
+            raise Exception('No details could be found for prediction #%d in the database.' % prediction_id)
+        prediction_record = prediction_record[0]
+        prediction_record['Files'] = {}
+        if include_files:
+            prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
+
+        # Read the UserPPDataSetExperiment details
+        user_dataset_experiment_id = prediction_record['UserPPDataSetExperimentID']
+        ude_details = self.get_user_dataset_experiment_details(user_dataset_experiment_id)
+        assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record['PPMutagenesisID'])
+        for k, v in ude_details.iteritems():
+            assert(k not in prediction_record)
+            prediction_record[k] = v
+        return prediction_record
 
 
     @job_execution
     def start_job(self, prediction_id, prediction_set_id):
         '''Sets the job status to "active". prediction_set must be passed and is used as a sanity check.'''
+        prediction_record = self.DDG_db.execute_select('SELECT * FROM PredictionPPI WHERE ID=%s AND PredictionSet=%s', parameters=(prediction_id, prediction_set_id))
+        if prediction_record['Protocol'] == None:
+            print('empty Protocol')
+            if prediction_record['TemporaryProtocolField'] == None:
+                raise Exception('Neither the Protocol nor the TemporaryProtocolField is set for this job - it cannot be started without this information.')
+
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
@@ -496,6 +572,13 @@ class BindingAffinityDDGInterface(ddG):
     def store_scores(self, scores, prediction_set, prediction_id):
         '''Stores a list of dicts suitable for database storage e.g. PredictionPPIStructureScore records.'''
         raise Exception('not implemented yet')
+
+
+    @job_completion
+    def complete_job(self, prediction_id, prediction_set, scores, maxvmem, ddgtime, files = []):
+        '''Sets a job to 'completed' and stores scores. prediction_set must be passed and is used as a sanity check.'''
+
+        raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
     ################################################################################################
