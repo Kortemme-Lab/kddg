@@ -20,7 +20,10 @@ import random
 import datetime
 import zipfile
 import pprint
-import magic
+try:
+    import magic
+except ImportError:
+    pass
 import json
 
 from io import BytesIO
