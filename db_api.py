@@ -43,7 +43,6 @@ import ddgdbapi
 from tools.bio.pdb import PDB
 from tools.bio.basics import residue_type_3to1_map as aa1, dssp_elision
 from tools.bio.basics import Mutation
-from tools.bio.alignment import ScaffoldModelChainMapper
 #from Bio.PDB import *
 from tools.fs.fsio import write_file, read_file
 from tools.process import Popen
