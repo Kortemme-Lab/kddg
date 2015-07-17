@@ -22,7 +22,6 @@ from api_layers import *
 from db_api import ddG
 from tools import colortext
 from tools.bio.pdb import PDB
-from tools.bio.alignment import ScaffoldModelChainMapper
 from tools.bio.basics import ChainMutation
 from tools.fs.fsio import read_file
 from tools.rosetta.input_files import Mutfile
