@@ -27,6 +27,45 @@ from tools.bio.basics import ChainMutation
 from tools.fs.fsio import read_file
 from tools.rosetta.input_files import Mutfile
 
+def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
+    # Uses ~/.my.cnf to get authentication information
+    ### Example .my.cnf (host_config_name will equal guybrush2):
+    ### [clientguybrush2]
+    ### user=kyleb
+    ### password=notmyrealpass
+    ### host=guybrush.ucsf.edu
+    my_cnf_path = os.path.expanduser(os.path.join('~', '.my.cnf'))
+    if not os.path.isfile( os.path.expanduser(my_cnf_path) ):
+        raise Exception("A .my.cnf file must exist at: " + my_cnf_path)
+
+    # These three variables must be set in a section of .my.cnf named host_config_name
+    user = None
+    password = None
+    host = None
+    with open(my_cnf_path, 'r') as f:
+        parsing_config_section = False
+        for line in f:
+            if line.strip() == '[client%s]' % host_config_name:
+                parsing_config_section = True
+            elif line.strip() == '':
+                parsing_config_section = False
+            elif parsing_config_section:
+                if '=' in line:
+                    key, val = line.strip().split('=')
+                    if key == 'user':
+                        user = val
+                    elif key == 'password':
+                        password = val
+                    elif key == 'host':
+                        host = val
+                else:
+                    parsing_config_section = False
+
+    if not user or not password or not host:
+        raise Exception("Couldn't find host(%s), username(%s), or password in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
+
+    return get_interface(password, username=user)
+
 def get_interface(passwd, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
@@ -202,7 +241,9 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_job_command_lines(self, *args, **kwargs):
+    def add_job_command_lines(self, prediction_set_id, command_line, **kwargs):
+        prediction_ids = self.get_prediction_ids(prediction_set_id)
+        self.DDG_db.execute('UPDATE PredictionPPI SET ')
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
