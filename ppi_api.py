@@ -63,7 +63,7 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
     if not user or not password or not host:
         raise Exception("Couldn't find host(%s), username(%s), or password in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
 
-    return get_interface(password, username=user, hostname=host)
+    return get_interface(password, username=user, hostname=host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
 
 def get_interface(passwd, username = 'kortemmelab', hostname='kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
@@ -240,10 +240,12 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_job_command_lines(self, prediction_set_id, command_line, **kwargs):
+    def add_job_command_lines(self, prediction_set_id, command_line):
         prediction_ids = self.get_prediction_ids(prediction_set_id)
-        self.DDG_db.execute('UPDATE PredictionPPI SET ')
-        raise Exception('This function needs to be implemented by subclasses of the API.')
+        for prediction_id in prediction_ids:
+            print predition_id
+        # self.DDG_db.execute('UPDATE PredictionPPI SET ')
+        # raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
     @job_creator
@@ -411,13 +413,9 @@ class BindingAffinityDDGInterface(ddG):
         assert(not(input_files))
 
         # Preliminaries
-        if not(self.rosetta_scripts_path and self.rosetta_database_path):
-            raise Exception('The rosetta_scripts_path and rosetta_database_path API variables need to be set when adding predictions as we use the Features Reporter to create the mapping between PDB residues and Rosetta residues.')
-        else:
-            if not(os.path.exists(self.rosetta_scripts_path)):
-                raise Exception('The path "%s" to the RosettaScripts executable does not exist.' % self.rosetta_scripts_path)
-            if not(os.path.exists(self.rosetta_database_path)):
-                raise Exception('The path "%s" to the Rosetta database does not exist.' % self.rosetta_database_path)
+        if not self.rosetta_scripts_path or not os.path.exists(self.rosetta_scripts_path):
+            raise Exception('The path "%s" to the RosettaScripts executable does not exist.' % self.rosetta_scripts_path)
+
         cache_maps = False
         if isinstance(pdb_residues_to_rosetta_cache, dict):
             cache_maps = True
@@ -428,7 +426,10 @@ class BindingAffinityDDGInterface(ddG):
         # Determine the list of PDB chains that will be kept
         pdb_chains = self.get_chains_for_mutatagenesis(pp_mutagenesis_id, pdb_file_id, pp_complex_pdb_set_number, complex_id = pp_complex_id)
         pdb_chains_to_keep = set(pdb_chains['L'] + pdb_chains['R'])
-        cache_key = (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)), self.rosetta_scripts_path, self.rosetta_database_path, extra_rosetta_command_flags)
+        if self.rosetta_database_path:
+            cache_key = (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)), self.rosetta_scripts_path, self.rosetta_database_path, extra_rosetta_command_flags)
+        else:
+            cache_key = (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)), self.rosetta_scripts_path, extra_rosetta_command_flags)
 
         if cache_maps and pdb_residues_to_rosetta_cache.get(cache_key):
             stripped_p = pdb_residues_to_rosetta_cache[cache_key]['stripped_p']
@@ -480,7 +481,10 @@ class BindingAffinityDDGInterface(ddG):
             atom_to_rosetta_residue_map = pdb_residues_to_rosetta_cache[cache_key]['atom_to_rosetta_residue_map']
             rosetta_to_atom_residue_map = pdb_residues_to_rosetta_cache[cache_key]['rosetta_to_atom_residue_map']
         else:
-            stripped_p.construct_pdb_to_rosetta_residue_map(self.rosetta_scripts_path, self.rosetta_database_path, extra_command_flags = extra_rosetta_command_flags)
+            if self.rosetta_database_path:
+                stripped_p.construct_pdb_to_rosetta_residue_map(self.rosetta_scripts_path, self.rosetta_database_path, extra_command_flags = extra_rosetta_command_flags)
+            else:
+                stripped_p.construct_pdb_to_rosetta_residue_map(self.rosetta_scripts_path, extra_command_flags = extra_rosetta_command_flags)
             atom_to_rosetta_residue_map = stripped_p.get_atom_sequence_to_rosetta_json_map()
             rosetta_to_atom_residue_map = stripped_p.get_rosetta_sequence_to_atom_json_map()
 
