@@ -2095,7 +2095,7 @@ class ddGDatabase(DatabaseInterface):
     chainErrors = {}
     chainWarnings= {}
 
-    def __init__(self, passwd = None, username = 'kortemmelab', use_utf=False):
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', use_utf=False):
         if not passwd:
             if os.path.exists("pw"):
                 F = open("pw")
@@ -2109,13 +2109,14 @@ class ddGDatabase(DatabaseInterface):
         super(ddGDatabase, self).__init__({},
             isInnoDB = True,
             numTries = 32,
-            host = "kortemmelab.ucsf.edu",
             db = "ddG",
             user = username,
             passwd = passwd,
+            host = hostname,
             port = 3306,
             unix_socket = "/var/lib/mysql/mysql.sock",
-            use_utf = use_utf)
+            use_utf = use_utf,
+        )
 
     def _create_protein_deletion_stored_procedure(self):
         '''This stored procedure returns 1 on error, -1 when there was no associated Protein record, and 0 on success.'''
