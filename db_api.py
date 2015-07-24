@@ -1413,6 +1413,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         if prediction_table == 'Prediction':
             d['PredictionID'] = prediction_id
             if db_cursor:
+                # Note: When less tired, add select statement here to see if info already in database
                 sql, params = self.DDG_db.create_insert_dict_string('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
                 db_cursor.execute(sql, params)
             else:
