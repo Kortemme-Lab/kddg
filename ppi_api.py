@@ -177,6 +177,35 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @informational_job
+    def get_dataset_experiment_details(self, user_dataset_experiment_id, user_dataset_id = None):
+        if user_dataset_id:
+            ude = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s AND UserDataSetID=%s', parameters=(user_dataset_experiment_id, user_dataset_id))
+            if len(ude) != 1:
+                raise colortext.Exception('User dataset experiment %d does not exist for/correspond to the user dataset %s.' % (user_dataset_experiment_id, user_dataset_id))
+        else:
+            ude = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s', parameters=(user_dataset_experiment_id,))
+            if len(ude) != 1:
+                raise colortext.Exception('User dataset experiment %d does not exist.' % (user_dataset_experiment_id, ))
+        ude = ude[0]
+        user_dataset_id = ude['UserDataSetID']
+        assert(ude['IsComplex'] == 1)
+
+        pdb_mutations = self.get_pdb_mutations_for_mutagenesis(ude['PPMutagenesisID'], ude['PDBFileID'], ude['SetNumber'], complex_id = ude['PPComplexID'])
+        return dict(
+            Mutagenesis = dict(
+                PPMutagenesisID = ude['PPMutagenesisID'],
+            ),
+            Complex = self.get_complex_details(ude['PPComplexID']),
+            Structure = dict(
+                PDBFileID = ude['PDBFileID'],
+                SetNumber = ude['SetNumber'],
+                Partners = self.get_chains_for_mutatagenesis(ude['PPMutagenesisID'], ude['PDBFileID'], ude['SetNumber'], complex_id = ude['PPComplexID']),
+            ),
+            PDBMutations = pdb_mutations,
+        )
+
+
+    @informational_job
     def get_user_dataset_experiment_details(self, user_dataset_experiment_id, user_dataset_id = None):
         if user_dataset_id:
             ude = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s AND UserDataSetID=%s', parameters=(user_dataset_experiment_id, user_dataset_id))
@@ -214,13 +243,13 @@ class BindingAffinityDDGInterface(ddG):
         if dataset_record['DatasetType'] != 'Binding affinity' and dataset_record['DatasetType'] != 'Protein stability and binding affinity':
             raise Exception('The dataset %s does not contain any binding affinity data..' % dataset_id)
 
-        prediction_record['Files'] = {}
-        if include_files:
-            prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
+        #prediction_record['Files'] = {}
+        #if include_files:
+        #    prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
 
         # Read the UserPPDataSetExperiment details
         user_dataset_experiment_id = prediction_record['UserPPDataSetExperimentID']
-        ude_details = self.get_user_dataset_experiment_details(user_dataset_experiment_id)
+        ude_details = self.get_dataset_experiment_details(user_dataset_experiment_id)
         assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record['PPMutagenesisID'])
         for k, v in ude_details.iteritems():
             assert(k not in prediction_record)
@@ -484,15 +513,15 @@ class BindingAffinityDDGInterface(ddG):
                 tagged_subset_str = 'subset "%s" of ' % tagged_subset
 
         # Create a cache to speed up job insertion
-        pdb_residues_to_rosetta_cache = manager dictproxy
+        #todo: start back here  pdb_residues_to_rosetta_cache = manager dictproxy
 
         # Create the stripped PDBs and residue maps in parallel using the multiprocessing module
     #todo: write this function on Monday - get_user_dataset_pdb_partner_chains should return a set (<list of {'id' : pdb_file_id, 'L' : <list of chain ids>, , 'R' : <list of chain ids>} dicts>)
         pdb_partner_chains = self.get_user_dataset_pdb_partner_chains(user_dataset_name, tagged_subset = tagged_subset)
-        for ppc in pdb_partner_chains:
+        #todo: start back here for ppc in pdb_partner_chains:
 
-            apply_async self._create_pdb_residues_to_rosetta_cache_mp(pdb_residues_to_rosetta_cache, ppc['id'], set(ppc['L'] + ppc['R']), extra_rosetta_command_flags, keep_hetatm_lines)
-        .join()
+        #todo: start back here    apply_async self._create_pdb_residues_to_rosetta_cache_mp(pdb_residues_to_rosetta_cache, ppc['id'], set(ppc['L'] + ppc['R']), extra_rosetta_command_flags, keep_hetatm_lines)
+        #todo: start back here .join()
 
         # Progress counter setup
         failed_jobs = {}
@@ -904,7 +933,7 @@ class BindingAffinityDDGInterface(ddG):
         else:
             raise Exception("DevelopmentProtocol table was originally set up so that names are unique; this has obviously changed")
 
-        
+
     def _create_dev_protocol(self, name, application, template_command_line):
         dev_prot_record = {
             'Name' : name,
