@@ -20,7 +20,10 @@ import random
 import datetime
 import zipfile
 import pprint
-import magic
+try:
+    import magic
+except ImportError:
+    pass
 import json
 
 from io import BytesIO
@@ -40,7 +43,6 @@ import ddgdbapi
 from tools.bio.pdb import PDB
 from tools.bio.basics import residue_type_3to1_map as aa1, dssp_elision
 from tools.bio.basics import Mutation
-from tools.bio.alignment import ScaffoldModelChainMapper
 #from Bio.PDB import *
 from tools.fs.fsio import write_file, read_file
 from tools.process import Popen
@@ -87,11 +89,11 @@ class ddG(object):
 
     GET_JOB_FN_CALL_COUNTER_MAX = 10
 
-    def __init__(self, passwd = None, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
         if passwd:
             passwd = passwd.strip()
-        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username)
-        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, use_utf = True)
+        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname)
+        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True)
         self.prediction_data_path = None
         self.rosetta_scripts_path = rosetta_scripts_path
         self.rosetta_database_path = rosetta_database_path
@@ -1429,6 +1431,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         if prediction_table == 'Prediction':
             d['PredictionID'] = prediction_id
             if db_cursor:
+                # Note: When less tired, add select statement here to see if info already in database
                 sql, params = self.DDG_db.create_insert_dict_string('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
                 db_cursor.execute(sql, params)
             else:

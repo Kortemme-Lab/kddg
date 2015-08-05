@@ -22,23 +22,61 @@ from api_layers import *
 from db_api import ddG
 from tools import colortext
 from tools.bio.pdb import PDB
-from tools.bio.alignment import ScaffoldModelChainMapper
 from tools.bio.basics import ChainMutation
 from tools.fs.fsio import read_file
-from tools.rosetta.input_files import Mutfile
+from tools.rosetta.input_files import Mutfile, Resfile
 
-def get_interface(passwd, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
+def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
+    # Uses ~/.my.cnf to get authentication information
+    ### Example .my.cnf (host_config_name will equal guybrush2):
+    ### [clientguybrush2]
+    ### user=kyleb
+    ### password=notmyrealpass
+    ### host=guybrush.ucsf.edu
+    my_cnf_path = os.path.expanduser(os.path.join('~', '.my.cnf'))
+    if not os.path.isfile( os.path.expanduser(my_cnf_path) ):
+        raise Exception("A .my.cnf file must exist at: " + my_cnf_path)
+
+    # These three variables must be set in a section of .my.cnf named host_config_name
+    user = None
+    password = None
+    host = None
+    with open(my_cnf_path, 'r') as f:
+        parsing_config_section = False
+        for line in f:
+            if line.strip() == '[client%s]' % host_config_name:
+                parsing_config_section = True
+            elif line.strip() == '':
+                parsing_config_section = False
+            elif parsing_config_section:
+                if '=' in line:
+                    key, val = line.strip().split('=')
+                    if key == 'user':
+                        user = val
+                    elif key == 'password':
+                        password = val
+                    elif key == 'host':
+                        host = val
+                else:
+                    parsing_config_section = False
+
+    if not user or not password or not host:
+        raise Exception("Couldn't find host(%s), username(%s), or password in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
+
+    return get_interface(password, username=user, hostname=host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+
+def get_interface(passwd, username = 'kortemmelab', hostname='kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
-    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
 
 
 class BindingAffinityDDGInterface(ddG):
     '''This is the internal API class that should be NOT used to interface with the database.'''
 
 
-    def __init__(self, passwd = None, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
-        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None):
+        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
 
 
@@ -225,10 +263,34 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_job_command_lines(self, *args, **kwargs):
-        raise Exception('This function needs to be implemented by subclasses of the API.')
+    def add_development_protocol_command_lines(self, prediction_set_id, protocol_name, application, template_command_line, rosetta_script_file = None):
+        dev_protocol_id = self._get_dev_protocol_id(protocol_name)
+        if not dev_protocol_id:
+            dev_protocol_id = self._create_dev_protocol(protocol_name, application, template_command_line)
 
+        rosetta_script = None
+        if rosetta_script_file:
+            with open(rosetta_script_file, 'r') as f:
+                rosetta_script = f.read()
 
+        prediction_ids = self.get_prediction_ids(prediction_set_id)
+
+        # All functions within the next with block should use the same database cursor.
+        # The commands then function as parts of a transaction which is rolled back if errors occur within the block
+        # or else is committed.
+        self.DDG_db._get_connection()
+        con = self.DDG_db.connection
+        with con:
+            cur = con.cursor()
+            for prediction_id in prediction_ids:
+                qry = 'UPDATE PredictionPPI SET DevelopmentProtocolID=%s WHERE ID=%s'
+                cur.execute(qry, (dev_protocol_id, prediction_id))
+
+                if rosetta_script:
+                # Add the Rosetta script to the database, not using cursor
+                    self._add_prediction_file(prediction_id, rosetta_script, os.path.basename(rosetta_script_file), 'RosettaScript', 'RosettaScript', 'Input', rm_trailing_line_whitespace = True)
+
+                
     @job_creator
     def add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = None):
         '''This function inserts a prediction into the database.
@@ -320,7 +382,6 @@ class BindingAffinityDDGInterface(ddG):
                 if showprogress and count % records_per_dot == 0: colortext.write(".", "cyan", flush = True)
                 if short_run and count > 4: break
             if not quiet: print('')
-            return True
 
         if test_only:
             return
@@ -360,7 +421,7 @@ class BindingAffinityDDGInterface(ddG):
 
             # Progress counter
             count += 1
-            if showprogress and count % records_per_dot == 0: colortext.write(".", "cyan", flush = True)
+            if showprogress and count % records_per_dot == 0: colortext.write(".", "green", flush = True)
             if short_run and count > 4: break
 
         if failed_jobs:
@@ -501,13 +562,9 @@ class BindingAffinityDDGInterface(ddG):
         assert(not(input_files))
 
         # Preliminaries
-        if not(self.rosetta_scripts_path and self.rosetta_database_path):
-            raise Exception('The rosetta_scripts_path and rosetta_database_path API variables need to be set when adding predictions as we use the Features Reporter to create the mapping between PDB residues and Rosetta residues.')
-        else:
-            if not(os.path.exists(self.rosetta_scripts_path)):
-                raise Exception('The path "%s" to the RosettaScripts executable does not exist.' % self.rosetta_scripts_path)
-            if not(os.path.exists(self.rosetta_database_path)):
-                raise Exception('The path "%s" to the Rosetta database does not exist.' % self.rosetta_database_path)
+        if not self.rosetta_scripts_path or not os.path.exists(self.rosetta_scripts_path):
+            raise Exception('The path "%s" to the RosettaScripts executable does not exist.' % self.rosetta_scripts_path)
+
         cache_maps = False
         if isinstance(pdb_residues_to_rosetta_cache, dict):
             cache_maps = True
@@ -518,7 +575,10 @@ class BindingAffinityDDGInterface(ddG):
         # Determine the list of PDB chains that will be kept
         pdb_chains = self.get_chains_for_mutatagenesis(pp_mutagenesis_id, pdb_file_id, pp_complex_pdb_set_number, complex_id = pp_complex_id)
         pdb_chains_to_keep = set(pdb_chains['L'] + pdb_chains['R'])
-        cache_key = (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)), self.rosetta_scripts_path, self.rosetta_database_path, extra_rosetta_command_flags)
+        if self.rosetta_database_path:
+            cache_key = (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)), self.rosetta_scripts_path, self.rosetta_database_path, extra_rosetta_command_flags)
+        else:
+            cache_key = (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)), self.rosetta_scripts_path, extra_rosetta_command_flags)
 
         if cache_maps and pdb_residues_to_rosetta_cache.get(cache_key):
             stripped_p = pdb_residues_to_rosetta_cache[cache_key]['stripped_p']
@@ -530,6 +590,9 @@ class BindingAffinityDDGInterface(ddG):
             if not keep_hetatm_lines:
                 p.strip_HETATMs()
             stripped_p = PDB('\n'.join(p.lines))
+
+        # Determine PDB chains to move
+        pdb_chains_to_move_str = ','.join(sorted(set(pdb_chains['R'])))
 
         # Check for CSE and MSE
         try:
@@ -570,14 +633,19 @@ class BindingAffinityDDGInterface(ddG):
             atom_to_rosetta_residue_map = pdb_residues_to_rosetta_cache[cache_key]['atom_to_rosetta_residue_map']
             rosetta_to_atom_residue_map = pdb_residues_to_rosetta_cache[cache_key]['rosetta_to_atom_residue_map']
         else:
-            stripped_p.construct_pdb_to_rosetta_residue_map(self.rosetta_scripts_path, self.rosetta_database_path, extra_command_flags = extra_rosetta_command_flags)
+            if self.rosetta_database_path:
+                stripped_p.construct_pdb_to_rosetta_residue_map(self.rosetta_scripts_path, self.rosetta_database_path, extra_command_flags = extra_rosetta_command_flags)
+            else:
+                stripped_p.construct_pdb_to_rosetta_residue_map(self.rosetta_scripts_path, extra_command_flags = extra_rosetta_command_flags)
             atom_to_rosetta_residue_map = stripped_p.get_atom_sequence_to_rosetta_json_map()
             rosetta_to_atom_residue_map = stripped_p.get_rosetta_sequence_to_atom_json_map()
 
-        # Make mutfile
+        # Make mutfile and resfile
         rosetta_mutations = stripped_p.map_pdb_residues_to_rosetta_residues(mutations)
         mf = Mutfile.from_mutagenesis(rosetta_mutations)
-        resfile_content = self._create_resfile_from_pdb_mutations(stripped_p, mutations)
+        mutfile_name = 'mutations.mutfile'
+        rf = Resfile.from_mutageneses(mutations)
+        resfile_name = 'mutations.resfile'
 
         if cache_maps and (not pdb_residues_to_rosetta_cache.get(cache_key)):
             pdb_residues_to_rosetta_cache[cache_key] = dict(
@@ -594,6 +662,16 @@ class BindingAffinityDDGInterface(ddG):
             total_num_residues += num_chain_residues
             assert(num_chain_residues > 0)
 
+        pdb_filename = '%s_%s.pdb' % (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)))
+        
+        # Create parameter substitution dictionary
+        parameter_sub_dict = {
+            '%%input_pdb%%' : pdb_filename,
+            '%%chainstomove%%' : pdb_chains_to_move_str,
+            '%%pathtoresfile%%' : resfile_name,
+            '%%pathtomutfile%%' : mutfile_name,
+        }
+            
         if test_only:
             return
 
@@ -604,7 +682,7 @@ class BindingAffinityDDGInterface(ddG):
         con = self.DDG_db.connection
         with con:
             cur = con.cursor()
-
+            
             if protocol_id:
                 qry = 'SELECT * FROM %s WHERE PredictionSet=%%s AND UserPPDataSetExperimentID=%%s AND ProtocolID=%%s' % self._get_prediction_table()
                 cur.execute(qry, (prediction_set_id, user_dataset_experiment_id, protocol_id))
@@ -619,7 +697,9 @@ class BindingAffinityDDGInterface(ddG):
                 PPMutagenesisID = pp_mutagenesis_id,
                 UserPPDataSetExperimentID = user_dataset_experiment_id,
                 ProtocolID = protocol_id,
-                TemporaryProtocolField = None,
+                JSONParameters = json.dumps(parameter_sub_dict),
+                DevelopmentProtocolID = None,
+                ExtraParameters = extra_rosetta_command_flags,
                 Status = 'queued',
                 Cost = total_num_residues,
                 KeptHETATMLines = keep_hetatm_lines,
@@ -629,13 +709,12 @@ class BindingAffinityDDGInterface(ddG):
             prediction_id = cur.lastrowid
 
             # Add the stripped PDB file
-            pdb_filename = '%s_%s.pdb' % (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)))
-            #pdb_filename = '%d.pdb' % prediction_id
             self._add_prediction_file(prediction_id, '\n'.join(stripped_p.lines), pdb_filename, 'PDB', 'StrippedPDB', 'Input', db_cursor = cur, rm_trailing_line_whitespace = True, forced_mime_type = 'chemical/x-pdb')
 
             # Add the mutfile
-            self._add_prediction_file(prediction_id, str(mf), 'mutations.mutfile', 'Mutfile', 'Mutfile', 'Input', db_cursor = cur, rm_trailing_line_whitespace = True)
-            self._add_prediction_file(prediction_id, resfile_content, 'mutations.resfile', 'Resfile', 'Resfile', 'Input', db_cursor = cur, rm_trailing_line_whitespace = True)
+            self._add_prediction_file(prediction_id, str(mf), mutfile_name, 'Mutfile', 'Mutfile', 'Input', db_cursor = cur, rm_trailing_line_whitespace = True)
+            # Add the resfile
+            self._add_prediction_file(prediction_id, str(rf), resfile_name, 'Resfile', 'Resfile', 'Input', db_cursor = cur, rm_trailing_line_whitespace = True)
 
             # Add the residue mappings
             self._add_prediction_file(prediction_id, rosetta_to_atom_residue_map, 'rosetta2pdb.resmap.json', 'RosettaPDBMapping', 'Rosetta residue->PDB residue map', 'Input', db_cursor = cur, forced_mime_type = "application/json")
@@ -692,8 +771,8 @@ class BindingAffinityDDGInterface(ddG):
         prediction_record = self.DDG_db.execute_select('SELECT * FROM PredictionPPI WHERE ID=%s AND PredictionSet=%s', parameters=(prediction_id, prediction_set_id))
         if prediction_record['Protocol'] == None:
             print('empty Protocol')
-            if prediction_record['TemporaryProtocolField'] == None:
-                raise Exception('Neither the Protocol nor the TemporaryProtocolField is set for this job - it cannot be started without this information.')
+            if prediction_record['DevelopmentProtocolID'] == None:
+                raise Exception('Neither the Protocol nor the DevelopmentProtocolID is set for this job - it cannot be started without this information.')
 
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
@@ -754,6 +833,14 @@ class BindingAffinityDDGInterface(ddG):
 
     #== Information API =======================================================================
 
+
+    @informational_job
+    def get_development_protocol(self, development_protocol_id):
+        results = self.DDG_db.execute_select('SELECT * FROM DevelopmentProtocol WHERE ID = %s', parameters=(development_protocol_id) )
+        assert( len(results) == 1 )
+        return results[0]
+
+
     @informational_pdb
     def _get_pdb_chains_used_for_prediction_set(self, prediction_set):
         raise Exception('not implemented yet')
@@ -808,4 +895,22 @@ class BindingAffinityDDGInterface(ddG):
             predictions = DDG_db.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
 
 
+    def _get_dev_protocol_id(self, name):
+        dev_protocol_ids = self.DDG_db.execute_select("SELECT ID FROM DevelopmentProtocol WHERE Name=%s", parameters = (name))
+        if len(dev_protocol_ids) == 0:
+            return None
+        elif len(dev_protocol_ids) == 1:
+            return int(dev_protocol_ids[0]['ID'])
+        else:
+            raise Exception("DevelopmentProtocol table was originally set up so that names are unique; this has obviously changed")
+
+        
+    def _create_dev_protocol(self, name, application, template_command_line):
+        dev_prot_record = {
+            'Name' : name,
+            'Application' : application,
+            'TemplateCommandLine' : template_command_line,
+        }
+        sql, params = self.DDG_db.create_insert_dict_string('DevelopmentProtocol', dev_prot_record)
+        self.DDG_db.execute(sql, params)
 
