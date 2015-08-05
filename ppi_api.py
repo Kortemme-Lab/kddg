@@ -167,6 +167,29 @@ class BindingAffinityDDGInterface(ddG):
         )
 
 
+    def _export_dataset(self, dataset_id):
+        '''Returns a dict containing the dataset information.'''
+        dataset_record = self.DDG_db.execute_select('SELECT * FROM DataSet WHERE ID=%s', parameters=(dataset_id,))
+        if not dataset_record:
+            raise Exception('Dataset %s does not exist in the database.' % dataset_id)
+        dataset_record = dataset_record[0]
+        if dataset_record['DatasetType'] != 'Binding affinity' and dataset_record['DatasetType'] != 'Protein stability and binding affinity':
+            raise Exception('The dataset %s does not contain any binding affinity data..' % dataset_id)
+
+        prediction_record['Files'] = {}
+        if include_files:
+            prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
+
+        # Read the UserPPDataSetExperiment details
+        user_dataset_experiment_id = prediction_record['UserPPDataSetExperimentID']
+        ude_details = self.get_user_dataset_experiment_details(user_dataset_experiment_id)
+        assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record['PPMutagenesisID'])
+        for k, v in ude_details.iteritems():
+            assert(k not in prediction_record)
+            prediction_record[k] = v
+        return prediction_record
+
+
     ##### Public API: Rosetta-related functions
 
 
@@ -291,7 +314,6 @@ class BindingAffinityDDGInterface(ddG):
                 if len(existing_results) > 0: continue
 
                 # Test the prediction setup
-                print('%d/%d' % (count, len(user_dataset_experiments)))
                 prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = True, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
                 # Progress counter
                 count += 1
@@ -302,6 +324,114 @@ class BindingAffinityDDGInterface(ddG):
 
         if test_only:
             return
+
+        # Progress counter setup
+        failed_jobs = {}
+        if not quiet:
+            colortext.message('Adding %d predictions spanning %d PDB files for %suser dataset "%s" using protocol %s.' % (len(user_dataset_experiments), len(pdb_file_ids), tagged_subset_str, user_dataset_name, str(protocol_id or 'N/A')))
+        count, records_per_dot = 0, 50
+        showprogress = not(quiet) and len(user_dataset_experiments) > 300
+        if showprogress: print("|" + ("*" * (int(len(user_dataset_experiments)/records_per_dot)-2)) + "|")
+
+        # Add the individual predictions
+        for ude in user_dataset_experiments:
+
+            # If the mutagenesis already exists in the prediction set, do not add it again
+            if protocol_id:
+                existing_results = self.DDG_db.execute_select("SELECT * FROM PredictionPPI WHERE PredictionSet=%s AND UserPPDataSetExperimentID=%s AND ProtocolID=%s", parameters=(prediction_set_id, ude['ID'], protocol_id))
+            else:
+                existing_results = self.DDG_db.execute_select("SELECT * FROM PredictionPPI WHERE PredictionSet=%s AND UserPPDataSetExperimentID=%s AND ProtocolID IS NULL", parameters=(prediction_set_id, ude['ID']))
+            if len(existing_results) == 0:
+                # Add the prediction
+                try:
+                    user_dataset_id = self.get_defined_user_datasets()[user_dataset_name]['ID']
+                    prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags,  keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = False, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
+                except Exception, e:
+                    user_dataset_id = self.get_defined_user_datasets()[user_dataset_name]['ID']
+                    ude_record = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s AND UserDataSetID=%s', parameters=(ude['ID'], user_dataset_id))
+                    ude_record = ude_record[0]
+                    assert(ude_record['ID'] == ude['ID'])
+                    colortext.error('Adding the prediction for UserPPDataSetExperimentID %(ID)d failed (%(PDBFileID)s).' % ude_record)
+                    failed_jobs[ude_record['PDBFileID']] = failed_jobs.get(ude_record['PDBFileID'], 0)
+                    failed_jobs[ude_record['PDBFileID']] += 1
+                    if show_full_errors:
+                        print(e)
+                        print(traceback.format_exc())
+
+            # Progress counter
+            count += 1
+            if showprogress and count % records_per_dot == 0: colortext.write(".", "cyan", flush = True)
+            if short_run and count > 4: break
+
+        if failed_jobs:
+            colortext.error('Some jobs failed to run:\n%s' % pprint.pformat(failed_jobs))
+        if not quiet: print('')
+        return True
+
+
+
+    def _create_pdb_residues_to_rosetta_cache_mp(self, pdb_residues_to_rosetta_cache, pdb_file_id, pdb_chains_to_keep, extra_rosetta_command_flags, keep_hetatm_lines):
+        # Retrieve the PDB file content, strip out the unused chains, and create a PDB object
+        raise Exception('Shane should finish this')
+        assert(type(pdb_residues_to_rosetta_cache) == None)# use the manager dictproxy)
+        pdb_file = self.DDG_db.execute_select("SELECT * FROM PDBFile WHERE ID=%s", parameters = (pdb_file_id,))
+        p = PDB(pdb_file[0]['Content'])
+        p.strip_to_chains(list(pdb_chains_to_keep))
+        if not keep_hetatm_lines:
+            p.strip_HETATMs()
+        stripped_p = PDB('\n'.join(p.lines))
+
+        stripped_p.construct_pdb_to_rosetta_residue_map(self.rosetta_scripts_path, self.rosetta_database_path, extra_command_flags = extra_rosetta_command_flags)
+        atom_to_rosetta_residue_map = stripped_p.get_atom_sequence_to_rosetta_json_map()
+        rosetta_to_atom_residue_map = stripped_p.get_rosetta_sequence_to_atom_json_map()
+        cache_key = (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)), self.rosetta_scripts_path, self.rosetta_database_path, extra_rosetta_command_flags)
+        pdb_residues_to_rosetta_cache[cache_key] = dict(
+            stripped_p = stripped_p,
+            atom_to_rosetta_residue_map = atom_to_rosetta_residue_map,
+            rosetta_to_atom_residue_map = rosetta_to_atom_residue_map)
+
+
+    @job_creator
+    def add_prediction_run_mp(self, prediction_set_id, user_dataset_name, extra_rosetta_command_flags = None, protocol_id = None, tagged_subset = None, keep_hetatm_lines = False, input_files = {}, quiet = False, only_single_mutations = False, short_run = False, show_full_errors = False):
+        '''This is a multiprocessing version of add_prediction_run and should be used in favor of that function as it runs faster.
+
+           It takes advantage of parallelism at two points - creating the stripped PDB files and mutfiles for input and
+           inserting the jobs (MD5 is run multiple times for each job).
+           It was simple/quicker to write this as a 2-step method with a bottleneck in the middle i.e. it waits until all
+           stripped PDB files are generated before adding the jobs.
+           This could be made even more parallel by removing the bottleneck i.e. the process which strips the PDBs could
+           then call _add_job immediately rather than waiting for the other calls to _create_pdb_residues_to_rosetta_cache_mp
+           to complete.
+           '''
+
+        # Check preconditions
+        assert(not(input_files)) # todo: do something with input_files when we use that here - call self._add_file_content, associate the filenames with the FileContent IDs, and pass that dict to add_job which will create PredictionPPIFile records
+        assert(only_single_mutations == False) # todo: support this later? it may make more sense to just define new UserDataSets
+        self._add_prediction_run_preconditions(prediction_set_id, user_dataset_name, tagged_subset)
+
+        # Get the list of user dataset experiment records
+        user_dataset_experiments = self.get_user_dataset_experiment_ids(user_dataset_name, tagged_subset = tagged_subset)
+        assert(set([u['IsComplex'] for u in user_dataset_experiments]) == set([1,]))
+        if not user_dataset_experiments:
+            return False
+
+        # Count the number of individual PDB files
+        pdb_file_ids = set([u['PDBFileID'] for u in user_dataset_experiments])
+        tagged_subset_str = ''
+        if not quiet:
+            if tagged_subset:
+                tagged_subset_str = 'subset "%s" of ' % tagged_subset
+
+        # Create a cache to speed up job insertion
+        pdb_residues_to_rosetta_cache = manager dictproxy
+
+        # Create the stripped PDBs and residue maps in parallel using the multiprocessing module
+    #todo: write this function on Monday - get_user_dataset_pdb_partner_chains should return a set (<list of {'id' : pdb_file_id, 'L' : <list of chain ids>, , 'R' : <list of chain ids>} dicts>)
+        pdb_partner_chains = self.get_user_dataset_pdb_partner_chains(user_dataset_name, tagged_subset = tagged_subset)
+        for ppc in pdb_partner_chains:
+
+            apply_async self._create_pdb_residues_to_rosetta_cache_mp(pdb_residues_to_rosetta_cache, ppc['id'], set(ppc['L'] + ppc['R']), extra_rosetta_command_flags, keep_hetatm_lines)
+        .join()
 
         # Progress counter setup
         failed_jobs = {}
@@ -447,6 +577,7 @@ class BindingAffinityDDGInterface(ddG):
         # Make mutfile
         rosetta_mutations = stripped_p.map_pdb_residues_to_rosetta_residues(mutations)
         mf = Mutfile.from_mutagenesis(rosetta_mutations)
+        resfile_content = self._create_resfile_from_pdb_mutations(stripped_p, mutations)
 
         if cache_maps and (not pdb_residues_to_rosetta_cache.get(cache_key)):
             pdb_residues_to_rosetta_cache[cache_key] = dict(
@@ -504,6 +635,7 @@ class BindingAffinityDDGInterface(ddG):
 
             # Add the mutfile
             self._add_prediction_file(prediction_id, str(mf), 'mutations.mutfile', 'Mutfile', 'Mutfile', 'Input', db_cursor = cur, rm_trailing_line_whitespace = True)
+            self._add_prediction_file(prediction_id, resfile_content, 'mutations.resfile', 'Resfile', 'Resfile', 'Input', db_cursor = cur, rm_trailing_line_whitespace = True)
 
             # Add the residue mappings
             self._add_prediction_file(prediction_id, rosetta_to_atom_residue_map, 'rosetta2pdb.resmap.json', 'RosettaPDBMapping', 'Rosetta residue->PDB residue map', 'Input', db_cursor = cur, forced_mime_type = "application/json")
@@ -535,6 +667,9 @@ class BindingAffinityDDGInterface(ddG):
         prediction_record['Files'] = {}
         if include_files:
             prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
+
+        mutfile_content = self.create_mutfile(prediction_id)
+
 
         # Read the UserPPDataSetExperiment details
         user_dataset_experiment_id = prediction_record['UserPPDataSetExperimentID']

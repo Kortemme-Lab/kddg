@@ -765,6 +765,24 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
+    @informational_job
+    def export_dataset_to_json(self, dataset_id):
+        '''Returns the dataset information in JSON format.'''
+        return json.dumps(self._export_dataset(dataset_id))
+
+
+    @informational_job
+    def export_dataset_to_csv(self, dataset_id):
+        '''Returns the dataset information in CSV format.'''
+        self._export_dataset('')
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    def _export_dataset(self, dataset_id):
+        '''Returns a dict containing the dataset information.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
     ###########################################################################################
     ## Prediction creation/management layer
     ##
