@@ -170,39 +170,117 @@ class BindingAffinityDDGInterface(ddG):
 
     @informational_job
     def get_complex_details(self, complex_id):
-        results = self.DDG_db.execute_select('SELECT * FROM PPComplex WHERE ID=%s', parameters=(complex_id, ))
+        results = self.DDG_db_utf.execute_select('SELECT * FROM PPComplex WHERE ID=%s', parameters=(complex_id, ))
         if len(results) == 1:
             return results[0]
         return None
 
 
-    @informational_job
-    def get_dataset_experiment_details(self, user_dataset_experiment_id, user_dataset_id = None):
-        if user_dataset_id:
-            ude = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s AND UserDataSetID=%s', parameters=(user_dataset_experiment_id, user_dataset_id))
-            if len(ude) != 1:
-                raise colortext.Exception('User dataset experiment %d does not exist for/correspond to the user dataset %s.' % (user_dataset_experiment_id, user_dataset_id))
+    def _get_dataset_record_with_checks(self, dataset_experiment_id, dataset_id = None):
+        if dataset_id:
+            de = self.DDG_db_utf.execute_select('SELECT * FROM PPIDataSetDDG WHERE ID=%s AND DataSetID=%s', parameters=(dataset_experiment_id, dataset_id))
+            if len(de) != 1:
+                raise colortext.Exception('Dataset record #%d does not exist for/correspond to the dataset %s.' % (dataset_experiment_id, dataset_id))
         else:
-            ude = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s', parameters=(user_dataset_experiment_id,))
-            if len(ude) != 1:
-                raise colortext.Exception('User dataset experiment %d does not exist.' % (user_dataset_experiment_id, ))
-        ude = ude[0]
-        user_dataset_id = ude['UserDataSetID']
-        assert(ude['IsComplex'] == 1)
+            de = self.DDG_db_utf.execute_select('SELECT * FROM PPIDataSetDDG WHERE ID=%s', parameters=(dataset_experiment_id,))
+            if len(de) != 1:
+                raise colortext.Exception('Dataset record #%d does not exist.' % (dataset_experiment_id, ))
+        return de[0]
 
-        pdb_mutations = self.get_pdb_mutations_for_mutagenesis(ude['PPMutagenesisID'], ude['PDBFileID'], ude['SetNumber'], complex_id = ude['PPComplexID'])
-        return dict(
+
+    @informational_job
+    def get_dataset_experiment_details(self, dataset_experiment_id, dataset_id = None):
+        de = self._get_dataset_record_with_checks(dataset_experiment_id, dataset_id = dataset_id)
+        PDBFileID = de['PDBFileID']
+        PPMutagenesisID = de['PPMutagenesisID']
+        ComplexID = self.DDG_db.execute_select('SELECT PPComplexID FROM PPMutagenesis WHERE ID=%s', parameters=(PPMutagenesisID,))[0]['PPComplexID']
+        SetNumber = None
+
+        # todo: this is a nasty hack due to the fact that we do not currently store the SetNumber and PPComplexID in the PPIDataSetDDG table
+        pdb_sets = self.DDG_db.execute_select('SELECT * FROM PPIPDBSet WHERE PPComplexID=%s AND IsComplex=1', parameters=(ComplexID,))
+        if len(pdb_sets) > 1:
+            probable_sets = self.DDG_db.execute_select('SELECT DatabaseKey FROM PPIDatabaseComplex WHERE DatabaseName LIKE "%%SKEMPI%%" AND DatabaseKey LIKE "%%%s%%" AND PPComplexID=%s' % (PDBFileID, ComplexID))
+            assert(len(probable_sets) == 1)
+            match_pdb_chains = sorted(list(''.join(probable_sets[0]['DatabaseKey'].split('_')[1:])))
+
+            pdb_sets = {}
+            for set_record in self.DDG_db.execute_select('SELECT * FROM PPIPDBPartnerChain WHERE PPComplexID=%s AND PDBFileID=%s', parameters=(ComplexID, PDBFileID)):
+                pdb_sets[set_record['SetNumber']] = pdb_sets.get(set_record['SetNumber'], [])
+                pdb_sets[set_record['SetNumber']].append(set_record['Chain'])
+                pdb_sets[set_record['SetNumber']] = sorted(pdb_sets[set_record['SetNumber']])
+
+            hits = []
+            for k, v in pdb_sets.iteritems():
+                if v == match_pdb_chains:
+                    hits.append(k)
+            if not len(hits) == 1:
+                raise Exception('Error: multiple possible PDB sets for dataset record #%d and PPMutagenesisID=%s.' % (dataset_experiment_id, PPMutagenesisID))
+            SetNumber = hits[0]
+        elif len(pdb_sets) == 0:
+            raise Exception('Error: no possible PDB sets for dataset record #%d and PPMutagenesisID=%s.' % (dataset_experiment_id, PPMutagenesisID))
+        else:
+            SetNumber = pdb_sets[0]['SetNumber']
+
+        pdb_mutations = self.get_pdb_mutations_for_mutagenesis(PPMutagenesisID, PDBFileID, SetNumber, complex_id = ComplexID)
+
+        d = dict(
+            _DataSetID = de['ID'],
+            RecordID = de['RecordNumber'],
+            PublishedDDG = de['PublishedDDG'],
+            PDBFileID = PDBFileID,
+            DerivedMutation = de['RecordIsDerivative'] == 1,
+            PossiblyBadRecord = de['PossibleError'] == 1,
+            Notes = [de['Remark'], de['CorrectionRemark']],
             Mutagenesis = dict(
-                PPMutagenesisID = ude['PPMutagenesisID'],
+                PPMutagenesisID = PPMutagenesisID,
             ),
-            Complex = self.get_complex_details(ude['PPComplexID']),
+            Complex = self.get_complex_details(ComplexID),
             Structure = dict(
-                PDBFileID = ude['PDBFileID'],
-                SetNumber = ude['SetNumber'],
-                Partners = self.get_chains_for_mutatagenesis(ude['PPMutagenesisID'], ude['PDBFileID'], ude['SetNumber'], complex_id = ude['PPComplexID']),
+                PDBFileID = PDBFileID,
+                SetNumber = SetNumber,
+                Partners = self.get_chains_for_mutatagenesis(PPMutagenesisID, PDBFileID, SetNumber, complex_id = ComplexID),
             ),
             PDBMutations = pdb_mutations,
         )
+        if de['PublishedPDBFileID'] != PDBFileID:
+            d['Notes'].append("The PDB ID was changed by Shane O'Connor from %s to %s." % (de['PublishedPDBFileID'], PDBFileID))
+        d['Notes'] = '. '.join([x for x in d['Notes'] if x])
+        d['ExperimentalDDGs'] = self.get_ddg_values_for_dataset_record(dataset_experiment_id, dataset_id = dataset_id)
+        d['DDG'] = sum([((e.get('Positive') or {}).get('DDG', 0) - (e.get('Negative') or {}).get('DDG', 0)) for e in d['ExperimentalDDGs']])
+        # todo: add SCOPe class, Pfam domain
+        pprint.pprint(d)
+        import sys
+        sys.exit(0)
+        return d
+
+
+    def get_ddg_values_for_dataset_record(self, dataset_experiment_id, dataset_id = None):
+        de = self._get_dataset_record_with_checks(dataset_experiment_id, dataset_id = dataset_id)
+        ddg_pairs = self.DDG_db.execute_select('SELECT PositiveDependentPPIDDGID, NegativeDependentPPIDDGID FROM PPIDataSetDDGSource WHERE PPIDataSetDDGID=%s', parameters=(dataset_experiment_id,))
+        assert(ddg_pairs)
+        ddgs = []
+        for ddg_pair in ddg_pairs:
+            paired_record = {'Positive' : None, 'Negative' : None}
+            if ddg_pair['PositiveDependentPPIDDGID']:
+                positive_record = self.DDG_db.execute_select('SELECT * FROM PPIDDG WHERE ID=%s', parameters=(ddg_pair['PositiveDependentPPIDDGID'],))[0]
+                paired_record['Positive'] = dict(
+                    DDG = positive_record['DDG'],
+                    LocationOfValueInPublication = positive_record['LocationOfValueInPublication'],
+                    Publication = positive_record['Publication'],
+                    Temperature = positive_record['Temperature'],
+                    pH = positive_record['pH'],
+                )
+            if ddg_pair['NegativeDependentPPIDDGID']:
+                negative_record = self.DDG_db.execute_select('SELECT * FROM PPIDDG WHERE ID=%s', parameters=(ddg_pair['NegativeDependentPPIDDGID'],))[0]
+                paired_record['Negative'] = dict(
+                    DDG = negative_record['DDG'],
+                    LocationOfValueInPublication = negative_record['LocationOfValueInPublication'],
+                    Publication = negative_record['Publication'],
+                    Temperature = negative_record['Temperature'],
+                    pH = negative_record['pH'],
+                )
+            ddgs.append(paired_record)
+        return ddgs
 
 
     @informational_job
@@ -243,18 +321,47 @@ class BindingAffinityDDGInterface(ddG):
         if dataset_record['DatasetType'] != 'Binding affinity' and dataset_record['DatasetType'] != 'Protein stability and binding affinity':
             raise Exception('The dataset %s does not contain any binding affinity data..' % dataset_id)
 
-        #prediction_record['Files'] = {}
-        #if include_files:
-        #    prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
-
         # Read the UserPPDataSetExperiment details
-        user_dataset_experiment_id = prediction_record['UserPPDataSetExperimentID']
-        ude_details = self.get_dataset_experiment_details(user_dataset_experiment_id)
-        assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record['PPMutagenesisID'])
-        for k, v in ude_details.iteritems():
-            assert(k not in prediction_record)
-            prediction_record[k] = v
-        return prediction_record
+        data = []
+        ref_ids = set()
+        for dataset_ddg in self.DDG_db.execute_select('SELECT * FROM PPIDataSetDDG WHERE DataSetID=%s ORDER BY Section, RecordNumber', parameters=(dataset_id,)):
+            de_details = self.get_dataset_experiment_details(dataset_ddg['ID'], dataset_id)
+            for ddg_pair in de_details['ExperimentalDDGs']:
+                if ddg_pair['Positive']: ref_ids.add(ddg_pair['Positive']['Publication'])
+                if ddg_pair['Negative']: ref_ids.add(ddg_pair['Negative']['Publication'])
+            data.append(de_details)
+
+        references = {}
+        for ref_id in sorted(ref_ids):
+            references[ref_id] = self.get_publication(ref_id)
+
+        return dict(
+            Data = data,
+            References = references
+            )
+
+
+    @informational_job
+    def export_dataset_to_csv(self, dataset_id):
+        '''Returns the dataset information in CSV format.'''
+        dataset_set = self._export_dataset(dataset_id)['Data']
+        lines = ['\t'.join(['Record #', 'Mutagenesis #', 'Partner 1', 'Partner 2', 'PDB ID', 'Partner 1 chains', 'Partner 2 chains', 'Mutations', 'DDG', 'PublishedDDG', 'IsDerivedMutation'])]
+        for record in dataset_set:
+            line = '\t'.join([
+                str(record['RecordID']),
+                str(record['Mutagenesis']['PPMutagenesisID']),
+                record['Complex']['LShortName'],
+                record['Complex']['RShortName'],
+                record['PDBFileID'],
+                ','.join(sorted(record['Structure']['Partners']['L'])),
+                ','.join(sorted(record['Structure']['Partners']['R'])),
+                ','.join(['%s:%s%s%s' % (m['Chain'], m['WildTypeAA'], m['ResidueID'], m['MutantAA']) for m in record['PDBMutations']]),
+                str(record['DDG']),
+                str(record['PublishedDDG']),
+                str(int(record['DerivedMutation'])),
+            ])
+            lines.append(line)
+        return ('\n'.join(lines)).encode('utf8', 'replace')
 
 
     ##### Public API: Rosetta-related functions

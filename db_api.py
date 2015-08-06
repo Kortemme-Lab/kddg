@@ -587,6 +587,49 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         return amino_acids
 
 
+    @informational_misc
+    def get_publication(self, ID):
+        r = self.DDG_db_utf.execute_select('SELECT * FROM Publication WHERE ID=%s', parameters=(ID,))
+        if not r:
+            raise Exception('No publication exists with ID %s.' % str(ID))
+        r = r[0]
+        pubmed_id = self.DDG_db_utf.execute_select('SELECT * FROM PublicationIdentifier WHERE SourceID=%s AND Type="PMID"', parameters=(r['ID'],))
+        if pubmed_id:
+            pubmed_id = pubmed_id[0]['ID']
+        authors = self.DDG_db_utf.execute_select('SELECT * FROM PublicationAuthor WHERE PublicationID=%s ORDER BY AuthorOrder', parameters=(r['ID'],))
+        authorlist = []
+        for a in authors:
+            authorlist.append(dict(FirstName = a['FirstName'], MiddleNames = a['MiddleNames'], Surname = a['Surname']))
+        pub_details = dict(
+            Title = r['Title'],
+            Publication = r['Publication'],
+            Volume = r['Volume'],
+            StartPage = r['StartPage'],
+            EndPage = r['EndPage'],
+            PublicationYear = r['PublicationYear'],
+            PublicationDate = r['PublicationDate'],
+            DOI = r['DOI'],
+            URL = r['URL'],
+            PubMedID = pubmed_id,
+            Authors = authorlist,
+        )
+        if pub_details['PublicationDate']:
+            pub_details['PublicationDate'] = pub_details['PublicationDate'].strftime('%Y-%m-%d')
+
+        if not pub_details['URL'] and pub_details['DOI']:
+            pub_details['URL'] = 'https://dx.doi.org/%s' % pub_details['DOI']
+        return pub_details
+
+
+    @informational_misc
+    def get_publications(self):
+        publications = {}
+        for r in self.DDG_db.execute_select('SELECT ID FROM Publication'):
+            publications[r['ID']] = self.get_publication(r['ID'])
+        return publications
+
+
+
     @informational_file
     def get_file_id(self, content, db_cursor = None, hexdigest = None):
         '''Searches the database to see whether the FileContent already exists. The search uses the digest and filesize as
@@ -776,7 +819,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     @informational_job
     def export_dataset_to_csv(self, dataset_id):
         '''Returns the dataset information in CSV format.'''
-        self._export_dataset('')
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
