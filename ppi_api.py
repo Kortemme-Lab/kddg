@@ -883,7 +883,7 @@ class BindingAffinityDDGInterface(ddG):
         if include_files:
             prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
 
-        mutfile_content = self.create_mutfile(prediction_id)
+        # mutfile_content = self.create_mutfile(prediction_id)
 
 
         # Read the UserPPDataSetExperiment details
