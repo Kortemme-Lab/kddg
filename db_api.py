@@ -48,7 +48,7 @@ from tools.fs.fsio import write_file, read_file
 from tools.process import Popen
 from tools.constants import rosetta_weights
 from tools import colortext
-from tools.stats.misc import get_xy_dataset_correlations
+from tools.stats.misc import get_xy_dataset_statistics
 
 from tools.general.strutil import remove_trailing_line_whitespace
 from tools.hash.md5 import get_hexdigest
