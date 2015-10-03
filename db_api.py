@@ -1107,6 +1107,40 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @job_completion
+    def extract_data(self, prediction_set_id, root_directory = None, force = False):
+        '''Extracts the data for the prediction set run and stores it into the database.'''
+
+        prediction_ids = self.get_prediction_ids(prediction_set_id)
+        for prediction_id in prediction_ids:
+            # Note: we do not use a transaction at this level. We could but it may end up being a very large transaction
+            # depending on the dataset size. It seems to make more sense to me to use transactions at the single prediction
+            # level i.e. in extract_data_for_case
+            self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force)
+
+
+    @job_completion
+    def extract_data_for_case(self, prediction_id, root_directory = None, force = False):
+        '''Extracts the data for the prediction case (e.g. by processing stdout) and stores it in the Prediction*StructureScore
+           table.
+           The scores are returned to prevent the caller having to run another query.
+
+           if force is False and the expected number of records for the case exists in the database, these are returned.
+           Otherwise, the data are extracted, stored using a database transaction to prevent partial storage, and returned.
+
+           Note:
+           We use a lot of functions here: extract_data_for_case, parse_prediction_scores, store_scores, add_ddg_score.
+           This may seem like overkill but I think it could allow us to reuse a lot of the code since the tables for
+           PredictionPPIStructureScore and PredictionStructureScore are very similar (but are different since the underlying
+           foreign tables PredictionPPI and Prediction are at least currently separate).
+        '''
+
+        # call parse_prediction_scores to return a dict suitable for database storage
+        # call store_scores to store the scores (which calls add_ddg_score for each score)
+        # return the dict from parse_prediction_scores
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @job_completion
     def parse_prediction_scores(self, *args, **kwargs):
         '''Returns a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass. Returns a dict suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.')
@@ -1116,12 +1150,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def store_scores(self, scores, prediction_set, prediction_id):
         '''Stores a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
-
-
-    @job_completion
-    def complete_job(self, prediction_id, prediction_set, scores, maxvmem, ddgtime):
-        '''Sets a job to 'completed' and stores scores. prediction_set must be passed and is used as a sanity check.'''
-        raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
     @job_results
@@ -1150,6 +1178,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         '''Add the scores for a given score method for one mutant structure of a prediction.'''
         return self._add_structure_score(prediction_set, prediction_id, structure_id, ScoreMethodID, scores, False)
         raise Exception('not implemented yet. This should only need to be implemented for the base class')
+
+
+    @job_completion
+    def complete_job(self, prediction_id, prediction_set, scores, maxvmem, ddgtime):
+        '''Sets a job to 'completed' and stores scores. prediction_set must be passed and is used as a sanity check.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
     ###########################################################################################
@@ -1240,6 +1274,118 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     ##
     ## This part of the API is responsible for running analysis on completed predictions
     ###########################################################################################
+
+
+    @analysis_api
+    def get_analysis_dataframe(self, PredictionSet,
+            PredictionSetSeriesName = None, PredictionSetDescription = None, PredictionSetCredit = None,
+            use_existing_benchmark_data = True, recreate_graphs = False,
+            include_derived_mutations = False,
+            use_single_reported_value = False,
+            take_lowest = 3,
+            burial_cutoff = 0.25,
+            stability_classication_experimental_cutoff = 1.0,
+            stability_classication_predicted_cutoff = 1.0,
+            report_analysis = True,
+            silent = False,
+            root_directory = None
+            ):
+        '''This function uses experimental data from the database and prediction data from the Prediction*StructureScore
+           table to build a pandas dataframe and store it in the database. See .analyze for an explanation of the
+           parameters.
+
+           The dataframes mostly contain redundant data so their storage could be seen to break a key database design
+           principal. However, we store the dataframe in the database as it can take a while to build it from scratch and
+           pre-built dataframes can be used to run quick analysis, for rapid development of the analysis methods, or to
+           plug into webservers where responsiveness is important.
+
+           If use_existing_benchmark_data is True and the dataframe already exists then it is returned as a BenchmarkRun object.
+           Otherwise, it is built from the Prediction*StructureScore records.
+           If the Prediction*StructureScore records do not exist, this function falls back into extract_data_for_case
+           to generate them in which case root_directory needs to be specified (this is the only use for the root_directory
+           parameter).
+        '''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+        # if use_existing_benchmark_data and dataframe exists: return dataframe
+        # else retrieve all of the Score records from the database
+        #    if a record does not exist:
+        #        if root_directory then call extract_data_for_case to create an analysis dataframe and store it in the database
+        #    store the number of complete Score records as a column in the dataframe (to indicate whether analysis is being performed on a full set of data)
+        #
+        # For Shane: this extracts the dataset_description and dataset_cases data that DDGBenchmarkManager currently takes care of in the capture.
+        # The analysis_data variable of DDGBenchmarkManager should be compiled via queries calls to the Prediction*StructureScore table.
+
+
+    @analysis_api
+    def analyze(self, PredictionSets,
+            PredictionSetSeriesNames = {}, PredictionSetDescriptions = {}, PredictionSetCredits = {}, PredictionSetColors = {}, PredictionSetAlphas = {},
+            use_published_data = False,
+            use_existing_benchmark_data = True, recreate_graphs = False,
+            include_derived_mutations = False,
+            expectn = 50,
+            use_single_reported_value = False,
+            take_lowest = 3,
+            burial_cutoff = 0.25,
+            stability_classication_experimental_cutoff = 1.0,
+            stability_classication_predicted_cutoff = 1.0,
+            output_directory = None,
+            generate_plots = True,
+            report_analysis = True,
+            silent = False,
+            root_directory = None
+            ):
+        '''Runs the analyses for the specified PredictionSets and cross-analyzes the sets against each other if appropriate.
+
+           * Analysis setup arguments *
+
+           PredictionSets is a list of PredictionSet IDs. Each PredictionSet will be analyzed separately and appropriate
+           pairs will be cross-analyzed.
+           PredictionSetSeriesNames, PredictionSetDescriptions, and PredictionSetCredits are mappings from PredictionSet IDs
+           to series names (in plots), descriptions, and credits respectively. The details are stored in PredictionSet so
+           they are not necessary. The mappings can be used to override the database values to customize the analysis
+           reports. Likewise, PredictionSetColors and PredictionSetAlphas are mappings to series colors and transparency values
+           for use in the plots.
+           use_published_data. todo: implement later. This should include any published data e.g. the Kellogg et al. data for protein stability.
+           use_existing_benchmark_data and recreate_graphs are data creation arguments i.e. "should we use existing data or create it from scratch?"
+           include_derived_mutations is used to filter out dataset cases with derived mutations.
+           expectn declares how many predictions we expect to see per dataset case. If the actual number is less than expectn
+           then a warning will be included in the analysis.
+
+           * Dataframe arguments *
+
+           use_single_reported_value is specific to ddg_monomer. If this is True then the DDG value reported by the application is used and take_lowest is ignored. This is inadvisable - take_lowest = 3 is a better default.
+           take_lowest AKA Top_X. Specifies how many of the best-scoring groups of structures to consider when calculating the predicted DDG value.
+           burial_cutoff defines what should be considered buried (DSSPExposure field). Values around 1.0 are fully exposed, values of 0.0 are fully buried. For technical reasons, the DSSP value can exceed 1.0 but usually not by much.
+           stability_classication_experimental_cutoff AKA x_cutoff. This defines the neutral mutation range for experimental values in kcal/mol i.e. values between -1.0 and 1.0 kcal/mol are considered neutral by default.
+           stability_classication_predicted_cutoff AKA y_cutoff. This defines the neutral mutation range for predicted values in energy units.
+
+           * Reporting arguments *
+
+           output_directory : The directory in which to save plots and reports.
+           generate_plots   : if plots are not needed, setting this to False can shorten the analysis time.
+           report_analysis  : Whether or not to print analysis to stdout.
+           silent = False   : Whether or not anything should be printed to stdout (True is useful for webserver interaction).
+        '''
+
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+        # colors, alpha, and default series name and descriptions are taken from PredictionSet records
+        # The order (if p1 before p2 then p1 will be on the X-axis in comparative plots) in comparative analysis plots is determined by the order in PredictionSets
+        assert(take_lowest > 0 and (int(take_lowest) == take_lowest))
+        assert(0 <= burial_cutoff <= 2.0)
+        assert(stability_classication_experimental_cutoff > 0)
+        assert(stability_classication_predicted_cutoff > 0)
+        # assert PredictionSet for PredictionSet in PredictionSets is in the database
+
+        # calls get_analysis_dataframe(options) over all PredictionSets
+        # if output_directory is set, save files
+        # think about how to handle this in-memory. Maybe return a dict like:
+            #"run_analyis" -> benchmark_name -> {analysis_type -> object}
+            #"comparative_analysis" -> (benchmark_name_1, benchmark_name_2) -> {analysis_type -> object}
+        # comparative analysis
+        #   only compare dataframes with the exact same points
+        #   allow cutoffs, take_lowest to differ but report if they do so
 
 
     @analysis_api
