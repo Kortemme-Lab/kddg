@@ -862,7 +862,7 @@ class BindingAffinityDDGInterface(ddG):
                 Cost = total_num_residues,
                 KeptHETATMLines = keep_hetatm_lines,
             )
-            sql, params = self.DDG_db.create_insert_dict_string(self._get_prediction_table(), prediction_record, ['PredictionSet', 'UserPPDataSetExperimentID', 'ProtocolID'])
+            sql, params, record_exists = self.DDG_db.create_insert_dict_string(self._get_prediction_table(), prediction_record, ['PredictionSet', 'UserPPDataSetExperimentID', 'ProtocolID'])
             cur.execute(sql, params)
             prediction_id = cur.lastrowid
 
@@ -930,7 +930,7 @@ class BindingAffinityDDGInterface(ddG):
             mc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantComplex', score_method_id = score_method_id),
 
             # @todo: Kyle
-            
+
             scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
         return scores
 
@@ -1060,6 +1060,6 @@ class BindingAffinityDDGInterface(ddG):
             'Application' : application,
             'TemplateCommandLine' : template_command_line,
         }
-        sql, params = self.DDG_db.create_insert_dict_string('DevelopmentProtocol', dev_prot_record)
+        sql, params, record_exists = self.DDG_db.create_insert_dict_string('DevelopmentProtocol', dev_prot_record)
         self.DDG_db.execute(sql, params)
 

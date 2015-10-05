@@ -40,6 +40,7 @@ except ImportError:
 
 import score
 import ddgdbapi
+
 from tools.bio.pdb import PDB
 from tools.bio.basics import residue_type_3to1_map as aa1, dssp_elision
 from tools.bio.basics import Mutation
@@ -684,7 +685,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         # Relax the typing
         if structure_id: structure_id = int(structure_id)
         if prediction_id: prediction_id = int(prediction_id)
-        if score_method_id: prediction_id = int(score_method_id)
+        if score_method_id: score_method_id = int(score_method_id)
         if score_type:
             allowed_score_types = self._get_allowed_score_types()
             if  score_type not in allowed_score_types:
@@ -1272,13 +1273,16 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         self._check_scores_for_main_fields(scores, prediction_id)
         self._check_score_fields(scores)
 
-        con = self.DDG_db.connection
-        with con:
-            db_cursor = con.cursor()
-            for score in scores:
-                raise Exception('test')
-                sql, params = self.DDG_db.create_insert_dict_string(self._get_prediction_structure_scores_table(), score, [self._get_prediction_id_field(), 'ScoreMethodID', 'ScoreType', 'StructureID'])
-                db_cursor.execute(sql, params)
+        try:
+            con = self.DDG_db.connection
+            with con:
+                db_cursor = con.cursor()
+                for score in scores:
+                    sql, params, record_exists = self.DDG_db.create_insert_dict_string(self._get_prediction_structure_scores_table(), score, PKfields = [self._get_prediction_id_field(), 'ScoreMethodID', 'ScoreType', 'StructureID'], check_existing = True)
+                    if not record_exists:
+                        db_cursor.execute(sql, params)
+        except Exception, e:
+            raise colortext.Exception('Failed to insert scores for Prediction #{0}: "{1}".\n{2}'.format(prediction_id, str(e), traceback.format_exc()))
 
 
     @job_completion
@@ -1627,8 +1631,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def _check_prediction(self, prediction_id, prediction_set):
         '''Sanity check: Asserts that a Prediction belongs in the expected PredictionSet.'''
         prediction_table = self._get_prediction_table()
-        if True or not self.DDG_db.execute_select('SELECT * FROM {0} WHERE ID=%s AND PredictionSet=%s'.format(prediction_table), parameters=(prediction_id, prediction_set)):
-            # Leaving this as True until we hit it
+        if not self.DDG_db.execute_select('SELECT * FROM {0} WHERE ID=%s AND PredictionSet=%s'.format(prediction_table), parameters=(prediction_id, prediction_set)):
             raise Exception('{0} record #{1} does not belong to PredictionSet {2}.'.format(prediction_table, prediction_id, prediction_set))
 
 
@@ -1692,7 +1695,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             )
 
             if db_cursor:
-                sql, params = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
+                sql, params, record_exists = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
                 db_cursor.execute(sql, params)
             else:
                 self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
@@ -1759,14 +1762,14 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             d['PredictionID'] = prediction_id
             if db_cursor:
                 # Note: When less tired, add select statement here to see if info already in database
-                sql, params = self.DDG_db.create_insert_dict_string('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
+                sql, params, record_exists = self.DDG_db.create_insert_dict_string('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
                 db_cursor.execute(sql, params)
             else:
                 self.DDG_db.insertDictIfNew('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
         elif prediction_table == 'PredictionPPI':
             d['PredictionPPIID'] = prediction_id
             if db_cursor:
-                sql, params = self.DDG_db.create_insert_dict_string('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
+                sql, params, record_exists = self.DDG_db.create_insert_dict_string('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
                 db_cursor.execute(sql, params)
             else:
                 self.DDG_db.insertDictIfNew('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
