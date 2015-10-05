@@ -629,6 +629,75 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         return publications
 
 
+    @informational_misc
+    def get_score_method_details(self):
+        '''Returns all defined ScoreMethod records.'''
+        score_methods = {}
+        for r in self.DDG_db_utf.execute_select('SELECT * FROM ScoreMethod'):
+            score_methods[r['ID']] = r
+        return score_methods
+
+
+    @informational_misc
+    def get_score_method_id(self, method_name, method_type = None, method_parameters = None, method_authors = None, fuzzy = True):
+        '''Returns the ID for the ScoreMethod with the specified parameters.
+           If fuzzy is True then the string matching uses LIKE rather than equality.
+           e.g. method_id = self.get_score_method_id('interface', method_authors = 'kyle')
+           '''
+        if fuzzy:
+            match_phrase = 'LIKE %s'
+            method_name = '%{0}%'.format(method_name)
+            if method_type: method_type = '%{0}%'.format(method_type)
+            if method_parameters: method_parameters = '%{0}%'.format(method_parameters)
+            if method_authors: method_authors = '%{0}%'.format(method_authors)
+        else:
+            match_phrase = '=%s'
+
+        condition_parameters = [method_name]
+        conditions = ['MethodName {0}'.format(match_phrase)]
+        if method_type:
+            conditions.append('MethodType {0}'.format(match_phrase))
+            condition_parameters.append(method_type)
+        if method_parameters:
+            conditions.append('Parameters {0}'.format(match_phrase))
+            condition_parameters.append(method_parameters)
+        if method_authors:
+            conditions.append('Authors {0}'.format(match_phrase))
+            condition_parameters.append(method_authors)
+        conditions = ' AND '.join(conditions)
+        condition_parameters = tuple(condition_parameters)
+
+        results = self.DDG_db_utf.execute_select('SELECT ID FROM ScoreMethod WHERE {0}'.format(conditions), parameters=condition_parameters)
+        if not results:
+            raise Exception('Error: No ScoreMethod records were found using the criteria: '.format(', '.join(map(str, [s for s in [method_name, method_type, method_parameters] if s]))))
+        elif len(results) > 1:
+            raise Exception('Error: Multiple ScoreMethod records were found using the criteria: '.format(', '.join(map(str, [s for s in [method_name, method_type, method_parameters] if s]))))
+        else:
+            return results[0]['ID']
+
+
+    @informational_misc
+    def get_score_dict(self, prediction_id = None, score_method_id = None, score_type = None, structure_id = None):
+        '''Returns a dict with keys for all fields in the Score table. The optional arguments can be used to set the
+           corresponding fields of the dict. All other fields are set to None.'''
+
+        # Relax the typing
+        if structure_id: structure_id = int(structure_id)
+        if prediction_id: prediction_id = int(prediction_id)
+        if score_method_id: prediction_id = int(score_method_id)
+        if score_type:
+            allowed_score_types = self._get_allowed_score_types()
+            if  score_type not in allowed_score_types:
+                raise Exception('"{0}" is not an allowed score type. Allowed types are: "{1}".'.format(score_type, '", "'.join(sorted(allowed_score_types))))
+
+        fieldnames = set([f for f in self.DDG_db.FieldNames.__dict__[self._get_prediction_structure_scores_table()].__dict__.keys() if not(f.startswith('_'))])
+        d = dict.fromkeys(fieldnames, None)
+        d[self._get_prediction_id_field()] = prediction_id
+        d['ScoreMethodID'] = score_method_id
+        d['ScoreType'] = score_type
+        d['StructureID'] = structure_id
+        return d
+
 
     @informational_file
     def get_file_id(self, content, db_cursor = None, hexdigest = None):
@@ -1100,84 +1169,116 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @job_completion
-    def fail_job(self, prediction_id, prediction_set, maxvmem, ddgtime):
+    def fail_job(self, prediction_id, prediction_set, maxvmem, ddgtime, errors = None):
         '''Sets the job status to "failed". prediction_set must be passed and is used as a sanity check.'''
-        raise Exception('This function needs to be implemented by subclasses of the API.')
-        # sets a job to 'failed'.
+        self._check_prediction(prediction_id, prediction_set)
+        self.DDG_db.execute('UPDATE {0} SET Status="failed", maxvmem=%s, DDGTime=%s, Errors=%s WHERE ID=%s'.format(self._get_prediction_table()), parameters=(maxvmem, ddgtime, errors, prediction_id,))
 
 
     @job_completion
-    def extract_data(self, prediction_set_id, root_directory = None, force = False):
-        '''Extracts the data for the prediction set run and stores it into the database.'''
+    def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None):
+        '''Extracts the data for the prediction set run and stores it into the database.
 
+           For all PredictionIDs associated with the PredictionSet:
+             - looks for a subdirectory of root_directory with the same name as the ID e.g. /some/folder/21412
+             - call extract_data_for_case
+
+           Note: we do not use a transaction at this level. We could but it may end up being a very large transaction
+           depending on the dataset size. It seems to make more sense to me to use transactions at the single prediction
+           level i.e. in extract_data_for_case
+
+           root_directory defaults to /kortemmelab/shared/DDG/ppijobs.
+           If force is True then existing records should be overridden.
+        '''
+
+        root_directory = root_directory or self.prediction_data_path
         prediction_ids = self.get_prediction_ids(prediction_set_id)
         for prediction_id in prediction_ids:
-            # Note: we do not use a transaction at this level. We could but it may end up being a very large transaction
-            # depending on the dataset size. It seems to make more sense to me to use transactions at the single prediction
-            # level i.e. in extract_data_for_case
-            self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force)
+            job_path = os.path.join(root_directory, prediction_id)
+            if not os.path.exists(job_path):
+                raise Exception('The folder {0} for Prediction #{1} does not exist.'.format(job_path, prediction_id))
+
+        for prediction_id in prediction_ids:
+            self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force, score_method_id = score_method_id)
 
 
     @job_completion
-    def extract_data_for_case(self, prediction_id, root_directory = None, force = False):
+    def extract_data_for_case(self, prediction_id, root_directory = None, score_method_id = None, force = False):
         '''Extracts the data for the prediction case (e.g. by processing stdout) and stores it in the Prediction*StructureScore
            table.
            The scores are returned to prevent the caller having to run another query.
 
-           if force is False and the expected number of records for the case exists in the database, these are returned.
+           If force is False and the expected number of records for the case exists in the database, these are returned.
            Otherwise, the data are extracted, stored using a database transaction to prevent partial storage, and returned.
 
            Note:
-           We use a lot of functions here: extract_data_for_case, parse_prediction_scores, store_scores, add_ddg_score.
+           We use a lot of functions here: extract_data_for_case, parse_prediction_scores, store_scores.
            This may seem like overkill but I think it could allow us to reuse a lot of the code since the tables for
            PredictionPPIStructureScore and PredictionStructureScore are very similar (but are different since the underlying
            foreign tables PredictionPPI and Prediction are at least currently separate).
+
+           parse_prediction_scores only returns dicts for database storage so it can be useful for debugging during development.
+           store_scores stores scores in the database (passed as a list of dicts) but does not care from where they came.
+           extract_data_for_case calls parse_prediction_scores to get the scores and the store_scores to commit them to the database.
         '''
 
-        # call parse_prediction_scores to return a dict suitable for database storage
-        # call store_scores to store the scores (which calls add_ddg_score for each score)
-        # return the dict from parse_prediction_scores
-        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+        root_directory = root_directory or self.prediction_data_path # defaults to /kortemmelab/shared/DDG/ppijobs
+        prediction_set = self.get_job_details(prediction_id, include_files = False)['PredictionSet']
+
+        # todo: implement force behavior
+
+        # Create a list of dicts for the PredictionPPIStructureScore table
+        scores = self.parse_prediction_scores(prediction_id, root_directory = root_directory, score_method_id = score_method_id)
+
+        # Store the dicts as PredictionPPIStructureScore records
+        self.store_scores(prediction_set, prediction_id, scores)
+
+        return scores
 
 
     @job_completion
-    def parse_prediction_scores(self, *args, **kwargs):
+    def parse_prediction_scores(self, prediction_id, root_directory = None, score_method_id = None):
         '''Returns a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass. Returns a dict suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.')
 
 
     @job_completion
-    def store_scores(self, scores, prediction_set, prediction_id):
-        '''Stores a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
-        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+    def store_scores_for_many_predictions(self, prediction_set, scores, safe = True):
+        '''Stores scores for many predictions.
+           scores should be a list of dicts suitable for database storage e.g. PredictionStructureScore or
+           PredictionPPIStructureScore records.
+           Note: This function is not very clever - it does not group scores per prediction and it creates garbage (the [score] list).
+        '''
+
+        prediction_id_field = self._get_prediction_id_field()
+        if safe:
+            # Sanity checks
+            for score in scores:
+                if prediction_id_field not in score:
+                    raise Exception('The score record is missing a {0} field: {1}.'.format(prediction_id_field, pprint.pformat(score)))
+                self._check_prediction(score[prediction_id_field], prediction_set)
+        for score in scores:
+            self.store_scores(prediction_set, score[prediction_id_field], [score])
 
 
-    @job_results
-    def add_ddg_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
-        '''Add the DDG scores for a given score method for a prediction.'''
-        raise Exception('not implemented yet. This should only need to be implemented for the base class')
+    @job_completion
+    def store_scores(self, prediction_set, prediction_id, scores):
+        '''Stores scores for one prediction.
+           scores should be a list of dicts suitable for database storage e.g. PredictionStructureScore or
+           PredictionPPIStructureScore records.
+           This function uses a transaction so if any of the insertions fail then they are all rolled back.
+           '''
+        self._check_prediction(prediction_id, prediction_set)
+        self._check_scores_for_main_fields(scores, prediction_id)
+        self._check_score_fields(scores)
 
-
-    @job_results
-    def _add_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores, is_wildtype):
-        '''Add the scores for a given score method for one structure of a prediction.'''
-        raise Exception('not implemented yet. This should only need to be implemented for the base class')
-        #if ScoreMethodID is None, raise an exception but report the score method id for the default score method
-        #assert(scores fields match db fields)
-
-
-    @job_results
-    def add_wildtype_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
-        '''Add the scores for a given score method for one wildtype structure of a prediction.'''
-        return self._add_structure_score(prediction_set, prediction_id, structure_id, ScoreMethodID, scores, True)
-        raise Exception('not implemented yet. This should only need to be implemented for the base class')
-
-
-    @job_results
-    def add_mutant_structure_score(self, prediction_set, prediction_id, structure_id, ScoreMethodID, scores):
-        '''Add the scores for a given score method for one mutant structure of a prediction.'''
-        return self._add_structure_score(prediction_set, prediction_id, structure_id, ScoreMethodID, scores, False)
-        raise Exception('not implemented yet. This should only need to be implemented for the base class')
+        con = self.DDG_db.connection
+        with con:
+            db_cursor = con.cursor()
+            for score in scores:
+                raise Exception('test')
+                sql, params = self.DDG_db.create_insert_dict_string(self._get_prediction_structure_scores_table(), score, [self._get_prediction_id_field(), 'ScoreMethodID', 'ScoreType', 'StructureID'])
+                db_cursor.execute(sql, params)
 
 
     @job_completion
@@ -1508,11 +1609,49 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     def _get_prediction_table(self): return None
+    def _get_prediction_id_field(self): return self._get_prediction_table() + 'ID'
     def _get_prediction_type(self): return None
     def _get_prediction_dataset_type(self): return None
     def _get_prediction_type_description(self): return None
     def _get_user_dataset_experiment_table(self): return None
     def _get_user_dataset_experiment_tag_table(self): return None
+    def _get_allowed_score_types(self): return None
+
+    ###########################################################################################
+    ## Assertion layer
+    ##
+    ## These functions check pre- and post-conditions
+    ###########################################################################################
+
+
+    def _check_prediction(self, prediction_id, prediction_set):
+        '''Sanity check: Asserts that a Prediction belongs in the expected PredictionSet.'''
+        prediction_table = self._get_prediction_table()
+        if True or not self.DDG_db.execute_select('SELECT * FROM {0} WHERE ID=%s AND PredictionSet=%s'.format(prediction_table), parameters=(prediction_id, prediction_set)):
+            # Leaving this as True until we hit it
+            raise Exception('{0} record #{1} does not belong to PredictionSet {2}.'.format(prediction_table, prediction_id, prediction_set))
+
+
+    def _check_scores_for_main_fields(self, scores, prediction_id):
+        '''Sanity check: Asserts that the identifying fields for the scores make sense for this interface.'''
+        prediction_id_field = self._get_prediction_id_field()
+        score_method_details = self.get_score_method_details()
+        allowed_score_types = self._get_allowed_score_types()
+        int_type = type(1)
+        for score in scores:
+            assert(prediction_id_field in score and score[prediction_id_field] == prediction_id)
+            assert('ScoreMethodID' in score and score['ScoreMethodID'] in score_method_details)
+            assert('ScoreType' in score and score['ScoreType'] in allowed_score_types)
+            assert('StructureID' in score and type(score['StructureID']) == int_type)
+
+
+    def _check_score_fields(self, scores):
+        '''Sanity check: Asserts that the fields for the scores are represented in the database table.'''
+        fieldnames = set([f for f in self.DDG_db.FieldNames.__dict__[self._get_prediction_structure_scores_table()].__dict__.keys() if not(f.startswith('_'))])
+        for score in scores:
+            score_keys = score.keys()
+            if sorted(fieldnames.intersection(score_keys)) != sorted(score_keys):
+                raise Exception('These score table fieldnames were not recognized: %s.'.format(', '.join(sorted(score_keys.difference(fieldnames)))))
 
 
     ###########################################################################################

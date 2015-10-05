@@ -345,7 +345,7 @@ class MonomericStabilityDDGInterface(ddG):
 
 
     @job_completion
-    def store_scores(self, scores, prediction_set, prediction_id):
+    def store_scores(self, prediction_set, prediction_id, scores):
         '''Stores a list of dicts suitable for database storage e.g. PredictionStructureScore records.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 

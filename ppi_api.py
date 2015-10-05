@@ -189,6 +189,28 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @informational_job
+    def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
+        prediction_record = self.DDG_db.execute_select('SELECT * FROM PredictionPPI WHERE ID=%s', parameters=(prediction_id,))
+        if not prediction_record:
+            raise Exception('No details could be found for prediction #%d in the database.' % prediction_id)
+        prediction_record = prediction_record[0]
+        prediction_record['Files'] = {}
+        if include_files:
+            prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
+
+        # mutfile_content = self.create_mutfile(prediction_id)
+
+        # Read the UserPPDataSetExperiment details
+        user_dataset_experiment_id = prediction_record['UserPPDataSetExperimentID']
+        ude_details = self.get_user_dataset_experiment_details(user_dataset_experiment_id)
+        assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record['PPMutagenesisID'])
+        for k, v in ude_details.iteritems():
+            assert(k not in prediction_record)
+            prediction_record[k] = v
+        return prediction_record
+
+
+    @informational_job
     def get_dataset_experiment_details(self, dataset_experiment_id, dataset_id = None):
         de = self._get_dataset_record_with_checks(dataset_experiment_id, dataset_id = dataset_id)
         PDBFileID = de['PDBFileID']
@@ -873,29 +895,6 @@ class BindingAffinityDDGInterface(ddG):
     # completed
 
 
-    @informational_job
-    def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
-        prediction_record = self.DDG_db.execute_select('SELECT * FROM PredictionPPI WHERE ID=%s', parameters=(prediction_id,))
-        if not prediction_record:
-            raise Exception('No details could be found for prediction #%d in the database.' % prediction_id)
-        prediction_record = prediction_record[0]
-        prediction_record['Files'] = {}
-        if include_files:
-            prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
-
-        # mutfile_content = self.create_mutfile(prediction_id)
-
-
-        # Read the UserPPDataSetExperiment details
-        user_dataset_experiment_id = prediction_record['UserPPDataSetExperimentID']
-        ude_details = self.get_user_dataset_experiment_details(user_dataset_experiment_id)
-        assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record['PPMutagenesisID'])
-        for k, v in ude_details.iteritems():
-            assert(k not in prediction_record)
-            prediction_record[k] = v
-        return prediction_record
-
-
     @job_execution
     def set_job_temporary_protocol_field(self, prediction_id, prediction_set_id, temporary_protocol_field):
         raise Exception('not implemented yet')
@@ -919,14 +918,26 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_completion
-    def parse_prediction_scores(self, stdout):
-        '''Returns a list of dicts suitable for database storage e.g. PredictionPPIStructureScore records.'''
-        raise Exception('not implemented yet')
+    def parse_prediction_scores(self, prediction_id, root_directory = None, score_method_id = None):
+
+        scores = []
+        for n in nstruct: # @todo: Kyle - determine nstruct
+            wtl_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeLPartner', score_method_id = score_method_id)
+            wtr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeRPartner', score_method_id = score_method_id),
+            wtc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeComplex', score_method_id = score_method_id),
+            ml_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantLPartner', score_method_id = score_method_id),
+            mr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantRPartner', score_method_id = score_method_id),
+            mc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantComplex', score_method_id = score_method_id),
+
+            # @todo: Kyle
+            
+            scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
+        return scores
 
 
     @job_completion
-    def store_scores(self, scores, prediction_set, prediction_id):
-        '''Stores a list of dicts suitable for database storage e.g. PredictionPPIStructureScore records.'''
+    def parse_prediction_scores(self, stdout):
+        '''Returns a list of dicts suitable for database storage e.g. PredictionPPIStructureScore records.'''
         raise Exception('not implemented yet')
 
 
@@ -959,6 +970,8 @@ class BindingAffinityDDGInterface(ddG):
     def _get_prediction_type_description(self): return 'binding affinity'
     def _get_user_dataset_experiment_table(self): return 'UserPPDataSetExperiment'
     def _get_user_dataset_experiment_tag_table(self): return 'UserPPDataSetExperimentTag'
+    def _get_allowed_score_types(self): return set(['DDG', 'WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex'])
+
 
     ###########################################################################################
     ## Information layer
