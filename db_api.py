@@ -1458,8 +1458,38 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @analysis_api
-    def get_analysis_dataframe(self, PredictionSet,
-            PredictionSetSeriesName = None, PredictionSetDescription = None, PredictionSetCredit = None,
+    def get_prediction_scores(self, prediction_id):
+        '''Returns the scores for the prediction using nested dicts with the structure:
+                ScoreMethodID -> StructureID -> ScoreType -> database record
+        '''
+        scores = {}
+        for r in self.DDG_db.execute_select('SELECT * FROM {0} WHERE {1}=%s'.format(self._get_prediction_structure_scores_table(), self._get_prediction_id_field()), parameters=(prediction_id,)):
+            ScoreMethodID = r['ScoreMethodID']
+            StructureID = r['StructureID']
+            if StructureID == -1:
+                StructureID = 'None' # usually this indicates an overall or aggregate value
+            ScoreType = r['ScoreType']
+            scores[ScoreMethodID] = scores.get(ScoreMethodID, {})
+            scores[ScoreMethodID][StructureID] = scores[ScoreMethodID].get(StructureID, {})
+            scores[ScoreMethodID][StructureID][ScoreType] = r
+            del scores[ScoreMethodID][StructureID][ScoreType]['ScoreMethodID']
+            del scores[ScoreMethodID][StructureID][ScoreType]['StructureID']
+            del scores[ScoreMethodID][StructureID][ScoreType]['ScoreType']
+            del scores[ScoreMethodID][StructureID][ScoreType]['PredictionID']
+            del scores[ScoreMethodID][StructureID][ScoreType]['ID']
+        return scores
+
+
+    @analysis_api
+    def get_top_x_ddg(self, prediction_id, top_x = 3, score_method_id = None):
+        '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
+           case computed using the associated Score records in the database.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
+
+
+    @analysis_api
+    def get_analysis_dataframe(self, prediction_set_id,
+            prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
             use_existing_benchmark_data = True, recreate_graphs = False,
             include_derived_mutations = False,
             use_single_reported_value = False,
@@ -1499,8 +1529,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @analysis_api
-    def analyze(self, PredictionSets,
-            PredictionSetSeriesNames = {}, PredictionSetDescriptions = {}, PredictionSetCredits = {}, PredictionSetColors = {}, PredictionSetAlphas = {},
+    def analyze(self, prediction_set_ids,
+            prediction_set_series_names = {}, prediction_set_descriptions = {}, prediction_set_credits = {}, prediction_set_colors = {}, prediction_set_alphas = {},
             use_published_data = False,
             use_existing_benchmark_data = True, recreate_graphs = False,
             include_derived_mutations = False,
@@ -1520,13 +1550,14 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
            * Analysis setup arguments *
 
-           PredictionSets is a list of PredictionSet IDs. Each PredictionSet will be analyzed separately and appropriate
+           prediction_set_ids is a list of PredictionSet IDs. Each PredictionSet will be analyzed separately and appropriate
            pairs will be cross-analyzed.
-           PredictionSetSeriesNames, PredictionSetDescriptions, and PredictionSetCredits are mappings from PredictionSet IDs
-           to series names (in plots), descriptions, and credits respectively. The details are stored in PredictionSet so
-           they are not necessary. The mappings can be used to override the database values to customize the analysis
-           reports. Likewise, PredictionSetColors and PredictionSetAlphas are mappings to series colors and transparency values
-           for use in the plots.
+           prediction_set_series_names, prediction_set_descriptions, and prediction_set_credits are mappings from PredictionSet IDs
+           to series names (in plots), descriptions, and credits respectively. These details are stored in PredictionSet so
+           they are optional arguments. If passed, these mappings will override the PredictionSet values in the database
+           which allows the user to customize the analysis reports. Likewise, prediction_set_colors and prediction_set_alphas
+           are mappings to series colors and transparency values for use in the plots.
+
            use_published_data. todo: implement later. This should include any published data e.g. the Kellogg et al. data for protein stability.
            use_existing_benchmark_data and recreate_graphs are data creation arguments i.e. "should we use existing data or create it from scratch?"
            include_derived_mutations is used to filter out dataset cases with derived mutations.
@@ -1689,6 +1720,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     def _get_prediction_table(self): return None
+    def _get_prediction_structure_scores_table(self): return None
     def _get_prediction_id_field(self): return self._get_prediction_table() + 'ID'
     def _get_prediction_type(self): return None
     def _get_prediction_dataset_type(self): return None
@@ -1696,6 +1728,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def _get_user_dataset_experiment_table(self): return None
     def _get_user_dataset_experiment_tag_table(self): return None
     def _get_allowed_score_types(self): return None
+
 
     ###########################################################################################
     ## Assertion layer

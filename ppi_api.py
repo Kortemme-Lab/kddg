@@ -64,9 +64,9 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
     if not user or not password or not host:
         raise Exception("Couldn't find host(%s), username(%s), or password in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
 
-    return get_interface(password, username=user, hostname=host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+    return get_interface(password, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
 
-def get_interface(passwd, username = 'kortemmelab', hostname='kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
+def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
     return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
@@ -1087,11 +1087,26 @@ class BindingAffinityDDGInterface(ddG):
     ###########################################################################################
 
 
-    #def get_prediction_set_case_details(self, prediction_set_id, retrieve_references = True):
+    @analysis_api
+    def get_top_x_ddg(self, prediction_id, top_x = 3, score_method_id = None):
+        '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
+           case computed using the associated Score records in the database.'''
+
+        if not score_method_id:
+            score_method_id = self.get_score_method_id('interface', method_authors = 'kyle')
+
+        scores = self.get_prediction_scores(prediction_id)[score_method_id]
+        # scores is a mapping from nstruct -> ScoreType -> score record where ScoreType is one of 'DDG', 'WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex'
+
+        # do some calculation on scores to determine the TopX
+        # we can implement different variations on TopX and pass the function pointers as an argument to the main analysis function
+
+        raise Exception('Kyle will implement this.')
+
 
     @analysis_api
-    def get_analysis_dataframe(self, PredictionSet,
-            PredictionSetSeriesName = None, PredictionSetDescription = None, PredictionSetCredit = None,
+    def get_analysis_dataframe(self, prediction_set_id,
+            prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
             use_existing_benchmark_data = True, recreate_graphs = False,
             include_derived_mutations = False,
             use_single_reported_value = False,
@@ -1128,11 +1143,12 @@ class BindingAffinityDDGInterface(ddG):
         #
         # For Shane: this extracts the dataset_description and dataset_cases data that DDGBenchmarkManager currently takes care of in the capture.
         # The analysis_data variable of DDGBenchmarkManager should be compiled via queries calls to the Prediction*StructureScore table.
+        self.get_prediction_set_case_details(prediction_set_id, retrieve_references = True)
 
 
     @analysis_api
-    def analyze(self, PredictionSets,
-            PredictionSetSeriesNames = {}, PredictionSetDescriptions = {}, PredictionSetCredits = {}, PredictionSetColors = {}, PredictionSetAlphas = {},
+    def analyze(self, prediction_set_ids,
+            prediction_set_series_names = {}, prediction_set_descriptions = {}, prediction_set_credits = {}, prediction_set_colors = {}, prediction_set_alphas = {},
             use_published_data = False,
             use_existing_benchmark_data = True, recreate_graphs = False,
             include_derived_mutations = False,

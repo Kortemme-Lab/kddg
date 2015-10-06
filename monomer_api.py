@@ -25,17 +25,18 @@ from tools import colortext
 from tools.bio.alignment import ScaffoldModelChainMapper
 
 
-def get_interface(passwd, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
+def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a MonomericStabilityDDGInterface interface object. It hides the
     private methods from the user so that a more traditional object-oriented API is created.'''
-    return GenericUserInterface.generate(MonomericStabilityDDGInterface, passwd = passwd, username = username, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+    return GenericUserInterface.generate(MonomericStabilityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+
 
 
 class MonomericStabilityDDGInterface(ddG):
 
 
-    def __init__(self, passwd = None, username = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
-        super(MonomericStabilityDDGInterface, self).__init__(passwd = passwd, username = username, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None):
+        super(MonomericStabilityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
 
 
@@ -938,6 +939,8 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
     def _get_prediction_type_description(self): return 'monomeric stability'
     def _get_user_dataset_experiment_table(self): return 'UserDataSetExperiment'
     def _get_user_dataset_experiment_tag_table(self): raise Exception('To be added.')
+    def _get_allowed_score_types(self): return set(['DDG', 'WildType', 'Mutant'])
+
 
     ###########################################################################################
     ## Information layer
