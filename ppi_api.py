@@ -275,7 +275,7 @@ class BindingAffinityDDGInterface(ddG):
         return d
 
 
-    def get_ddg_values_for_dataset_record(self, dataset_experiment_id, dataset_id = None):
+    def _get_ddg_values_for_dataset_record(self, dataset_experiment_id, dataset_id = None):
         de = self._get_dataset_record_with_checks(dataset_experiment_id, dataset_id = dataset_id)
         ddg_pairs = self.DDG_db.execute_select('SELECT PositiveDependentPPIDDGID, NegativeDependentPPIDDGID FROM PPIDataSetDDGSource WHERE PPIDataSetDDGID=%s', parameters=(dataset_experiment_id,))
         assert(ddg_pairs)
@@ -1078,6 +1078,128 @@ class BindingAffinityDDGInterface(ddG):
         '''Sets a job to 'completed' and stores scores. prediction_set must be passed and is used as a sanity check.'''
 
         raise Exception('This function needs to be implemented by subclasses of the API.')
+
+
+    ###########################################################################################
+    ## Analysis layer
+    ##
+    ## This part of the API is responsible for running analysis on completed predictions
+    ###########################################################################################
+
+
+    #def get_prediction_set_case_details(self, prediction_set_id, retrieve_references = True):
+
+    @analysis_api
+    def get_analysis_dataframe(self, PredictionSet,
+            PredictionSetSeriesName = None, PredictionSetDescription = None, PredictionSetCredit = None,
+            use_existing_benchmark_data = True, recreate_graphs = False,
+            include_derived_mutations = False,
+            use_single_reported_value = False,
+            take_lowest = 3,
+            burial_cutoff = 0.25,
+            stability_classication_experimental_cutoff = 1.0,
+            stability_classication_predicted_cutoff = 1.0,
+            report_analysis = True,
+            silent = False,
+            root_directory = None
+            ):
+        '''This function uses experimental data from the database and prediction data from the Prediction*StructureScore
+           table to build a pandas dataframe and store it in the database. See .analyze for an explanation of the
+           parameters.
+
+           The dataframes mostly contain redundant data so their storage could be seen to break a key database design
+           principal. However, we store the dataframe in the database as it can take a while to build it from scratch and
+           pre-built dataframes can be used to run quick analysis, for rapid development of the analysis methods, or to
+           plug into webservers where responsiveness is important.
+
+           If use_existing_benchmark_data is True and the dataframe already exists then it is returned as a BenchmarkRun object.
+           Otherwise, it is built from the Prediction*StructureScore records.
+           If the Prediction*StructureScore records do not exist, this function falls back into extract_data_for_case
+           to generate them in which case root_directory needs to be specified (this is the only use for the root_directory
+           parameter).
+        '''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+        # if use_existing_benchmark_data and dataframe exists: return dataframe
+        # else retrieve all of the Score records from the database
+        #    if a record does not exist:
+        #        if root_directory then call extract_data_for_case to create an analysis dataframe and store it in the database
+        #    store the number of complete Score records as a column in the dataframe (to indicate whether analysis is being performed on a full set of data)
+        #
+        # For Shane: this extracts the dataset_description and dataset_cases data that DDGBenchmarkManager currently takes care of in the capture.
+        # The analysis_data variable of DDGBenchmarkManager should be compiled via queries calls to the Prediction*StructureScore table.
+
+
+    @analysis_api
+    def analyze(self, PredictionSets,
+            PredictionSetSeriesNames = {}, PredictionSetDescriptions = {}, PredictionSetCredits = {}, PredictionSetColors = {}, PredictionSetAlphas = {},
+            use_published_data = False,
+            use_existing_benchmark_data = True, recreate_graphs = False,
+            include_derived_mutations = False,
+            expectn = 50,
+            use_single_reported_value = False,
+            take_lowest = 3,
+            burial_cutoff = 0.25,
+            stability_classication_experimental_cutoff = 1.0,
+            stability_classication_predicted_cutoff = 1.0,
+            output_directory = None,
+            generate_plots = True,
+            report_analysis = True,
+            silent = False,
+            root_directory = None
+            ):
+        '''Runs the analyses for the specified PredictionSets and cross-analyzes the sets against each other if appropriate.
+
+           * Analysis setup arguments *
+
+           PredictionSets is a list of PredictionSet IDs. Each PredictionSet will be analyzed separately and appropriate
+           pairs will be cross-analyzed.
+           PredictionSetSeriesNames, PredictionSetDescriptions, and PredictionSetCredits are mappings from PredictionSet IDs
+           to series names (in plots), descriptions, and credits respectively. The details are stored in PredictionSet so
+           they are not necessary. The mappings can be used to override the database values to customize the analysis
+           reports. Likewise, PredictionSetColors and PredictionSetAlphas are mappings to series colors and transparency values
+           for use in the plots.
+           use_published_data. todo: implement later. This should include any published data e.g. the Kellogg et al. data for protein stability.
+           use_existing_benchmark_data and recreate_graphs are data creation arguments i.e. "should we use existing data or create it from scratch?"
+           include_derived_mutations is used to filter out dataset cases with derived mutations.
+           expectn declares how many predictions we expect to see per dataset case. If the actual number is less than expectn
+           then a warning will be included in the analysis.
+
+           * Dataframe arguments *
+
+           use_single_reported_value is specific to ddg_monomer. If this is True then the DDG value reported by the application is used and take_lowest is ignored. This is inadvisable - take_lowest = 3 is a better default.
+           take_lowest AKA Top_X. Specifies how many of the best-scoring groups of structures to consider when calculating the predicted DDG value.
+           burial_cutoff defines what should be considered buried (DSSPExposure field). Values around 1.0 are fully exposed, values of 0.0 are fully buried. For technical reasons, the DSSP value can exceed 1.0 but usually not by much.
+           stability_classication_experimental_cutoff AKA x_cutoff. This defines the neutral mutation range for experimental values in kcal/mol i.e. values between -1.0 and 1.0 kcal/mol are considered neutral by default.
+           stability_classication_predicted_cutoff AKA y_cutoff. This defines the neutral mutation range for predicted values in energy units.
+
+           * Reporting arguments *
+
+           output_directory : The directory in which to save plots and reports.
+           generate_plots   : if plots are not needed, setting this to False can shorten the analysis time.
+           report_analysis  : Whether or not to print analysis to stdout.
+           silent = False   : Whether or not anything should be printed to stdout (True is useful for webserver interaction).
+        '''
+
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+        # colors, alpha, and default series name and descriptions are taken from PredictionSet records
+        # The order (if p1 before p2 then p1 will be on the X-axis in comparative plots) in comparative analysis plots is determined by the order in PredictionSets
+        assert(take_lowest > 0 and (int(take_lowest) == take_lowest))
+        assert(0 <= burial_cutoff <= 2.0)
+        assert(stability_classication_experimental_cutoff > 0)
+        assert(stability_classication_predicted_cutoff > 0)
+        # assert PredictionSet for PredictionSet in PredictionSets is in the database
+
+        # calls get_analysis_dataframe(options) over all PredictionSets
+        # if output_directory is set, save files
+        # think about how to handle this in-memory. Maybe return a dict like:
+            #"run_analyis" -> benchmark_name -> {analysis_type -> object}
+            #"comparative_analysis" -> (benchmark_name_1, benchmark_name_2) -> {analysis_type -> object}
+        # comparative analysis
+        #   only compare dataframes with the exact same points
+        #   allow cutoffs, take_lowest to differ but report if they do so
+
 
 
     ################################################################################################

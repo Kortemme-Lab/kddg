@@ -590,6 +590,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @informational_misc
     def get_publication(self, ID):
+        '''Returns the information (title, publication, authors etc.) for a publication.'''
         r = self.DDG_db_utf.execute_select('SELECT * FROM Publication WHERE ID=%s', parameters=(ID,))
         if not r:
             raise Exception('No publication exists with ID %s.' % str(ID))
@@ -624,6 +625,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @informational_misc
     def get_publications(self):
+        '''Returns the information (title, publication, authors etc.) for all publications.'''
         publications = {}
         for r in self.DDG_db.execute_select('SELECT ID FROM Publication'):
             publications[r['ID']] = self.get_publication(r['ID'])
@@ -784,6 +786,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @informational_job
+    def get_development_protocol(self, development_protocol_id):
+        '''Possibly temporary function which returns a DevelopmentProtocol record from the database.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @informational_job
     def get_complex_details(self, complex_id):
         '''Returns the database record for the given complex.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
@@ -877,6 +885,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     @informational_job
     def get_user_dataset_experiment_details(self, user_dataset_experiment_id, user_dataset_id = None):
         '''Returns all the data relating to a user dataset experiment.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @informational_job
+    def get_dataset_experiment_details(self, dataset_experiment_id, dataset_id = None):
+        '''Returns the experimental data relating to a dataset experiment.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
@@ -1107,6 +1121,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         raise Exception('not implemented yet')
 
 
+    @job_creator
+    def add_development_protocol_command_lines(self, development_protocol_id):
+        '''Possibly temporary function used to add protocol command lines for methods in development.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
     #== Input file generation API ===========================================================
     #
     # This part of the API is responsible for creating input files for predictions
@@ -1217,6 +1237,12 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         assert(batch_size > 0)
         self._assert_prediction_set_exists(prediction_set_id)
         self.DDG_db.execute_select('UPDATE PredictionSet SET BatchSize=%s WHERE ID=%s', parameters=(batch_size, prediction_set_id,))
+
+
+    @job_execution
+    def set_job_temporary_protocol_field(self, prediction_id, prediction_set_id, temporary_protocol_field):
+        '''Possibly temporary function which sets fields in the temporary protocol field.'''
+        raise Exception('not implemented yet')
 
 
     @job_completion
