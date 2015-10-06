@@ -892,6 +892,56 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
+    @informational_job
+    def get_predictions_experimental_details(self, prediction_id, userdatset_experiment_ids_to_subset_ddgs = None, include_files = False, reference_ids = set()):
+        '''Returns a dict containing the experimental details for the Prediction. This is what is used by export_prediction_cases_to_json etc.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @informational_job
+    def get_experimental_ddgs_by_analysis_set(self):
+        '''Returns a mapping from UserPPDataSetExperimentIDs to dicts mapping analysis Subsets to a dicts containing the
+           record identifier triple (subset, section, record number), the experimental DDG values, the mean of those values,
+           and whether the values / one of the values are derived from other measurements e.g.
+
+          23 : {
+            'BeAtMuSiC' : {'Cases'           : set([('BeAtMuSiC', 'Main', 1408L)]),
+                           'DDGs'            : [{'IsDerivedValue': 0L,
+                                                 'Value': 2.9802478611},
+                                                {'IsDerivedValue': 0L,
+                                                 'Value': 2.1978328374}],
+                           'IsDerivedValue'  : 0L,
+                           'MeanDDG'         : 2.5890403492500003},
+            'SKEMPI'    : {'Cases'           : set([('SKEMPI', 'Non-derivative', 1L)]),
+                           'DDGs'            : [{'IsDerivedValue': 0L, 'Value': 2.9802478611},
+                                              {'IsDerivedValue': 0L, 'Value': 2.1978328374}],
+                           'IsDerivedValue'  : 0L,
+                           'MeanDDG'         : 2.5890403492500003},
+            'ZEMu'      : {'Cases'           : set([('ZEMu', 'Main', 1144L)]),
+                           'DDGs'            : [{'IsDerivedValue': 0L, 'Value': 2.1978328374}],
+                           'IsDerivedValue'  : 0L,
+                           'MeanDDG'         : 2.1978328374}}
+           ...
+
+           This can be used to: i) generate histograms showing the spread of experimental values for a dataset; or
+           ii) to add columns to an analysis dataframe so that, once created, it can be analyzed over multiple analysis sets.
+        '''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @informational_job
+    def get_prediction_set_case_details(self, prediction_set_id, retrieve_references = True):
+        '''Returns a dict containing the case information for prediction cases in the prediction set with a structure
+           expected by the analysis class.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @informational_job
+    def export_prediction_cases_to_json(self, prediction_set_id, retrieve_references = True):
+        '''A JSON wrapper to get_prediction_set_case_details.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
     def _export_dataset(self, dataset_id):
         '''Returns a dict containing the dataset information.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')

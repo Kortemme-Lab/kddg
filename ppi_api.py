@@ -26,6 +26,7 @@ from tools.bio.basics import ChainMutation
 from tools.fs.fsio import read_file
 from tools.rosetta.input_files import Mutfile, Resfile
 
+
 def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
     # Uses ~/.my.cnf to get authentication information
     ### Example .my.cnf (host_config_name will equal guybrush2):
@@ -155,8 +156,9 @@ class BindingAffinityDDGInterface(ddG):
         '''Returns the PDB mutations for a mutagenesis experiment as well as the PDB residue information.'''
         pdb_mutations = []
         for pdb_mutation in self.DDG_db.execute_select('''
-            SELECT PPMutagenesisPDBMutation.*, PDBResidue.ResidueType, PDBResidue.BFactorMean,
-            PDBResidue.BFactorDeviation, PDBResidue.SecondaryStructurePosition, PDBResidue.AccessibleSurfaceArea, ComplexExposure, ComplexDSSP
+            SELECT PPMutagenesisPDBMutation.*, PDBResidue.ResidueType,
+            PDBResidue.BFactorMean, PDBResidue.BFactorDeviation,
+            PDBResidue.ComplexExposure, PDBResidue.ComplexDSSP, PDBResidue.MonomericExposure, PDBResidue.MonomericDSSP
             FROM
             PPMutagenesisPDBMutation
             INNER JOIN
@@ -218,7 +220,7 @@ class BindingAffinityDDGInterface(ddG):
         ComplexID = self.DDG_db.execute_select('SELECT PPComplexID FROM PPMutagenesis WHERE ID=%s', parameters=(PPMutagenesisID,))[0]['PPComplexID']
         SetNumber = None
 
-        # todo: this is a nasty hack due to the fact that we do not currently store the SetNumber and PPComplexID in the PPIDataSetDDG table
+        # todo: this is a nasty hack due to the fact that we do not currently store the SetNumber and PPComplexID in the PPIDataSetDDG table. See ticket:1457.
         pdb_sets = self.DDG_db.execute_select('SELECT * FROM PPIPDBSet WHERE PPComplexID=%s AND IsComplex=1', parameters=(ComplexID,))
         if len(pdb_sets) > 1:
             probable_sets = self.DDG_db.execute_select('SELECT DatabaseKey FROM PPIDatabaseComplex WHERE DatabaseName LIKE "%%SKEMPI%%" AND DatabaseKey LIKE "%%%s%%" AND PPComplexID=%s' % (PDBFileID, ComplexID))
@@ -270,9 +272,6 @@ class BindingAffinityDDGInterface(ddG):
         d['ExperimentalDDGs'] = self.get_ddg_values_for_dataset_record(dataset_experiment_id, dataset_id = dataset_id)
         d['DDG'] = sum([((e.get('Positive') or {}).get('DDG', 0) - (e.get('Negative') or {}).get('DDG', 0)) for e in d['ExperimentalDDGs']])
         # todo: add SCOPe class, Pfam domain
-        pprint.pprint(d)
-        import sys
-        sys.exit(0)
         return d
 
 
@@ -384,6 +383,140 @@ class BindingAffinityDDGInterface(ddG):
             ])
             lines.append(line)
         return ('\n'.join(lines)).encode('utf8', 'replace')
+
+
+    @informational_job
+    def get_predictions_experimental_details(self, prediction_id, userdatset_experiment_ids_to_subset_ddgs = None, include_files = False, reference_ids = set()):
+
+        details = self.get_job_details(prediction_id, include_files = include_files)
+
+        # Sanity checks and redundancy removal
+        PPMutagenesisID = details['PPMutagenesisID']
+        ComplexID = details['Complex']['ID']
+        chains = set([item for sublist in [v for k, v in details['Structure']['Partners'].iteritems()] for item in sublist])
+        PDBFileID = details['Structure']['PDBFileID']
+        SetNumber = details['Structure']['SetNumber']
+        for m in details['PDBMutations']:
+            assert(m['PPMutagenesisID'] == PPMutagenesisID)
+            del m['PPMutagenesisID']
+            assert(ComplexID == m['PPComplexID'])
+            del m['PPComplexID']
+            assert(PDBFileID == m['PDBFileID'])
+            del m['PDBFileID']
+            assert(SetNumber == m['SetNumber'])
+            del m['SetNumber']
+            assert(m['Chain'] in chains)
+        assert(details['Mutagenesis']['PPMutagenesisID'] == PPMutagenesisID)
+        del details['Mutagenesis']
+
+        # Add the DDG values for the related analysis sets
+        user_dataset_experiment_id = details['UserPPDataSetExperimentID']
+        userdatset_experiment_ids_to_subset_ddgs = userdatset_experiment_ids_to_subset_ddgs or self.get_experimental_ddgs_by_analysis_set(user_dataset_experiment_id, reference_ids = reference_ids)
+        assert('DDG' not in details)
+        details['DDG'] = userdatset_experiment_ids_to_subset_ddgs[user_dataset_experiment_id]
+
+        return details
+
+
+    @informational_job
+    def get_experimental_ddgs_by_analysis_set(self, user_dataset_experiment_id = None, reference_ids = set()):
+
+        # Determine the set of analysis sets
+        userdatset_experiment_ids_to_subset_ddgs = {}
+        analysis_sets = [r['Subset'] for r in self.DDG_db.execute_select('SELECT DISTINCT Subset FROM UserPPAnalysisSet')]
+
+        # Query the database, restricting to one user_dataset_experiment_id if passed
+        parameters = None
+        qry = '''
+            SELECT UserPPAnalysisSet.*,
+            (IFNULL(PositiveDDG.DDG, 0) - IFNULL(NegativeDDG.DDG, 0)) AS ExperimentalDDG,
+            IF(ISNULL(NegativeDDG.DDG), 0, 1) AS DerivedMutation,
+            PositiveDDG.PPMutagenesisID, PositiveDDG.Publication AS PositiveDDGPublication, PositiveDDG.DDG as PositiveDDGValue,
+            NegativeDDG.PPMutagenesisID, NegativeDDG.Publication AS NegativeDDGPublication, NegativeDDG.DDG as NegativeDDGValue
+            FROM UserPPAnalysisSet
+            LEFT JOIN PPIDDG AS PositiveDDG ON PositiveDependentPPIDDGID=PositiveDDG.ID
+            LEFT JOIN PPIDDG AS NegativeDDG ON NegativeDependentPPIDDGID=NegativeDDG.ID'''
+        if user_dataset_experiment_id != None:
+            qry += ' WHERE UserPPAnalysisSet.UserPPDataSetExperimentID=%s'
+            parameters = (user_dataset_experiment_id,)
+        results = self.DDG_db.execute_select(qry, parameters)
+
+        # Return the mapping
+        for r in results:
+            if not userdatset_experiment_ids_to_subset_ddgs.get(r['UserPPDataSetExperimentID']):
+                d = dict.fromkeys(analysis_sets, None)
+                for analysis_set in analysis_sets:
+                    d[analysis_set] = {}
+                userdatset_experiment_ids_to_subset_ddgs[r['UserPPDataSetExperimentID']] = d
+
+            userdatset_experiment_ids_to_subset_ddgs[r['UserPPDataSetExperimentID']][r['Subset']] = userdatset_experiment_ids_to_subset_ddgs[r['UserPPDataSetExperimentID']][r['Subset']] or dict(
+                Cases = set(),
+                DDGs = [],
+                IsDerivedValue = False,
+                MeanDDG = None
+            )
+
+            # Store the references IDs
+            reference = None
+            if r['PositiveDDGPublication'] and r['NegativeDDGPublication']:
+                reference = r['PositiveDDGPublication'] + ', ' + r['NegativeDDGPublication']
+                reference_ids.add(r['PositiveDDGPublication'])
+                reference_ids.add(r['NegativeDDGPublication'])
+            elif r['PositiveDDGPublication']:
+                reference = r['PositiveDDGPublication']
+                reference_ids.add(r['PositiveDDGPublication'])
+            elif r['NegativeDDGPublication']:
+                reference = r['NegativeDDGPublication']
+                reference_ids.add(r['NegativeDDGPublication'])
+
+            record_d = userdatset_experiment_ids_to_subset_ddgs[r['UserPPDataSetExperimentID']][r['Subset']]
+            record_d['Cases'].add((r['Subset'], r['Section'], r['RecordNumber']))
+            record_d['DDGs'].append({'Value' : r['ExperimentalDDG'], 'IsDerivedValue' : r['DerivedMutation'], 'Reference' : reference})
+            record_d['IsDerivedValue'] = record_d['IsDerivedValue'] or r['DerivedMutation']
+
+        # Calculate the mean of the DDG values
+        # Note: Based on experience, summing in Python over small lists can be faster than creating temporary numpy arrays due to the array creation overhead
+        for k, v in userdatset_experiment_ids_to_subset_ddgs.iteritems():
+            for subset, subset_ddgs in v.iteritems():
+                if subset_ddgs:
+                    num_points = len(subset_ddgs['DDGs'])
+                    if num_points > 1:
+                        subset_ddgs['MeanDDG'] = sum([float(ddg['Value'])for ddg in subset_ddgs['DDGs']]) / float(num_points)
+                    else:
+                        # Avoid unnecessary garbage creation and division
+                        subset_ddgs['MeanDDG'] = subset_ddgs['DDGs'][0]['Value']
+
+        return userdatset_experiment_ids_to_subset_ddgs
+
+
+    @informational_job
+    def get_prediction_set_case_details(self, prediction_set_id, retrieve_references = True):
+
+        # Read the Prediction details
+        reference_ids = set()
+        prediction_ids = self.get_prediction_ids(prediction_set_id)
+        userdatset_experiment_ids_to_subset_ddgs = self.get_experimental_ddgs_by_analysis_set(reference_ids = reference_ids)
+
+        prediction_cases = {}
+        for prediction_id in prediction_ids:
+            prediction_cases[prediction_id] = self.get_predictions_experimental_details(prediction_id, userdatset_experiment_ids_to_subset_ddgs)
+
+        references = {}
+        if retrieve_references:
+            for reference_id in sorted(reference_ids):
+                references[reference_id] = self.get_publication(reference_id)
+
+        return dict(
+            Data = prediction_cases,
+            References = references,
+            PredictionSet = self.get_prediction_set_details(prediction_set_id)
+            )
+
+
+    @informational_job
+    def export_prediction_cases_to_json(self, prediction_set_id, retrieve_references = True):
+        print('This will probably break - I need to dump datetime.datetime objects to ISO strings.')
+        return json.dumps(self.get_prediction_set_case_details(prediction_set_id, retrieve_references = retrieve_references))
 
 
     ##### Public API: Rosetta-related functions
@@ -586,7 +719,6 @@ class BindingAffinityDDGInterface(ddG):
             colortext.error('Some jobs failed to run:\n%s' % pprint.pformat(failed_jobs))
         if not quiet: print('')
         return True
-
 
 
     def _create_pdb_residues_to_rosetta_cache_mp(self, pdb_residues_to_rosetta_cache, pdb_file_id, pdb_chains_to_keep, extra_rosetta_command_flags, keep_hetatm_lines):
