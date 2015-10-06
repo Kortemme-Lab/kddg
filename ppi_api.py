@@ -923,12 +923,12 @@ class BindingAffinityDDGInterface(ddG):
         scores = []
         for n in nstruct: # @todo: Kyle - determine nstruct
             wtl_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeLPartner', score_method_id = score_method_id)
-            wtr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeRPartner', score_method_id = score_method_id),
-            wtc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeComplex', score_method_id = score_method_id),
-            ml_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantLPartner', score_method_id = score_method_id),
-            mr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantRPartner', score_method_id = score_method_id),
-            mc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantComplex', score_method_id = score_method_id),
-
+            wtr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeRPartner', score_method_id = score_method_id)
+            wtc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeComplex', score_method_id = score_method_id)
+            ml_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantLPartner', score_method_id = score_method_id)
+            mr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantRPartner', score_method_id = score_method_id)
+            mc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantComplex', score_method_id = score_method_id)
+            ddg_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'DDG', score_method_id = score_method_id)
             # @todo: Kyle
 
             scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
