@@ -491,30 +491,6 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @informational_job
-    def get_prediction_set_case_details(self, prediction_set_id, retrieve_references = True):
-
-        # Read the Prediction details
-        reference_ids = set()
-        prediction_ids = self.get_prediction_ids(prediction_set_id)
-        userdatset_experiment_ids_to_subset_ddgs = self.get_experimental_ddgs_by_analysis_set(reference_ids = reference_ids)
-
-        prediction_cases = {}
-        for prediction_id in prediction_ids:
-            prediction_cases[prediction_id] = self.get_predictions_experimental_details(prediction_id, userdatset_experiment_ids_to_subset_ddgs)
-
-        references = {}
-        if retrieve_references:
-            for reference_id in sorted(reference_ids):
-                references[reference_id] = self.get_publication(reference_id)
-
-        return dict(
-            Data = prediction_cases,
-            References = references,
-            PredictionSet = self.get_prediction_set_details(prediction_set_id)
-            )
-
-
-    @informational_job
     def export_prediction_cases_to_json(self, prediction_set_id, retrieve_references = True):
         print('This will probably break - I need to dump datetime.datetime objects to ISO strings.')
         return json.dumps(self.get_prediction_set_case_details(prediction_set_id, retrieve_references = retrieve_references))
@@ -1089,46 +1065,25 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
-    def get_top_x_ddg(self, prediction_id, top_x = 3, score_method_id = None, expectn = None):
-        '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
-           case computed using the associated Score records in the database.'''
-
-        if not score_method_id:
-            score_method_id = self.get_score_method_id('interface', method_authors = 'kyle')
-
-        scores = self.get_prediction_scores(prediction_id)[score_method_id]
-
-        # Make sure that we have as many cases as we expect
-        if expectn == None:
-            num_cases = 0
-            for k in scores.keys():
-                if type(k) == type(int):
-                    num_cases += 1
-            if num_cases != expectn:
-                raise Exception('Expected scores for {0} runs; found {1}.'.format(expectn, num_cases))
-
-        # Kyle - start here
-        # scores is a mapping from nstruct -> ScoreType -> score record where ScoreType is one of 'DDG', 'WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex'
-        # do some calculation on scores to determine the TopX
-        # we can implement different variations on TopX and pass the function pointers as an argument to the main analysis function
-
-        raise Exception('Kyle will implement this.')
-
-
-    @analysis_api
     def get_top_x_ddg(self, prediction_id, score_method_id, top_x = 3, expectn = None):
         '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
            case computed using the associated Score records in the database.'''
 
         # Make sure that we have as many cases as we expect
         if expectn != None:
-            scores = self.get_prediction_scores(prediction_id)[score_method_id]
+            scores = self.get_prediction_scores(prediction_id).get(score_method_id)
             num_cases = 0
             for k in scores.keys():
                 if type(k) == type(1L):
                     num_cases += 1
             if num_cases != expectn:
                 raise Exception('Expected scores for {0} runs; found {1}.'.format(expectn, num_cases))
+
+
+        # Dummy code: remove this
+        if not scores: scores = self.get_prediction_scores(prediction_id).get(score_method_id)
+        return (sum(sorted([scores_by_type['DDG']['total'] for structn, scores_by_type in scores.iteritems()])[:top_x])) / float(top_x)
+
 
         raise Exception('Kyle will implement this.')
 
@@ -1193,12 +1148,14 @@ class BindingAffinityDDGInterface(ddG):
         num_predictions_in_prediction_set = len(prediction_ids)
         failed_cases = set()
         for prediction_id in prediction_ids:
+            colortext.message(prediction_id)
             try:
                 top_x_ddg = self.get_top_x_ddg(prediction_id, top_x = take_lowest, score_method_id = score_method_id, expectn = expectn)
             except:
                 self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
             try:
                 top_x_ddg = self.get_top_x_ddg(prediction_id, top_x = take_lowest, score_method_id = score_method_id, expectn = expectn)
+                # best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
             except Exception, e:
                 if not allow_failures:
                     raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))

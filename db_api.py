@@ -913,7 +913,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @informational_job
-    def get_experimental_ddgs_by_analysis_set(self):
+    def get_experimental_ddgs_by_analysis_set(self, user_dataset_experiment_id = None, reference_ids = set()):
         '''Returns a mapping from UserPPDataSetExperimentIDs to dicts mapping analysis Subsets to a dicts containing the
            record identifier triple (subset, section, record number), the experimental DDG values, the mean of those values,
            and whether the values / one of the values are derived from other measurements e.g.
@@ -947,7 +947,26 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     def get_prediction_set_case_details(self, prediction_set_id, retrieve_references = True):
         '''Returns a dict containing the case information for prediction cases in the prediction set with a structure
            expected by the analysis class.'''
-        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+        # Read the Prediction details
+        reference_ids = set()
+        prediction_ids = self.get_prediction_ids(prediction_set_id)
+        userdatset_experiment_ids_to_subset_ddgs = self.get_experimental_ddgs_by_analysis_set(reference_ids = reference_ids)
+
+        prediction_cases = {}
+        for prediction_id in prediction_ids:
+            prediction_cases[prediction_id] = self.get_predictions_experimental_details(prediction_id, userdatset_experiment_ids_to_subset_ddgs)
+
+        references = {}
+        if retrieve_references:
+            for reference_id in sorted(reference_ids):
+                references[reference_id] = self.get_publication(reference_id)
+
+        return dict(
+            Data = prediction_cases,
+            References = references,
+            PredictionSet = self.get_prediction_set_details(prediction_set_id)
+            )
 
 
     @informational_job
@@ -1475,13 +1494,13 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             del scores[ScoreMethodID][StructureID][ScoreType]['ScoreMethodID']
             del scores[ScoreMethodID][StructureID][ScoreType]['StructureID']
             del scores[ScoreMethodID][StructureID][ScoreType]['ScoreType']
-            del scores[ScoreMethodID][StructureID][ScoreType]['PredictionID']
+            del scores[ScoreMethodID][StructureID][ScoreType][self._get_prediction_id_field()]
             del scores[ScoreMethodID][StructureID][ScoreType]['ID']
         return scores
 
 
     @analysis_api
-    def get_top_x_ddg(self, prediction_id, top_x = 3, score_method_id = None):
+    def get_top_x_ddg(self, prediction_id, score_method_id, top_x = 3, expectn = None):
         '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
            case computed using the associated Score records in the database.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')

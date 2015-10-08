@@ -455,7 +455,7 @@ class MonomericStabilityDDGInterface(ddG):
 
 
     @analysis_api
-    def determine_best_pair(self, prediction_id, score_method_id = 1):
+    def determine_best_pair(self, prediction_id, score_method_id):
         # Iterates over the (wildtype, mutant) pairs in the PredictionStructureScore table and returns the structure ID
         # for the pair with the lowest energy mutant
         # Note: There are multiple ways to select the best pair. For example, if multiple mutants have the same minimal total
@@ -494,6 +494,92 @@ class MonomericStabilityDDGInterface(ddG):
             return r[0]['TopX']
         except Exception, e:
             raise Exception('An error occurred determining the Top{0} score for prediction #{1} using score method {2}: "{3}"\n{4}'.format(top_x, prediction_id, score_method_id, str(e), traceback.print_exc()))
+
+
+    @analysis_api
+    def get_analysis_dataframe(self, prediction_set_id,
+            prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
+            use_existing_benchmark_data = True,
+            include_derived_mutations = False,
+            use_single_reported_value = False,
+            take_lowest = 3,
+            burial_cutoff = 0.25,
+            stability_classication_experimental_cutoff = 1.0,
+            stability_classication_predicted_cutoff = 1.0,
+            report_analysis = True,
+            silent = False,
+            root_directory = None,
+            score_method_id = None,
+            expectn = None,
+            allow_failures = False,
+            ):
+        '''This function uses experimental data from the database and prediction data from the Prediction*StructureScore
+           table to build a pandas dataframe and store it in the database. See .analyze for an explanation of the
+           parameters.
+
+           The dataframes mostly contain redundant data so their storage could be seen to break a key database design
+           principal. However, we store the dataframe in the database as it can take a while to build it from scratch and
+           pre-built dataframes can be used to run quick analysis, for rapid development of the analysis methods, or to
+           plug into webservers where responsiveness is important.
+
+           If use_existing_benchmark_data is True and the dataframe already exists then it is returned as a BindingAffinityBenchmarkRun object.
+           Otherwise, it is built from the Prediction*StructureScore records.
+           If the Prediction*StructureScore records do not exist, this function falls back into extract_data_for_case
+           to generate them in which case root_directory needs to be specified (this is the only use for the root_directory
+           parameter).
+        '''
+
+        assert(score_method_id)
+
+        dataframe = None
+        if use_existing_benchmark_data and dataframe:
+            return dataframe
+
+        raise Exception('Implement once the new DB structure is up.')
+
+        print('Retrieving the associated experimental data for the user dataset.')
+        prediction_set_case_details = self.get_prediction_set_case_details(prediction_set_id, retrieve_references = True)
+        prediction_ids = prediction_set_case_details['Data'].keys()
+
+        print('Computing the TopX values for each prediction case, extracting data if need be.')
+        num_predictions_in_prediction_set = len(prediction_ids)
+        failed_cases = set()
+        for prediction_id in prediction_ids:
+            colortext.message(prediction_id)
+            try:
+                top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = take_lowest, expectn = expectn)
+            except:
+                self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
+            try:
+                top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = take_lowest, expectn = expectn)
+                best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
+                print(top_x_ddg, best_pair_id)
+            except Exception, e:
+                if not allow_failures:
+                    raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
+                failed_cases.add(prediction_id)
+        if failed_cases:
+            colortext.error('Failed to determine the TopX score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
+        working_prediction_ids = sorted(set(prediction_ids).difference(failed_cases))
+
+        top_level_dataframe_attributes = dict(
+            num_predictions_in_prediction_set = num_predictions_in_prediction_set,
+            num_predictions_in_dataframe = len(working_prediction_ids)
+        )
+        # For Shane: this extracts the dataset_description and dataset_cases data that DDGBenchmarkManager currently takes care of in the capture.
+        # The analysis_data variable of DDGBenchmarkManager should be compiled via queries calls to the Prediction*StructureScore table.
+
+
+        a='''prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
+        recreate_graphs = False,
+        include_derived_mutations = False,
+        use_single_reported_value = False,
+        take_lowest = 3,
+        burial_cutoff = 0.25,
+        stability_classication_experimental_cutoff = 1.0,
+        stability_classication_predicted_cutoff = 1.0,
+        report_analysis = True,
+        silent = False,'''
 
 
     ################################################################################################
