@@ -672,9 +672,9 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
         results = self.DDG_db_utf.execute_select('SELECT ID FROM ScoreMethod WHERE {0}'.format(conditions), parameters=condition_parameters)
         if not results:
-            raise Exception('Error: No ScoreMethod records were found using the criteria: '.format(', '.join(map(str, [s for s in [method_name, method_type, method_parameters] if s]))))
+            raise Exception('Error: No ScoreMethod records were found using the criteria: {0}'.format(', '.join(map(str, [s for s in [method_name, method_type, method_parameters] if s]))))
         elif len(results) > 1:
-            raise Exception('Error: Multiple ScoreMethod records were found using the criteria: '.format(', '.join(map(str, [s for s in [method_name, method_type, method_parameters] if s]))))
+            raise Exception('Error: Multiple ScoreMethod records were found using the criteria: {0}'.format(', '.join(map(str, [s for s in [method_name, method_type, method_parameters] if s]))))
         else:
             return results[0]['ID']
 
@@ -1490,7 +1490,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     @analysis_api
     def get_analysis_dataframe(self, prediction_set_id,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
-            use_existing_benchmark_data = True, recreate_graphs = False,
+            use_existing_benchmark_data = True,
             include_derived_mutations = False,
             use_single_reported_value = False,
             take_lowest = 3,
