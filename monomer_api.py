@@ -18,6 +18,7 @@ Copyright (c) 2015 __UCSF__. All rights reserved.
 from io import BytesIO
 import os
 import zipfile
+import traceback
 
 from api_layers import *
 from db_api import ddG
@@ -469,6 +470,30 @@ class MonomericStabilityDDGInterface(ddG):
             else:
                 return mutant_structure_ids[0]
         return None
+
+
+    @analysis_api
+    def get_top_x_ddg(self, prediction_id, score_method_id, top_x = 3, expectn = None):
+        '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
+           case computed using the associated Score records in the database.'''
+
+        # Make sure that we have as many cases as we expect
+        if expectn != None:
+            scores = self.get_prediction_scores(prediction_id)[score_method_id]
+            num_cases = 0
+            for k in scores.keys():
+                if type(k) == type(1L):
+                    num_cases += 1
+            if num_cases != expectn:
+                raise Exception('Expected scores for {0} runs; found {1}.'.format(expectn, num_cases))
+
+        # Call the stored procedure which takes the top_x-lowest wildtype scores and gets their average then subtracts this from the average of the top_x-lowest mutant scores
+        try:
+            r = self.DDG_db.call_select_proc('MonomericStabilityTopX', parameters=(55808, score_method_id, 3), quiet=False)
+            assert(len(r) == 1)
+            return r[0]['TopX']
+        except Exception, e:
+            raise Exception('An error occurred determining the Top{0} score for prediction #{1} using score method {2}: "{3}"\n{4}'.format(top_x, prediction_id, score_method_id, str(e), traceback.print_exc()))
 
 
     ################################################################################################
