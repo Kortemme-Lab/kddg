@@ -1,0 +1,61 @@
+<ROSETTASCRIPTS>
+        <SCOREFXNS>
+	   <fa_talaris2014 weights=talaris2014/>
+	   <fa_interface weights=interface/>
+	   <fa_score12 weights=score12/>
+	   <fa_soft_rep weights=soft_rep/>
+	   <fa_talaris2013 weights=talaris2013/>
+	   <fa_talaris2014_soft_fa_rep weights=talaris2014>
+	     <Reweight scoretype="fa_rep" weight=0.055/>
+	   </fa_talaris2014_soft_fa_rep>
+	   <fa_talaris2014_soft_fa_dun weights=talaris2014>
+	     <Reweight scoretype="fa_dun" weight=0.07/>
+	   </fa_talaris2014_soft_fa_dun>
+        </SCOREFXNS>
+
+        <TASKOPERATIONS>
+        </TASKOPERATIONS>
+
+        <FILTERS>
+        </FILTERS>
+
+        <MOVERS>
+	  <TrajectoryReportToDB name=dbreport batch_description="sep_partners_%%currentscorefxn%%">
+	    <feature name=PdbDataFeatures/>
+	    <feature name=ScoreTypeFeatures/>
+	    <feature name=ScoreFunctionFeatures scorefxn=fa_%%currentscorefxn%%/>
+	    <feature name=StructureScoresFeatures scorefxn=fa_%%currentscorefxn%%/>
+	    <feature name=ResidueFeatures/>
+	    <feature name=ResidueScoresFeatures scorefxn=fa_%%currentscorefxn%%/>
+	    <feature name=ProteinResidueConformationFeatures/>
+	    <feature name=ResidueConformationFeatures/>
+	  </TrajectoryReportToDB>
+
+	  <DumpPdb name=dump_allchains fname="tmppdbnocopy_dumped_allchains.pdb"/>
+	  <LoadPDB name=load_dumped_allchains filename="tmppdbnocopy_dumped_allchains.pdb"/>
+	  <SwitchChainOrder name=cutout_rchains chain_name="%%chainstomove%%"/>
+	  <SwitchChainOrder name=cutout_lchains chain_name="%%chainstomove%%" invert_chains=true/>
+
+        </MOVERS>
+
+        <APPLY_TO_POSE>
+        </APPLY_TO_POSE>
+
+        <PROTOCOLS>
+	  <Add mover_name=dump_allchains/>
+	  # Load/score WT lchains
+	  <Add mover_name=cutout_rchains/>
+	  <Add mover_name=dbreport/>
+
+	  # Load/score WT rchains
+	  <Add mover_name=load_dumped_allchains/>
+	  <Add mover_name=cutout_lchains/>
+	  <Add mover_name=dbreport/>
+
+	  # Load/score WT allchains
+	  <Add mover_name=load_dumped_allchains/>
+	  <Add mover_name=dbreport/>
+        </PROTOCOLS>
+
+        <OUTPUT />
+</ROSETTASCRIPTS>
