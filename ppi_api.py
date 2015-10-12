@@ -1116,10 +1116,21 @@ class BindingAffinityDDGInterface(ddG):
         return scores
 
 
+    #@todo: remove this
     @job_completion
-    def get_prediction_scores(self, stdout):
-        '''Returns a list of dicts suitable for database storage e.g. PredictionPPIStructureScore records.'''
-        raise Exception('not implemented yet')
+    def parse_prediction_scores(self, prediction_id, root_directory = None, score_method_id = None):
+        scores = []
+        for n in range(1,51): # @todo: Kyle - determine nstruct
+            wtl_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeLPartner', score_method_id = score_method_id)
+            wtr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeRPartner', score_method_id = score_method_id)
+            wtc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeComplex', score_method_id = score_method_id)
+            ml_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantLPartner', score_method_id = score_method_id)
+            mr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantRPartner', score_method_id = score_method_id)
+            mc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantComplex', score_method_id = score_method_id)
+            ddg_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'DDG', score_method_id = score_method_id)
+            # @todo: Kyle
+            scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
+        return scores
 
 
     @job_completion
@@ -1176,7 +1187,6 @@ class BindingAffinityDDGInterface(ddG):
 
     @analysis_api
     def get_analysis_dataframe(self, prediction_set_id,
-            analysis_directory = '/tmp/analysis',
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
@@ -1188,7 +1198,7 @@ class BindingAffinityDDGInterface(ddG):
             stability_classication_predicted_cutoff = 1.0,
             report_analysis = True,
             silent = False,
-            root_directory = None,
+            root_directory = None, # where to find the prediction data on disk
             score_method_id = None,
             expectn = None,
             allow_failures = False,
@@ -1249,7 +1259,6 @@ class BindingAffinityDDGInterface(ddG):
                 except Exception, e:
                     colortext.pcyan(str(e))
                     colortext.warning(traceback.format_exc())
-
                     self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
                 try:
                     top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = take_lowest, expectn = expectn)
@@ -1283,7 +1292,6 @@ class BindingAffinityDDGInterface(ddG):
                 analysis_data,
                 store_data_on_disk = False,
                 benchmark_run_directory = None,
-                analysis_directory = analysis_directory,
                 use_single_reported_value = use_single_reported_value,
                 description = prediction_set_description,
                 dataset_description = prediction_set_description,
@@ -1321,23 +1329,25 @@ class BindingAffinityDDGInterface(ddG):
                 DDGAnalysisTypeDescription              = benchmark_run.ddg_analysis_type_description,
                 PandasHDFStore                          = hdf_store_blob,
             )
+            self.DDG_db.execute('''DELETE FROM AnalysisDataFrame WHERE PredictionSet=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND
+                                    BurialCutoff=%s AND StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
+                                    IncludesDerivedMutations=%s AND DDGAnalysisType=%s''',
+                                    parameters = (prediction_set_id, score_method_id, use_single_reported_value, take_lowest,
+                                                  burial_cutoff, stability_classication_experimental_cutoff, stability_classication_predicted_cutoff,
+                                                  include_derived_mutations, ddg_analysis_type
+                                    ))
             self.DDG_db.insertDictIfNew('AnalysisDataFrame', d, ['PredictionSet', 'ScoreMethodID', 'UseSingleReportedValue', 'TopX', 'BurialCutoff',
                                                                  'StabilityClassicationExperimentalCutoff', 'StabilityClassicationPredictedCutoff',
                                                                  'IncludesDerivedMutations', 'DDGAnalysisType'])
         else:
             benchmark_run.read_dataframe_from_content(hdf_store_blob)
 
-
-        # Monday: start here after loops
-        # todo: store analysis_set as an extra field in the dataframe
-        benchmark_run.calculate_metrics('ZEMu')
-        #analysis_set
-
         return benchmark_run
 
 
     @analysis_api
-    def analyze(self, prediction_set_ids,
+    def analyze(self, prediction_set_ids, score_method_id,
+            analysis_set_ids = [],
             prediction_set_series_names = {}, prediction_set_descriptions = {}, prediction_set_credits = {}, prediction_set_colors = {}, prediction_set_alphas = {},
             use_published_data = False,
             use_existing_benchmark_data = True, recreate_graphs = False,
@@ -1352,7 +1362,7 @@ class BindingAffinityDDGInterface(ddG):
             generate_plots = True,
             report_analysis = True,
             silent = False,
-            root_directory = None
+            root_directory = None, # where to find the prediction data on disk
             ):
         '''Runs the analyses for the specified PredictionSets and cross-analyzes the sets against each other if appropriate.
 
@@ -1387,24 +1397,54 @@ class BindingAffinityDDGInterface(ddG):
            silent = False   : Whether or not anything should be printed to stdout (True is useful for webserver interaction).
         '''
 
-        raise Exception('Abstract method. This needs to be overridden by a subclass.')
-
-        # colors, alpha, and default series name and descriptions are taken from PredictionSet records
-        # The order (if p1 before p2 then p1 will be on the X-axis in comparative plots) in comparative analysis plots is determined by the order in PredictionSets
         assert(take_lowest > 0 and (int(take_lowest) == take_lowest))
         assert(0 <= burial_cutoff <= 2.0)
         assert(stability_classication_experimental_cutoff > 0)
         assert(stability_classication_predicted_cutoff > 0)
-        # assert PredictionSet for PredictionSet in PredictionSets is in the database
+        assert(expectn > 0 and (int(expectn) == expectn))
 
-        # calls get_analysis_dataframe(options) over all PredictionSets
-        # if output_directory is set, save files
-        # think about how to handle this in-memory. Maybe return a dict like:
-            #"run_analyis" -> benchmark_name -> {analysis_type -> object}
-            #"comparative_analysis" -> (benchmark_name_1, benchmark_name_2) -> {analysis_type -> object}
-        # comparative analysis
-        #   only compare dataframes with the exact same points
-        #   allow cutoffs, take_lowest to differ but report if they do so
+        for prediction_set_id in prediction_set_ids:
+            print(prediction_set_id)
+            analysis_dataframe = self.get_analysis_dataframe(prediction_set_id,
+                prediction_set_series_name = prediction_set_series_names.get(prediction_set_id),
+                prediction_set_description = prediction_set_descriptions.get(prediction_set_id),
+                prediction_set_credit = prediction_set_credits.get(prediction_set_id),
+                prediction_set_color = prediction_set_colors.get(prediction_set_id),
+                prediction_set_alpha = prediction_set_alphas.get(prediction_set_id),
+                use_existing_benchmark_data = use_existing_benchmark_data,
+                include_derived_mutations = include_derived_mutations,
+                use_single_reported_value = use_single_reported_value,
+                take_lowest = take_lowest,
+                burial_cutoff = burial_cutoff,
+                stability_classication_experimental_cutoff = 1.0,
+                stability_classication_predicted_cutoff = 1.0,
+                report_analysis = report_analysis,
+                silent = silent,
+                root_directory = root_directory, # where to find the
+                score_method_id = score_method_id,
+                expectn = expectn,
+                allow_failures = False,
+                )
+            print('jere')
+            print(analysis_dataframe)
+            # The keys of scalar_adjustments are the stored analysis sets
+            for analysis_set_id in analysis_set_ids:
+                pass
+                # recreate_graphs
+                # analysis_directory = output_directory
+
+                # colors, alpha, and default series name and descriptions are taken from PredictionSet records
+                # The order (if p1 before p2 then p1 will be on the X-axis in comparative plots) in comparative analysis plots is determined by the order in PredictionSets
+                # assert PredictionSet for PredictionSet in PredictionSets is in the database
+
+                # calls get_analysis_dataframe(options) over all PredictionSets
+                # if output_directory is set, save files
+                # think about how to handle this in-memory. Maybe return a dict like:
+                    #"run_analyis" -> benchmark_name -> {analysis_type -> object}
+                    #"comparative_analysis" -> (benchmark_name_1, benchmark_name_2) -> {analysis_type -> object}
+                # comparative analysis
+                #   only compare dataframes with the exact same points
+                #   allow cutoffs, take_lowest to differ but report if they do so
 
 
 

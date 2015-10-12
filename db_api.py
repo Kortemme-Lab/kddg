@@ -1540,6 +1540,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     @analysis_api
     def get_analysis_dataframe(self, prediction_set_id,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
+            prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
             use_single_reported_value = False,
@@ -1549,7 +1550,10 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             stability_classication_predicted_cutoff = 1.0,
             report_analysis = True,
             silent = False,
-            root_directory = None
+            root_directory = None,
+            score_method_id = None,
+            expectn = None,
+            allow_failures = False,
             ):
         '''This function uses experimental data from the database and prediction data from the Prediction*StructureScore
            table to build a pandas dataframe and store it in the database. See .analyze for an explanation of the
