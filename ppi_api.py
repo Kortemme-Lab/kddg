@@ -18,6 +18,8 @@ import sys
 import json
 import zipfile
 import traceback
+import shutil
+import sqlite3
 
 import interface_calc
 from api_layers import *
@@ -1080,14 +1082,36 @@ class BindingAffinityDDGInterface(ddG):
     def rescore_ddg_monomer_pdb(self, pdb_file, prediction_id):
         job_details = self.get_job_details(prediction_id)
         substitution_parameters = json.loads(job_details['JSONParameters'])
-        interface_calc.rescore_ddg_monomer_pdb(
+        output_db3 = interface_calc.rescore_ddg_monomer_pdb(
             os.path.abspath(pdb_file),
             self.rosetta_scripts_path,
             substitution_parameters['%%chainstomove%%'],
             rosetta_database_path = self.rosetta_database_path,
         )
-        sys.exit(0)
+        return output_db3
 
+    @job_completion
+    def add_scores_from_db3_file(self, db3_file, struct_id, score_dict):
+        conn = sqlite3.connect(db3_file)
+        c = conn.cursor()
+        print db3_file
+        score_types = set()
+        for row in c.execute('SELECT score_type_name FROM score_types WHERE batch_id=1'):
+            score_types.add(row[0])
+        for empty_score_type in score_dict:
+            if empty_score_type == 'total':
+                score_type = 'total_score'
+            else:
+                score_type = empty_score_type
+            score_rows = [row for row in c.execute('SELECT structure_scores.score_value from structure_scores INNER JOIN score_types ON score_types.batch_id=structure_scores.batch_id AND score_types.score_type_id=structure_scores.score_type_id WHERE structure_scores.struct_id=%d AND score_type_name="%s"' % (struct_id, score_type))]
+            if len(score_rows) == 1:
+                score_dict[empty_score_type] = float( score_rows[0][0] )
+            elif len(score_rows) > 1:
+                raise Exception('Matched too many score rows')
+        print score_dict
+        sys.exit(0)
+        return score_dict
+    
     @job_completion
     def parse_ddg_monomer_prediction_scores(self, prediction_id, output_pdbs_by_round, score_method_id = None):
 
@@ -1095,15 +1119,16 @@ class BindingAffinityDDGInterface(ddG):
         for round_num in output_pdbs_by_round:
             wt_pdb, mutant_pdb = output_pdbs_by_round[round_num]
 
-            self.rescore_ddg_monomer_pdb(wt_pdb, prediction_id)
-            wtl_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeLPartner', score_method_id = score_method_id)
+            output_db3 = self.rescore_ddg_monomer_pdb(wt_pdb, prediction_id)
+            # "left" structure has struct_id=1
+            wtl_score = self.add_scores_from_db3_file(output_db3, 1, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeLPartner', score_method_id = score_method_id))
             wtr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeRPartner', score_method_id = score_method_id)
             wtc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeComplex', score_method_id = score_method_id)
             ml_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantLPartner', score_method_id = score_method_id)
             mr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantRPartner', score_method_id = score_method_id)
             mc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantComplex', score_method_id = score_method_id)
             ddg_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'DDG', score_method_id = score_method_id)
-            # @todo: Kyle
+            shutil.rmtree( os.path.dirname(output_db3) )
 
             scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
         return scores
@@ -1129,7 +1154,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
-    def get_top_x_ddg(self, prediction_id, top_x = 3, score_method_id = None):
+    def get_top_x_ddg(self, prediction_id, top_x = 3, score_method_id = None, expectn = None):
         '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
            case computed using the associated Score records in the database.'''
 
@@ -1137,8 +1162,18 @@ class BindingAffinityDDGInterface(ddG):
             score_method_id = self.get_score_method_id('interface', method_authors = 'kyle')
 
         scores = self.get_prediction_scores(prediction_id)[score_method_id]
-        # scores is a mapping from nstruct -> ScoreType -> score record where ScoreType is one of 'DDG', 'WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex'
 
+        # Make sure that we have as many cases as we expect
+        if expectn == None:
+            num_cases = 0
+            for k in scores.keys():
+                if type(k) == type(int):
+                    num_cases += 1
+            if num_cases != expectn:
+                raise Exception('Expected scores for {0} runs; found {1}.'.format(expectn, num_cases))
+
+        # Kyle - start here
+        # scores is a mapping from nstruct -> ScoreType -> score record where ScoreType is one of 'DDG', 'WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex'
         # do some calculation on scores to determine the TopX
         # we can implement different variations on TopX and pass the function pointers as an argument to the main analysis function
 
@@ -1146,9 +1181,40 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
+    def get_top_x_ddg(self, prediction_id, score_method_id, top_x = 3, expectn = None):
+        '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
+           case computed using the associated Score records in the database.'''
+
+        # Make sure that we have as many cases as we expect
+        if expectn != None:
+            scores = self.get_prediction_scores(prediction_id)[score_method_id]
+            num_cases = 0
+            for k in scores.keys():
+                if type(k) == type(1L):
+                    num_cases += 1
+            if num_cases != expectn:
+                raise Exception('Expected scores for {0} runs; found {1}.'.format(expectn, num_cases))
+
+        raise Exception('Kyle will implement this.')
+
+        # Kyle - start here
+        # scores is a mapping from nstruct -> ScoreType -> score record where ScoreType is one of 'DDG', 'WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex'
+        # if you are going to do the calculation in Python, pull scores out to the top level
+        # otherwise, we can add a stored procedure to determine the TopX
+        # if we go the Python route, we can implement different variations on TopX (including a stored procedure) and pass the function pointers as an argument to the main analysis function
+
+        try:
+            r = self.DDG_db.call_select_proc('MonomericStabilityTopX', parameters=(55808, score_method_id, 3), quiet=False)
+            assert(len(r) == 1)
+            return r[0]['TopX']
+        except Exception, e:
+            raise Exception('An error occurred determining the Top{0} score for prediction #{1} using score method {2}: "{3}"\n{4}'.format(top_x, prediction_id, score_method_id, str(e), traceback.print_exc()))
+
+
+    @analysis_api
     def get_analysis_dataframe(self, prediction_set_id,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
-            use_existing_benchmark_data = True, recreate_graphs = False,
+            use_existing_benchmark_data = True,
             include_derived_mutations = False,
             use_single_reported_value = False,
             take_lowest = 3,
@@ -1157,7 +1223,10 @@ class BindingAffinityDDGInterface(ddG):
             stability_classication_predicted_cutoff = 1.0,
             report_analysis = True,
             silent = False,
-            root_directory = None
+            root_directory = None,
+            score_method_id = None,
+            expectn = None,
+            allow_failures = False,
             ):
         '''This function uses experimental data from the database and prediction data from the Prediction*StructureScore
            table to build a pandas dataframe and store it in the database. See .analyze for an explanation of the
@@ -1168,23 +1237,61 @@ class BindingAffinityDDGInterface(ddG):
            pre-built dataframes can be used to run quick analysis, for rapid development of the analysis methods, or to
            plug into webservers where responsiveness is important.
 
-           If use_existing_benchmark_data is True and the dataframe already exists then it is returned as a BenchmarkRun object.
+           If use_existing_benchmark_data is True and the dataframe already exists then it is returned as a BindingAffinityBenchmarkRun object.
            Otherwise, it is built from the Prediction*StructureScore records.
            If the Prediction*StructureScore records do not exist, this function falls back into extract_data_for_case
            to generate them in which case root_directory needs to be specified (this is the only use for the root_directory
            parameter).
         '''
-        raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
-        # if use_existing_benchmark_data and dataframe exists: return dataframe
-        # else retrieve all of the Score records from the database
-        #    if a record does not exist:
-        #        if root_directory then call extract_data_for_case to create an analysis dataframe and store it in the database
-        #    store the number of complete Score records as a column in the dataframe (to indicate whether analysis is being performed on a full set of data)
-        #
+        assert(score_method_id)
+
+        dataframe = None
+        if use_existing_benchmark_data and dataframe:
+            return dataframe
+
+        print('Retrieving the associated experimental data for the user dataset.')
+        prediction_set_case_details = self.get_prediction_set_case_details(prediction_set_id, retrieve_references = True)
+        prediction_ids = prediction_set_case_details['Data'].keys()
+
+        print('Computing the TopX values for each prediction case, extracting data if need be.')
+        num_predictions_in_prediction_set = len(prediction_ids)
+        failed_cases = set()
+        for prediction_id in prediction_ids:
+            try:
+                top_x_ddg = self.get_top_x_ddg(prediction_id, top_x = take_lowest, score_method_id = score_method_id, expectn = expectn)
+            except:
+                self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
+            try:
+                top_x_ddg = self.get_top_x_ddg(prediction_id, top_x = take_lowest, score_method_id = score_method_id, expectn = expectn)
+            except Exception, e:
+                if not allow_failures:
+                    raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
+                failed_cases.add(prediction_id)
+        if failed_cases:
+            colortext.error('Failed to determine the TopX score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
+        working_prediction_ids = sorted(set(prediction_ids).difference(failed_cases))
+
+        top_level_dataframe_attributes = dict(
+            num_predictions_in_prediction_set = num_predictions_in_prediction_set,
+            num_predictions_in_dataframe = len(working_prediction_ids)
+        )
         # For Shane: this extracts the dataset_description and dataset_cases data that DDGBenchmarkManager currently takes care of in the capture.
         # The analysis_data variable of DDGBenchmarkManager should be compiled via queries calls to the Prediction*StructureScore table.
-        self.get_prediction_set_case_details(prediction_set_id, retrieve_references = True)
+
+
+        a='''prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
+        recreate_graphs = False,
+        include_derived_mutations = False,
+        use_single_reported_value = False,
+        take_lowest = 3,
+        burial_cutoff = 0.25,
+        stability_classication_experimental_cutoff = 1.0,
+        stability_classication_predicted_cutoff = 1.0,
+        report_analysis = True,
+        silent = False,'''
+
+
 
 
     @analysis_api
