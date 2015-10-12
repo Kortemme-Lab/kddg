@@ -14,12 +14,16 @@ Copyright (c) 2015 __UCSF__. All rights reserved.
 import pprint
 from io import BytesIO
 import os
+import sys
 import json
 import zipfile
 import traceback
 import StringIO
 import gzip
+import shutil
+import sqlite3
 
+import interface_calc
 from api_layers import *
 from db_api import ddG
 from tools import colortext
@@ -28,7 +32,6 @@ from tools.bio.basics import ChainMutation
 from tools.fs.fsio import read_file
 from tools.rosetta.input_files import Mutfile, Resfile
 from tools.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
-
 
 def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
     # Uses ~/.my.cnf to get authentication information
@@ -560,7 +563,7 @@ class BindingAffinityDDGInterface(ddG):
                 # Add the Rosetta script to the database, not using cursor
                     self._add_prediction_file(prediction_id, rosetta_script, os.path.basename(rosetta_script_file), 'RosettaScript', 'RosettaScript', 'Input', rm_trailing_line_whitespace = True)
 
-                
+
     @job_creator
     def add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = None):
         '''This function inserts a prediction into the database.
@@ -932,7 +935,7 @@ class BindingAffinityDDGInterface(ddG):
             assert(num_chain_residues > 0)
 
         pdb_filename = '%s_%s.pdb' % (pdb_file_id, ''.join(sorted(pdb_chains_to_keep)))
-        
+
         # Create parameter substitution dictionary
         parameter_sub_dict = {
             '%%input_pdb%%' : pdb_filename,
@@ -940,7 +943,7 @@ class BindingAffinityDDGInterface(ddG):
             '%%pathtoresfile%%' : resfile_name,
             '%%pathtomutfile%%' : mutfile_name,
         }
-            
+
         if test_only:
             return
 
@@ -951,7 +954,7 @@ class BindingAffinityDDGInterface(ddG):
         con = self.DDG_db.connection
         with con:
             cur = con.cursor()
-            
+
             if protocol_id:
                 qry = 'SELECT * FROM %s WHERE PredictionSet=%%s AND UserPPDataSetExperimentID=%%s AND ProtocolID=%%s' % self._get_prediction_table()
                 cur.execute(qry, (prediction_set_id, user_dataset_experiment_id, protocol_id))
@@ -1029,25 +1032,92 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_completion
-    def parse_prediction_scores(self, prediction_id, root_directory = None, score_method_id = None):
+    def parse_ddg_monomer_prediction_set(self, prediction_set_id, root_directory, score_method_id = None):
+        print prediction_set_id
+        prediction_ids = self.get_prediction_ids(prediction_set_id)
+        for prediction_id in prediction_ids:
+            ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
+            if os.path.isdir( ddg_output_path ):
+                output_pdbs = [x for x in os.listdir(ddg_output_path) if '.pdb' in x]
+                mut_output_pdbs = { int(x.split('.')[0].split('_')[3]) : x for x in output_pdbs if x.startswith('mut')}
+                wt_output_pdbs = { int(x.split('.')[0].split('_')[3]) : x for x in output_pdbs if '_wt_' in x}
+                all_round_nums = set()
+                structs_with_both_rounds = {}
+                for round_num in mut_output_pdbs.keys():
+                    all_round_nums.add( round_num )
+                for round_num in wt_output_pdbs.keys():
+                    all_round_nums.add( round_num )
+                for round_num in all_round_nums:
+                    if round_num in wt_output_pdbs and round_num in mut_output_pdbs:
+                        structs_with_both_rounds[round_num] = (
+                            os.path.join(ddg_output_path, wt_output_pdbs[round_num]),
+                            os.path.join(ddg_output_path, mut_output_pdbs[round_num]),
+                        )
+                if len(structs_with_both_rounds) > 0:
+                    print self.parse_ddg_monomer_prediction_scores(prediction_id, structs_with_both_rounds, score_method_id = score_method_id)
+                sys.exit(0)
+
+
+    @job_completion
+    def rescore_ddg_monomer_pdb(self, pdb_file, prediction_id):
+        job_details = self.get_job_details(prediction_id)
+        substitution_parameters = json.loads(job_details['JSONParameters'])
+        output_db3 = interface_calc.rescore_ddg_monomer_pdb(
+            os.path.abspath(pdb_file),
+            self.rosetta_scripts_path,
+            substitution_parameters['%%chainstomove%%'],
+            rosetta_database_path = self.rosetta_database_path,
+        )
+        return output_db3
+
+
+    @job_completion
+    def add_scores_from_db3_file(self, db3_file, struct_id, score_dict):
+        conn = sqlite3.connect(db3_file)
+        c = conn.cursor()
+        print db3_file
+        score_types = set()
+        for row in c.execute('SELECT score_type_name FROM score_types WHERE batch_id=1'):
+            score_types.add(row[0])
+        for empty_score_type in score_dict:
+            if empty_score_type == 'total':
+                score_type = 'total_score'
+            else:
+                score_type = empty_score_type
+            score_rows = [row for row in c.execute('SELECT structure_scores.score_value from structure_scores INNER JOIN score_types ON score_types.batch_id=structure_scores.batch_id AND score_types.score_type_id=structure_scores.score_type_id WHERE structure_scores.struct_id=%d AND score_type_name="%s"' % (struct_id, score_type))]
+            if len(score_rows) == 1:
+                score_dict[empty_score_type] = float( score_rows[0][0] )
+            elif len(score_rows) > 1:
+                raise Exception('Matched too many score rows')
+        print score_dict
+        sys.exit(0)
+        return score_dict
+
+
+    @job_completion
+    def parse_ddg_monomer_prediction_scores(self, prediction_id, output_pdbs_by_round, score_method_id = None):
 
         scores = []
-        for n in nstruct: # @todo: Kyle - determine nstruct
-            wtl_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeLPartner', score_method_id = score_method_id)
-            wtr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeRPartner', score_method_id = score_method_id)
-            wtc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'WildTypeComplex', score_method_id = score_method_id)
-            ml_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantLPartner', score_method_id = score_method_id)
-            mr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantRPartner', score_method_id = score_method_id)
-            mc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'MutantComplex', score_method_id = score_method_id)
-            ddg_score = self.get_score_dict(prediction_id = prediction_id, structure_id = n, score_type = 'DDG', score_method_id = score_method_id)
-            # @todo: Kyle
+        for round_num in output_pdbs_by_round:
+            wt_pdb, mutant_pdb = output_pdbs_by_round[round_num]
+
+            output_db3 = self.rescore_ddg_monomer_pdb(wt_pdb, prediction_id)
+            # "left" structure has struct_id=1
+            wtl_score = self.add_scores_from_db3_file(output_db3, 1, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeLPartner', score_method_id = score_method_id))
+            wtr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeRPartner', score_method_id = score_method_id)
+            wtc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeComplex', score_method_id = score_method_id)
+            ml_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantLPartner', score_method_id = score_method_id)
+            mr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantRPartner', score_method_id = score_method_id)
+            mc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantComplex', score_method_id = score_method_id)
+            ddg_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'DDG', score_method_id = score_method_id)
+            shutil.rmtree( os.path.dirname(output_db3) )
 
             scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
         return scores
 
 
     @job_completion
-    def parse_prediction_scores(self, stdout):
+    def get_prediction_scores(self, stdout):
         '''Returns a list of dicts suitable for database storage e.g. PredictionPPIStructureScore records.'''
         raise Exception('not implemented yet')
 
@@ -1452,4 +1522,3 @@ class BindingAffinityDDGInterface(ddG):
         }
         sql, params, record_exists = self.DDG_db.create_insert_dict_string('DevelopmentProtocol', dev_prot_record)
         self.DDG_db.execute(sql, params)
-
