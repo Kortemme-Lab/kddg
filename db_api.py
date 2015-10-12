@@ -761,7 +761,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         pdbs = {}
         cached_pdb_ids = []
         if cached_pdb_details:
-            cached_pdb_ids = cached_pdb_details.keys()
+            cached_pdb_ids = set(cached_pdb_details.keys())
         for pdb_id in pdb_ids:
             if pdb_id in cached_pdb_ids:
                 pdbs[pdb_id] = cached_pdb_details[pdb_id]
@@ -781,7 +781,38 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
                     XRay = record['Techniques'].find('X-RAY') != -1,
                     Resolution = record['Resolution'],
                 )
+        return pdbs
 
+
+    @informational_pdb
+    def get_prediction_set_pdb_chain_details(self, PredictionSet, cached_pdb_details = None):
+        '''Used by the analysis API. This could be combined with get_pdb_details.'''
+
+        pdb_ids = [r['PDBFileID'] for r in self.DDG_db.execute_select('SELECT DISTINCT PDBFileID FROM {0} INNER JOIN {1} ON {1}ID={1}.ID WHERE PredictionSet=%s ORDER BY PDBFileID'.format(self._get_prediction_table(), self._get_user_dataset_experiment_table()), parameters=(PredictionSet,))]
+
+        pdbs = {}
+        cached_pdb_ids = []
+        if cached_pdb_details:
+            cached_pdb_ids = set(cached_pdb_details.keys())
+        for pdb_id in pdb_ids:
+            if pdb_id in cached_pdb_ids:
+                pdbs[pdb_id] = cached_pdb_details[pdb_id]
+            else:
+                record = self.DDG_db.execute_select('SELECT * FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))[0]
+                p = PDB(record['Content'])
+
+                d = {}
+                chain_ids = set(p.chain_types.keys()).union(set(p.seqres_chain_order)).union(set(p.atom_sequences.keys()))
+                d['Chains'] = dict.fromkeys(chain_ids)
+                for chain_id in chain_ids:
+                    d['Chains'][chain_id] = dict(
+                        Sequence = str(p.atom_sequences.get(chain_id) or ''),
+                        Type = p.chain_types.get(chain_id),
+                    )
+                d['Resolution'] = p.get_resolution()
+                d['MethodOfDetermination'] = p.get_techniques()
+
+                pdbs[pdb_id] = d
         return pdbs
 
 
