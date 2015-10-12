@@ -23,7 +23,6 @@ import gzip
 import shutil
 import sqlite3
 
-import interface_calc
 from api_layers import *
 from db_api import ddG
 from tools import colortext
@@ -33,7 +32,13 @@ from tools.fs.fsio import read_file
 from tools.rosetta.input_files import Mutfile, Resfile
 from tools.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 
-def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None):
+
+def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
+    '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
+       from the user so that a more traditional object-oriented API is created.'''
+    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+
+def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None, get_interface_factory = get_interface):
     # Uses ~/.my.cnf to get authentication information
     ### Example .my.cnf (host_config_name will equal guybrush2):
     ### [clientguybrush2]
@@ -70,13 +75,7 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
     if not user or not password or not host:
         raise Exception("Couldn't find host(%s), username(%s), or password in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
 
-    return get_interface(password, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
-
-def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
-    '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
-       from the user so that a more traditional object-oriented API is created.'''
-    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
-
+    return get_interface_factory(password, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
 
 class BindingAffinityDDGInterface(ddG):
     '''This is the internal API class that should be NOT used to interface with the database.'''
@@ -1029,91 +1028,6 @@ class BindingAffinityDDGInterface(ddG):
     @job_execution
     def get_max_number_of_cluster_jobs(self, prediction_set_id, priority):
         return self.DDG_db.execute_select('SELECT Value FROM _DBCONSTANTS WHERE VariableName="MaxStabilityClusterJobs"')['Value']
-
-
-    @job_completion
-    def parse_ddg_monomer_prediction_set(self, prediction_set_id, root_directory, score_method_id = None):
-        print prediction_set_id
-        prediction_ids = self.get_prediction_ids(prediction_set_id)
-        for prediction_id in prediction_ids:
-            ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
-            if os.path.isdir( ddg_output_path ):
-                output_pdbs = [x for x in os.listdir(ddg_output_path) if '.pdb' in x]
-                mut_output_pdbs = { int(x.split('.')[0].split('_')[3]) : x for x in output_pdbs if x.startswith('mut')}
-                wt_output_pdbs = { int(x.split('.')[0].split('_')[3]) : x for x in output_pdbs if '_wt_' in x}
-                all_round_nums = set()
-                structs_with_both_rounds = {}
-                for round_num in mut_output_pdbs.keys():
-                    all_round_nums.add( round_num )
-                for round_num in wt_output_pdbs.keys():
-                    all_round_nums.add( round_num )
-                for round_num in all_round_nums:
-                    if round_num in wt_output_pdbs and round_num in mut_output_pdbs:
-                        structs_with_both_rounds[round_num] = (
-                            os.path.join(ddg_output_path, wt_output_pdbs[round_num]),
-                            os.path.join(ddg_output_path, mut_output_pdbs[round_num]),
-                        )
-                if len(structs_with_both_rounds) > 0:
-                    print self.parse_ddg_monomer_prediction_scores(prediction_id, structs_with_both_rounds, score_method_id = score_method_id)
-                sys.exit(0)
-
-
-    @job_completion
-    def rescore_ddg_monomer_pdb(self, pdb_file, prediction_id):
-        job_details = self.get_job_details(prediction_id)
-        substitution_parameters = json.loads(job_details['JSONParameters'])
-        output_db3 = interface_calc.rescore_ddg_monomer_pdb(
-            os.path.abspath(pdb_file),
-            self.rosetta_scripts_path,
-            substitution_parameters['%%chainstomove%%'],
-            rosetta_database_path = self.rosetta_database_path,
-        )
-        return output_db3
-
-
-    @job_completion
-    def add_scores_from_db3_file(self, db3_file, struct_id, score_dict):
-        conn = sqlite3.connect(db3_file)
-        c = conn.cursor()
-        print db3_file
-        score_types = set()
-        for row in c.execute('SELECT score_type_name FROM score_types WHERE batch_id=1'):
-            score_types.add(row[0])
-        for empty_score_type in score_dict:
-            if empty_score_type == 'total':
-                score_type = 'total_score'
-            else:
-                score_type = empty_score_type
-            score_rows = [row for row in c.execute('SELECT structure_scores.score_value from structure_scores INNER JOIN score_types ON score_types.batch_id=structure_scores.batch_id AND score_types.score_type_id=structure_scores.score_type_id WHERE structure_scores.struct_id=%d AND score_type_name="%s"' % (struct_id, score_type))]
-            if len(score_rows) == 1:
-                score_dict[empty_score_type] = float( score_rows[0][0] )
-            elif len(score_rows) > 1:
-                raise Exception('Matched too many score rows')
-        print score_dict
-        sys.exit(0)
-        return score_dict
-
-
-    @job_completion
-    def parse_ddg_monomer_prediction_scores(self, prediction_id, output_pdbs_by_round, score_method_id = None):
-
-        scores = []
-        for round_num in output_pdbs_by_round:
-            wt_pdb, mutant_pdb = output_pdbs_by_round[round_num]
-
-            output_db3 = self.rescore_ddg_monomer_pdb(wt_pdb, prediction_id)
-            # "left" structure has struct_id=1
-            wtl_score = self.add_scores_from_db3_file(output_db3, 1, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeLPartner', score_method_id = score_method_id))
-            wtr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeRPartner', score_method_id = score_method_id)
-            wtc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeComplex', score_method_id = score_method_id)
-            ml_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantLPartner', score_method_id = score_method_id)
-            mr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantRPartner', score_method_id = score_method_id)
-            mc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantComplex', score_method_id = score_method_id)
-            ddg_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'DDG', score_method_id = score_method_id)
-            shutil.rmtree( os.path.dirname(output_db3) )
-
-            scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
-        return scores
 
 
     @job_completion
