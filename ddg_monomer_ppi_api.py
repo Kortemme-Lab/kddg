@@ -19,10 +19,6 @@ def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf
 
 
 class DDGMonomerInterface(BindingAffinityDDGInterface):
-<<<<<<< HEAD
-
-
-=======
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
         '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
         '''
@@ -35,7 +31,6 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             return_set.add( r['PredictionPPIID'] )
         return return_set
             
->>>>>>> 7163a69ead44c2a497fc49daaef5e5959eb1c39b
     @job_completion
     def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None):
         '''Extracts the data for the prediction set run and stores it into the database.

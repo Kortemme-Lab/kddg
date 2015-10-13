@@ -23,6 +23,8 @@ import gzip
 import shutil
 import sqlite3
 
+import numpy as np
+
 from api_layers import *
 from db_api import ddG
 from tools import colortext
@@ -1031,12 +1033,6 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_completion
-    def get_prediction_scores(self, stdout):
-        '''Returns a list of dicts suitable for database storage e.g. PredictionPPIStructureScore records.'''
-        raise Exception('not implemented yet')
-
-
-    @job_completion
     def complete_job(self, prediction_id, prediction_set, scores, maxvmem, ddgtime, files = []):
         '''Sets a job to 'completed' and stores scores. prediction_set must be passed and is used as a sanity check.'''
 
@@ -1056,9 +1052,8 @@ class BindingAffinityDDGInterface(ddG):
            case computed using the associated Score records in the database.'''
 
         # Make sure that we have as many cases as we expect
-        scores = None
+        scores = self.get_prediction_scores(prediction_id).get(score_method_id)
         if expectn != None:
-            scores = self.get_prediction_scores(prediction_id).get(score_method_id)
             num_cases = 0
             for k in scores.keys():
                 if type(k) == type(1L):
@@ -1066,13 +1061,7 @@ class BindingAffinityDDGInterface(ddG):
             if num_cases != expectn:
                 raise Exception('Expected scores for {0} runs; found {1}.'.format(expectn, num_cases))
 
-
-        # Dummy code: remove this
-        if not scores: scores = self.get_prediction_scores(prediction_id).get(score_method_id)
-        return (sum(sorted([scores_by_type['DDG']['total'] for structn, scores_by_type in scores.iteritems()])[:top_x])) / float(top_x)
-
-
-        raise Exception('Kyle will implement this.')
+        return self.get_top_x_ddg_total_score(scores, top_x)
 
         # Kyle - start here
         # scores is a mapping from nstruct -> ScoreType -> score record where ScoreType is one of 'DDG', 'WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex'
@@ -1080,13 +1069,24 @@ class BindingAffinityDDGInterface(ddG):
         # otherwise, we can add a stored procedure to determine the TopX
         # if we go the Python route, we can implement different variations on TopX (including a stored procedure) and pass the function pointers as an argument to the main analysis function
 
-        try:
-            r = self.DDG_db.call_select_proc('MonomericStabilityTopX', parameters=(55808, score_method_id, 3), quiet=False)
-            assert(len(r) == 1)
-            return r[0]['TopX']
-        except Exception, e:
-            raise Exception('An error occurred determining the Top{0} score for prediction #{1} using score method {2}: "{3}"\n{4}'.format(top_x, prediction_id, score_method_id, str(e), traceback.print_exc()))
+    def get_top_x_ddg_total_score(self, scores, top_x):
+        # total_scores = [(np.average([scores[struct_num][score_type]['total'] for score_type in scores[struct_num]]), struct_num) for struct_num in scores]
+        if scores == None:
+            return None
 
+        wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
+        wt_total_scores.sort()
+        top_x_wt_struct_nums = [t[1] for t in wt_total_scores[:top_x]]
+
+        mut_total_scores = [(scores[struct_num]['MutantComplex']['total'], struct_num) for struct_num in scores]
+        mut_total_scores.sort()
+        top_x_mut_struct_nums = [t[1] for t in mut_total_scores[:top_x]]
+
+        return np.average( [
+            (scores[mut_struct_num]['MutantComplex']['total'] - scores[mut_struct_num]['MutantLPartner']['total'] - scores[mut_struct_num]['MutantRPartner']['total']) -
+            (scores[wt_struct_num]['WildTypeComplex']['total'] - scores[wt_struct_num]['WildTypeLPartner']['total'] - scores[wt_struct_num]['WildTypeRPartner']['total'])
+            for wt_struct_num, mut_struct_num in zip(top_x_wt_struct_nums, top_x_mut_struct_nums)
+            ] )
 
     @analysis_api
     def get_analysis_dataframe(self, prediction_set_id,
@@ -1105,6 +1105,7 @@ class BindingAffinityDDGInterface(ddG):
             score_method_id = None,
             expectn = None,
             allow_failures = False,
+            extract_data_for_case_if_missing = True,
             ):
         '''This function uses experimental data from the database and prediction data from the Prediction*StructureScore
            table to build a pandas dataframe and store it in the database. See .analyze for an explanation of the
@@ -1154,7 +1155,10 @@ class BindingAffinityDDGInterface(ddG):
         analysis_data = {}
         top_level_dataframe_attributes = {}
         if not(use_existing_benchmark_data and hdf_store_blob):
-            print('Computing the TopX values for each prediction case, extracting data if need be.')
+            if extract_data_for_case_if_missing and not silent:
+                print('Computing the TopX values for each prediction case, extracting data if need be.')
+            elif not extract_data_for_case_if_missing and not silent:
+                print('Computing the TopX values for each prediction case; skipping missing data without attempting to extract.')
             num_predictions_in_prediction_set = len(prediction_ids)
             failed_cases = set()
             for prediction_id in prediction_ids:
@@ -1163,17 +1167,28 @@ class BindingAffinityDDGInterface(ddG):
                 except Exception, e:
                     colortext.pcyan(str(e))
                     colortext.warning(traceback.format_exc())
-                    self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
+                    if extract_data_for_case_if_missing:
+                        self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
+                    else:
+                        if not allow_failures:
+                            raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
+                        failed_cases.add(prediction_id) 
                 try:
                     top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = take_lowest, expectn = expectn)
-                    # best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
-                    analysis_data[prediction_id] = {
-                        ddg_analysis_type : top_x_ddg,
-                    }
+                    if not top_x_ddg:
+                        if not allow_failures:
+                            raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
+                        failed_cases.add(prediction_id)
+                    else:
+                        # best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
+                        analysis_data[prediction_id] = {
+                            ddg_analysis_type : top_x_ddg,
+                        }
                 except Exception, e:
                     if not allow_failures:
                         raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
                     failed_cases.add(prediction_id)
+
             if failed_cases:
                 colortext.error('Failed to determine the TopX score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
             working_prediction_ids = sorted(set(prediction_ids).difference(failed_cases))
@@ -1336,15 +1351,15 @@ class BindingAffinityDDGInterface(ddG):
                 analysis_sets_to_run = set(analysis_sets_to_run).intersection(set(analysis_set_ids))
             analysis_sets_to_run = sorted(analysis_sets_to_run)
 
-            analysis_sets_to_run = ['BeAtMuSiC'] # ['BeAtMuSiC', 'SKEMPI', 'ZEMu']
+            analysis_sets_to_run = ['ZEMu'] # ['BeAtMuSiC', 'SKEMPI', 'ZEMu']
 
             # todo: this currently seems to expect all datapoints to be present
 
             for analysis_set_id in analysis_sets_to_run:
                 colortext.message(analysis_set_id)
 
-                #benchmark_run.calculate_metrics(analysis_set = analysis_set_id, analysis_directory = '/tmp/analysis')
-                benchmark_run.plot(analysis_set = analysis_set_id, analysis_directory = '/tmp/analysis')
+                benchmark_run.calculate_metrics(analysis_set = analysis_set_id, analysis_directory = '/tmp/analysis')
+                benchmark_run.plot(analysis_set = analysis_set_id, analysis_directory = output_directory)
 
                 break
                 # recreate_graphs
