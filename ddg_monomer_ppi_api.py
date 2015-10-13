@@ -6,6 +6,9 @@ import json
 import sqlite3
 import interface_calc
 import sys
+import shutil
+import multiprocessing
+import random
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a DDGMonomerInterface object. It hides the private methods
@@ -28,15 +31,14 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
            root_directory defaults to /kortemmelab/shared/DDG/ppijobs.
            If force is True then existing records should be overridden.
         '''
-        print prediction_set_id
         root_directory = root_directory or self.prediction_data_path
-        prediction_ids = self.get_prediction_ids(prediction_set_id)
+        prediction_ids = [x for x in self.get_prediction_ids(prediction_set_id)]
+        random.shuffle( prediction_ids )
+        print '%d prediction_ids to process' % len(prediction_ids)
         for prediction_id in prediction_ids:
             ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
             if os.path.isdir( ddg_output_path ):
-                print self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force, score_method_id = score_method_id)
-                sys.exit(0)        
-
+                self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force, score_method_id = score_method_id)
 
     @job_completion
     def parse_prediction_scores(self, prediction_id, root_directory = None, score_method_id = None):
@@ -58,40 +60,84 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                     os.path.join(ddg_output_path, wt_output_pdbs[round_num]),
                     os.path.join(ddg_output_path, mut_output_pdbs[round_num]),
                 )
+
         scores = []
-        if len(structs_with_both_rounds) > 0:
-            for round_num in structs_with_both_rounds:
-                wt_pdb, mutant_pdb = structs_with_both_rounds[round_num]
-
-                output_db3 = self.rescore_ddg_monomer_pdb(wt_pdb, prediction_id)
-                # "left" structure has struct_id=1
-                wtl_score = self.add_scores_from_db3_file(output_db3, 1, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeLPartner', score_method_id = score_method_id))
-                wtr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeRPartner', score_method_id = score_method_id)
-                wtc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeComplex', score_method_id = score_method_id)
-                ml_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantLPartner', score_method_id = score_method_id)
-                mr_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantRPartner', score_method_id = score_method_id)
-                mc_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantComplex', score_method_id = score_method_id)
-                ddg_score = self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'DDG', score_method_id = score_method_id)
-                shutil.rmtree( os.path.dirname(output_db3) )
-
-                scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
-        return scores
-    
-    def rescore_ddg_monomer_pdb(self, pdb_file, prediction_id):
+        output_db3s = {}
+        score_method_details = self.get_score_method_details()[score_method_id]
+        method_name = score_method_details['MethodName']
+        author = score_method_details['Authors']
         job_details = self.get_job_details(prediction_id)
         substitution_parameters = json.loads(job_details['JSONParameters'])
-        output_db3 = interface_calc.rescore_ddg_monomer_pdb(
-            os.path.abspath(pdb_file),
-            self.rosetta_scripts_path,
-            substitution_parameters['%%chainstomove%%'],
-            rosetta_database_path = self.rosetta_database_path,
-        )
+        if method_name.startswith('Rescore-') and author == 'Kyle Barlow':
+            score_fxn = method_name[8:].lower()
+        else:
+            score_fxn = 'interface'
+
+        if len(structs_with_both_rounds) > 0:
+            print 'Opening rescoring pool for prediction', prediction_id
+            print '%d tasks to run' % (len(structs_with_both_rounds) * 2)
+            p = multiprocessing.Pool()
+            def finish_rescore(tup):
+                round_num, struct_type, output_db3 = tup
+                if round_num != None and struct_type != None and output_db3 != None:
+                    if round_num not in output_db3s:
+                        output_db3s[round_num] = {}
+                    assert( struct_type not in output_db3s[round_num] )
+                    output_db3s[round_num][struct_type] = output_db3
+            for round_num in structs_with_both_rounds:
+                wt_pdb, mutant_pdb = structs_with_both_rounds[round_num]
+                kwargs = {
+                    'rosetta_database_path' : self.rosetta_database_path,
+                    'score_fxn' : score_fxn,
+                    'round_num' : round_num,
+                    'struct_type' : 'wt',
+                }
+                p.apply_async( interface_calc.rescore_ddg_monomer_pdb, (
+                    os.path.abspath(wt_pdb),
+                    self.rosetta_scripts_path,
+                    substitution_parameters['%%chainstomove%%'],
+                    ), kwargs, callback=finish_rescore )
+
+                kwargs = {
+                    'rosetta_database_path' : self.rosetta_database_path,
+                    'score_fxn' : score_fxn,
+                    'round_num' : round_num,
+                    'struct_type' : 'mut',
+                }
+                p.apply_async( interface_calc.rescore_ddg_monomer_pdb, (
+                    os.path.abspath(mutant_pdb),
+                    self.rosetta_scripts_path,
+                    substitution_parameters['%%chainstomove%%'],
+                    ), kwargs, callback=finish_rescore )
+            p.close()
+            p.join()
+            print 'Rescoring pool finished for prediction', prediction_id
+            print
+
+        for round_num in output_db3s:
+            wt_output_db3 = output_db3s[round_num]['wt']
+            mut_output_db3 = output_db3s[round_num]['mut']
+            # "left" structure has struct_id=1
+            wtl_score = self.add_scores_from_db3_file(wt_output_db3, 1, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeLPartner', score_method_id = score_method_id))
+            wtr_score = self.add_scores_from_db3_file(wt_output_db3, 2, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeRPartner', score_method_id = score_method_id))
+            wtc_score = self.add_scores_from_db3_file(wt_output_db3, 3, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeComplex', score_method_id = score_method_id))
+            ml_score = self.add_scores_from_db3_file(mut_output_db3, 1, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantLPartner', score_method_id = score_method_id))
+            mr_score = self.add_scores_from_db3_file(mut_output_db3, 2, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantRPartner', score_method_id = score_method_id))
+            mc_score = self.add_scores_from_db3_file(mut_output_db3, 3, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantComplex', score_method_id = score_method_id))
+            
+            shutil.rmtree( os.path.dirname(wt_output_db3) )
+            shutil.rmtree( os.path.dirname(mut_output_db3) )
+
+            scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
+        return scores
+    
+    def rescore_ddg_monomer_pdb(self, pdb_file, prediction_id, score_method_id):
+
         return output_db3
 
-    def add_scores_from_db3_file(self, db3_file, struct_id, score_dict):
+    def add_scores_from_db3_file(self, db3_file, struct_id, round_num, score_dict):
         conn = sqlite3.connect(db3_file)
         c = conn.cursor()
-        print db3_file
         score_types = set()
         for row in c.execute('SELECT score_type_name FROM score_types WHERE batch_id=1'):
             score_types.add(row[0])
@@ -105,7 +151,6 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 score_dict[empty_score_type] = float( score_rows[0][0] )
             elif len(score_rows) > 1:
                 raise Exception('Matched too many score rows')
-        print score_dict
-        sys.exit(0)
+        score_dict['StructureID'] = round_num
         return score_dict
 
