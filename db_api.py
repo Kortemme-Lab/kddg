@@ -881,7 +881,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         qry = 'SELECT ID FROM %s WHERE PredictionSet=%%s ORDER BY ID' % self._get_prediction_table()
         return [r['ID'] for r in self.DDG_db.execute_select(qry, parameters=(prediction_set_id,))]
 
-
     @informational_job
     def get_defined_user_datasets(self):
         '''Return a dict detailing the defined UserDataSets, their tagged subsets (if any), and the mutagenesis counts
@@ -1358,7 +1357,8 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
         scores = self.parse_prediction_scores(prediction_id, root_directory = root_directory, score_method_id = score_method_id)
 
         # Store the dicts as PredictionPPIStructureScore records
-        self.store_scores(prediction_set, prediction_id, scores)
+        if len(scores) > 0:
+            self.store_scores(prediction_set, prediction_id, scores)
 
         return scores
 
@@ -1505,7 +1505,6 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     ##
     ## This part of the API is responsible for running analysis on completed predictions
     ###########################################################################################
-
 
     @analysis_api
     def get_prediction_scores(self, prediction_id):

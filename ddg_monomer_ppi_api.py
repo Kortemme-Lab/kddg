@@ -16,6 +16,18 @@ def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf
     return GenericUserInterface.generate(DDGMonomerInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
 
 class DDGMonomerInterface(BindingAffinityDDGInterface):
+    def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
+        '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
+        '''
+        if score_method_id:
+            q = "SELECT DISTINCT PredictionPPIID FROM PredictionPPIStructureScore INNER JOIN PredictionPPI ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID WHERE PredictionPPI.PredictionSet='%s' AND PredictionPPIStructureScore.ScoreMethodID=%d" % (prediction_set_id, score_method_id)
+        else:
+            q = "SELECT DISTINCT PredictionPPIID FROM PredictionPPIStructureScore INNER JOIN PredictionPPI ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID WHERE PredictionPPI.PredictionSet='%s'" % (prediction_set_id)
+        return_set = set()
+        for r in self.DDG_db.execute_select(q):
+            return_set.add( r['PredictionPPIID'] )
+        return return_set
+            
     @job_completion
     def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None):
         '''Extracts the data for the prediction set run and stores it into the database.
@@ -32,7 +44,13 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
            If force is True then existing records should be overridden.
         '''
         root_directory = root_directory or self.prediction_data_path
-        prediction_ids = [x for x in self.get_prediction_ids(prediction_set_id)]
+        all_prediction_ids = [x for x in self.get_prediction_ids(prediction_set_id)]
+        all_prediction_ids_set = set()
+        for prediction_id in all_prediction_ids:
+            all_prediction_ids_set.add( prediction_id )
+        scored_prediction_ids_set = self.get_prediction_ids_with_scores(prediction_set_id, score_method_id = score_method_id)
+        prediction_ids = [x for x in all_prediction_ids_set.difference(scored_prediction_ids_set)]
+
         random.shuffle( prediction_ids )
         print '%d prediction_ids to process' % len(prediction_ids)
         for prediction_id in prediction_ids:
@@ -115,20 +133,30 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             print
 
         for round_num in output_db3s:
-            wt_output_db3 = output_db3s[round_num]['wt']
-            mut_output_db3 = output_db3s[round_num]['mut']
-            # "left" structure has struct_id=1
-            wtl_score = self.add_scores_from_db3_file(wt_output_db3, 1, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeLPartner', score_method_id = score_method_id))
-            wtr_score = self.add_scores_from_db3_file(wt_output_db3, 2, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeRPartner', score_method_id = score_method_id))
-            wtc_score = self.add_scores_from_db3_file(wt_output_db3, 3, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeComplex', score_method_id = score_method_id))
-            ml_score = self.add_scores_from_db3_file(mut_output_db3, 1, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantLPartner', score_method_id = score_method_id))
-            mr_score = self.add_scores_from_db3_file(mut_output_db3, 2, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantRPartner', score_method_id = score_method_id))
-            mc_score = self.add_scores_from_db3_file(mut_output_db3, 3, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantComplex', score_method_id = score_method_id))
+            if 'wt' in output_db3s[round_num]:
+                wt_output_db3 = output_db3s[round_num]['wt']
+            else:
+                wt_output_db3 = None
 
-            shutil.rmtree( os.path.dirname(wt_output_db3) )
-            shutil.rmtree( os.path.dirname(mut_output_db3) )
+            if 'mut' in output_db3s[round_num]:
+                mut_output_db3 = output_db3s[round_num]['mut']
+            else:
+                mut_output_db3 = None
 
-            scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
+            if wt_output_db3 and mut_output_db3:
+                # "left" structure has struct_id=1
+                wtl_score = self.add_scores_from_db3_file(wt_output_db3, 1, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeLPartner', score_method_id = score_method_id))
+                wtr_score = self.add_scores_from_db3_file(wt_output_db3, 2, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeRPartner', score_method_id = score_method_id))
+                wtc_score = self.add_scores_from_db3_file(wt_output_db3, 3, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeComplex', score_method_id = score_method_id))
+                ml_score = self.add_scores_from_db3_file(mut_output_db3, 1, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantLPartner', score_method_id = score_method_id))
+                mr_score = self.add_scores_from_db3_file(mut_output_db3, 2, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantRPartner', score_method_id = score_method_id))
+                mc_score = self.add_scores_from_db3_file(mut_output_db3, 3, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantComplex', score_method_id = score_method_id))
+                scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
+
+            if wt_output_db3:
+                shutil.rmtree( os.path.dirname(wt_output_db3) )
+            if mut_output_db3:
+                shutil.rmtree( os.path.dirname(mut_output_db3) )
         return scores
 
     def rescore_ddg_monomer_pdb(self, pdb_file, prediction_id, score_method_id):
