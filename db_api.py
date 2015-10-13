@@ -2013,5 +2013,3 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             return '\n'.join(["total %d" % len(rosetta_mutations), "%d" % len(rosetta_mutations)] + mutfile)
         except:
             raise Exception("An error occurred creating a mutfile for the ddG job.")
-
-

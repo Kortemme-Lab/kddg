@@ -124,13 +124,13 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             ml_score = self.add_scores_from_db3_file(mut_output_db3, 1, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantLPartner', score_method_id = score_method_id))
             mr_score = self.add_scores_from_db3_file(mut_output_db3, 2, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantRPartner', score_method_id = score_method_id))
             mc_score = self.add_scores_from_db3_file(mut_output_db3, 3, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantComplex', score_method_id = score_method_id))
-            
+
             shutil.rmtree( os.path.dirname(wt_output_db3) )
             shutil.rmtree( os.path.dirname(mut_output_db3) )
 
             scores.extend([wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score])
         return scores
-    
+
     def rescore_ddg_monomer_pdb(self, pdb_file, prediction_id, score_method_id):
 
         return output_db3
@@ -153,4 +153,3 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 raise Exception('Matched too many score rows')
         score_dict['StructureID'] = round_num
         return score_dict
-

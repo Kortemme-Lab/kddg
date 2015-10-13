@@ -38,11 +38,11 @@ def rescore_ddg_monomer_pdb(pdb_path, rosetta_scripts_path, chains_to_move, rose
         print 'Rosetta run failed in folder', tmp_output_dir
         print 'Command line:', ' '.join(command_line)
         return (None, None, None)
-        
+
     if round_num and struct_type:
         return (round_num, struct_type, os.path.join(tmp_output_dir, output_db3))
     else:
         return os.path.join(tmp_output_dir, output_db3)
-    
+
 if __name__ == '__main__':
     rescore_ddg_monomer_pdb(sys.argv[1])
