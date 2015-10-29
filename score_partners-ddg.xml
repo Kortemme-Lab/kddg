@@ -1,0 +1,39 @@
+<ROSETTASCRIPTS>
+  <SCOREFXNS>
+    <fa_talaris2014 weights=talaris2014/>
+    <fa_interface weights=interface/>
+  </SCOREFXNS>
+
+  <TASKOPERATIONS>
+    <ReadResfile name=no_repack filename="%%resfile%%" />
+  </TASKOPERATIONS>
+
+  <MOVERS>
+    <ddG name=ddgmover scorefxn=fa_talaris2014 chain_name=%%chainstomove%% repack_unbound=false repack_bound=false relax_bound=false/>
+  </MOVERS>
+
+  <FILTERS>
+    <DdGScan name=nochangescorer task_operations=no_repack repeats=1 scorefxn=%%currentscorefxn%% report_diffs=1 write2pdb=0 ddG_mover=ddgmover />
+  </FILTERS>
+
+  <MOVERS>
+    <ReportToDB name=db_reporter batch_description="interface_weights">
+      <feature name=ResidueFeatures/>
+      <feature name=PdbDataFeatures/>
+      <feature name=ScoreTypeFeatures/>
+      <feature name=ScoreFunctionFeatures scorefxn=%%currentscorefxn%%/>
+      <feature name=StructureScoresFeatures scorefxn=%%currentscorefxn%%/>
+      <feature name=ResidueScoresFeatures scorefxn=%%currentscorefxn%%/>
+      <feature name=DdGFeatures ddG_scan_mover=nochangescorer/>
+    </ReportToDB>
+  </MOVERS>
+
+  <APPLY_TO_POSE>
+  </APPLY_TO_POSE>
+
+  <PROTOCOLS>
+    <Add mover_name=db_reporter/>
+  </PROTOCOLS>
+
+  <OUTPUT />
+</ROSETTASCRIPTS>
