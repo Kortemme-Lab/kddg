@@ -41,19 +41,19 @@ except ImportError:
 import score
 import ddgdbapi
 
-from tools.bio.pdb import PDB
-from tools.bio.basics import residue_type_3to1_map as aa1, dssp_elision
-from tools.bio.basics import Mutation
+from klab.bio.pdb import PDB
+from klab.bio.basics import residue_type_3to1_map as aa1, dssp_elision
+from klab.bio.basics import Mutation
 #from Bio.PDB import *
-from tools.fs.fsio import write_file, read_file
-from tools.process import Popen
-from tools.constants import rosetta_weights
-from tools import colortext
-from tools.stats.misc import get_xy_dataset_statistics
+from klab.fs.fsio import write_file, read_file
+from klab.process import Popen
+from klab.constants import rosetta_weights
+from klab import colortext
+from klab.stats.misc import get_xy_dataset_statistics
 
-from tools.general.strutil import remove_trailing_line_whitespace
-from tools.hash.md5 import get_hexdigest
-from tools.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
+from klab.general.strutil import remove_trailing_line_whitespace
+from klab.hash.md5 import get_hexdigest
+from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
 
 
 
@@ -131,7 +131,7 @@ class ddG(object):
 
     @alien
     def write_abacus_graph(self, graph_filename, graph_title, labels, data):
-        '''NOTE: This function should be generalized and moved into the tools repository.
+        '''NOTE: This function should be generalized and moved into the klab repository.
            This is a simple function wrapper around create_abacus_graph which writes the graph to file.'''
         byte_stream = self.create_abacus_graph(graph_title, labels, data)
         write_file(graph_filename, byte_stream.getvalue(), 'wb')
@@ -139,7 +139,7 @@ class ddG(object):
 
     @alien
     def create_abacus_graph(self, graph_title, labels, data):
-        '''NOTE: This function should be generalized and moved into the tools repository.
+        '''NOTE: This function should be generalized and moved into the klab repository.
            This function creates an 'abacus graph' from a set of data. Even though this is technically a scatterplot,
            I call this an abacus graph because it is looks like rows of beads on lines.
            The function takes a graph title, a set of labels (one per row of data), and an array of data where each row
@@ -1739,7 +1739,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     ################################################################################################
     ## Application layer
-    ## These functions combine the database and prediction data with useful tools
+    ## These functions combine the database and prediction data with useful klab
     ################################################################################################
 
 

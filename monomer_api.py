@@ -22,8 +22,8 @@ import traceback
 
 from api_layers import *
 from db_api import ddG
-from tools import colortext
-from tools.bio.alignment import ScaffoldModelChainMapper
+from klab import colortext
+from klab.bio.alignment import ScaffoldModelChainMapper
 
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
@@ -584,7 +584,7 @@ class MonomericStabilityDDGInterface(ddG):
 
     ################################################################################################
     ## Application layer
-    ## These functions combine the database and prediction data with useful tools
+    ## These functions combine the database and prediction data with useful klab
     ################################################################################################
 
 
@@ -1089,7 +1089,7 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
     def _charge_prediction_set_by_residue_count(self, PredictionSet):
         '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
         raise Exception('This function needs to be rewritten.')
-        from tools.bio.rcsb import parseFASTAs
+        from klab.bio.rcsb import parseFASTAs
 
         DDG_db = self.DDG_db
         predictions = DDG_db.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))

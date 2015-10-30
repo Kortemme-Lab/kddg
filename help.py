@@ -11,7 +11,7 @@ import sys
 import re
 from string import join
 from ddgdbapi import StdCursor, ddGDatabase # FieldNames
-from tools import colortext
+from klab import colortext
 import ddglib
 from ddglib.filter import *
 import inspect

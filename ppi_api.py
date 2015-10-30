@@ -27,12 +27,12 @@ import numpy as np
 
 from api_layers import *
 from db_api import ddG
-from tools import colortext
-from tools.bio.pdb import PDB
-from tools.bio.basics import ChainMutation
-from tools.fs.fsio import read_file
-from tools.rosetta.input_files import Mutfile, Resfile
-from tools.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
+from klab import colortext
+from klab.bio.pdb import PDB
+from klab.bio.basics import ChainMutation
+from klab.fs.fsio import read_file
+from klab.rosetta.input_files import Mutfile, Resfile
+from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
@@ -1450,7 +1450,7 @@ class BindingAffinityDDGInterface(ddG):
     def _charge_prediction_set_by_residue_count(self, PredictionSet):
         '''This function assigns a cost for a prediction equal to the number of residues in the chains.'''
         raise Exception('This function needs to be rewritten.')
-        from tools.bio.rcsb import parseFASTAs
+        from klab.bio.rcsb import parseFASTAs
 
         DDG_db = self.DDG_db
         predictions = DDG_db.execute_select("SELECT ID, ExperimentID FROM Prediction WHERE PredictionSet=%s", parameters=(PredictionSet,))
