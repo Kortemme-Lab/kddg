@@ -1,5 +1,5 @@
 import inspect
-from tools import colortext
+from klab import colortext
 from string import join
 
 class AbstractClass(object):

@@ -14,15 +14,15 @@ import getpass
 import itertools
 if __name__ == "__main__":
     sys.path.insert(0, "../../")
-from tools.db.mysql import DatabaseInterface
-from tools.fs.fsio import read_file, write_file
-from tools.bio import rcsb
-from tools.bio.dssp import MonomerDSSP, ComplexDSSP, MissingAtomException
-from tools import colortext
-from tools.bio.pdb import PDB, MissingRecordsException
-from tools.bio.basics import relaxed_residue_types_1 as relaxed_amino_acid_codes
-from tools.hash import CRC64
-from tools.biblio.ris import RISEntry
+from klab.db.mysql import DatabaseInterface
+from klab.fs.fsio import read_file, write_file
+from klab.bio import rcsb
+from klab.bio.dssp import MonomerDSSP, ComplexDSSP, MissingAtomException
+from klab import colortext
+from klab.bio.pdb import PDB, MissingRecordsException
+from klab.bio.basics import relaxed_residue_types_1 as relaxed_amino_acid_codes
+from klab.hash import CRC64
+from klab.biblio.ris import RISEntry
 from ddgobjects import DBObject
 
 relaxed_amino_acid_codes = list(relaxed_amino_acid_codes)
@@ -2315,7 +2315,7 @@ END
     def add_protein_from_UniParc_ID(self, UniParcID, cache_dir = None):
         '''Adds a Protein record and related records for the UniParc sequence with ID UniParcID. Returns the ID of the protein.'''
 
-        from tools.bio import uniprot # import moved here to get around differences in the custom-built simplejson package on the webserver (Python 2.4.3) and those shipped with Python 2.7.3
+        from klab.bio import uniprot # import moved here to get around differences in the custom-built simplejson package on the webserver (Python 2.4.3) and those shipped with Python 2.7.3
         uniparco = uniprot.UniParcEntry(UniParcID, cache_dir = cache_dir)
 
         # Sanity check the sequence, allowing unknown residues 'X'

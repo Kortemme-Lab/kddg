@@ -11,7 +11,7 @@ Copyright (c) 2015 __UCSF__. All rights reserved.
 
 import inspect
 import functools
-from tools import colortext
+from klab import colortext
 
 ### API function decorators. These are used to group functions together when printing the help text.
 

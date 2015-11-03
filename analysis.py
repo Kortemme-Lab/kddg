@@ -23,12 +23,12 @@ import inspect
 import json
 from tempfile import mkstemp
 
-import tools.colortext as colortext
+import klab.colortext as colortext
 import ddgdbapi
-import tools.deprecated.rosettahelper as rosettahelper
-from tools.deprecated.rosettahelper import kJtokcal
+import klab.deprecated.rosettahelper as rosettahelper
+from klab.deprecated.rosettahelper import kJtokcal
 
-import tools.latex as latex
+import klab.latex as latex
 
 script_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 

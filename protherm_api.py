@@ -10,12 +10,12 @@ if __name__ == "__main__":
 	sys.path.insert(0, "../common")
 from string import join
 #import common.colortext as colortext
-import tools.colortext as colortext
+import klab.colortext as colortext
 import ddgdbapi
 import ddgobjects
 #from common.rosettahelper import kJtokcal, NUMBER_KJ_IN_KCAL, NUMBER_KELVIN_AT_ZERO_CELSIUS
-from tools.deprecated.rosettahelper import kJtokcal, NUMBER_KJ_IN_KCAL, NUMBER_KELVIN_AT_ZERO_CELSIUS
-from tools.bio.basics import Mutation as MutationO
+from klab.deprecated.rosettahelper import kJtokcal, NUMBER_KJ_IN_KCAL, NUMBER_KELVIN_AT_ZERO_CELSIUS
+from klab.bio.basics import Mutation as MutationO
 
 sometimesFields = ["ION_NAME_2", "ION_CONC_2", "ION_NAME_3", "ION_CONC_3", "ION_CON_1C"] # ION_CON_1C seems to be a weird typo in version 23581
 
