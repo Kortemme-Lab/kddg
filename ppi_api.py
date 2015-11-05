@@ -22,6 +22,7 @@ import StringIO
 import gzip
 import shutil
 import sqlite3
+import cPickle as pickle
 
 import numpy as np
 
@@ -501,6 +502,9 @@ class BindingAffinityDDGInterface(ddG):
         print('This will probably break - I need to dump datetime.datetime objects to ISO strings.')
         return json.dumps(self.get_prediction_set_case_details(prediction_set_id, retrieve_references = retrieve_references))
 
+    @informational_job
+    def export_prediction_cases_to_pickle(self, prediction_set_id, retrieve_references = True):
+        return pickle.dumps(self.get_prediction_set_case_details(prediction_set_id, retrieve_references = retrieve_references))
 
     ##### Public API: Rosetta-related functions
 
