@@ -79,6 +79,7 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
 
     return get_interface_factory(password, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
 
+
 class BindingAffinityDDGInterface(ddG):
     '''This is the internal API class that should be NOT used to interface with the database.'''
 
@@ -532,8 +533,9 @@ class BindingAffinityDDGInterface(ddG):
     #   PredictionSet interface
 
     @job_creator
-    def add_prediction_set(self, prediction_set_id, halted = True, priority = 5, batch_size = 40, allow_existing_prediction_set = False):
-        return super(BindingAffinityDDGInterface, self).add_prediction_set(prediction_set_id, halted = halted, priority = priority, batch_size = batch_size, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = False, contains_binding_affinity_predictions = True)
+    def add_prediction_set(self, prediction_set_id, halted = True, priority = 5, batch_size = 40, allow_existing_prediction_set = False,
+                                 series_name = None, series_color = 'ff0000', series_alpha = 1.0, description = None):
+        return super(BindingAffinityDDGInterface, self).add_prediction_set(prediction_set_id, halted = halted, priority = priority, batch_size = batch_size, allow_existing_prediction_set = allow_existing_prediction_set, contains_protein_stability_predictions = False, contains_binding_affinity_predictions = True, series_name = series_name, series_color = series_color, series_alpha = series_alpha, description = description)
 
 
     @job_creator

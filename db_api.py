@@ -291,7 +291,7 @@ class ddG(object):
             return None
 
     @alien
-    def add_PDB_to_database(self, filepath = None, pdbID = None, contains_membrane_protein = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False, techniques = None):
+    def add_PDB_to_database(self, filepath = None, pdbID = None, contains_membrane_protein = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False, techniques = None, derived_from = None, notes = None, allow_missing_molecules = False):
         '''NOTE: This API is used to create and analysis predictions or retrieve information from the database.
                  This function adds new raw data to the database and does not seem to belong here. It should be moved into
                  an admin API instead.
@@ -309,14 +309,15 @@ class ddG(object):
             rootname = pdbID
 
         try:
-            dbp = ddgdbapi.PDBStructure(self.DDG_db, rootname, contains_membrane_protein = contains_membrane_protein, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques)
+            dbp = ddgdbapi.PDBStructure(self.DDG_db, rootname, contains_membrane_protein = contains_membrane_protein, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques, derived_from = derived_from, notes = notes)
             #Structure.getPDBContents(self.DDG_db)
             results = self.DDG_db.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters = (rootname,))
+
             if results:
                 #ddgdbapi.getUniProtMapping(pdbID, storeInDatabase = True)
                 #raise Exception("There is already a structure in the database with the ID %s." % rootname)
                 if force:
-                    dbp.commit(testonly = testonly)
+                    dbp.commit(testonly = testonly, allow_missing_molecules = allow_missing_molecules)
                 return None
             dbp.commit(testonly = testonly)
             return rootname
@@ -1023,7 +1024,9 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @job_creator
-    def add_prediction_set(self, prediction_set_id, halted = True, priority = 5, batch_size = 40, allow_existing_prediction_set = False, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False):
+    def add_prediction_set(self, prediction_set_id, halted = True, priority = 5, batch_size = 40,
+                           allow_existing_prediction_set = False, contains_protein_stability_predictions = True, contains_binding_affinity_predictions = False,
+                           series_name = None, series_color = 'ff0000', series_alpha = 1.0, description = None):
         '''Adds a new PredictionSet (a construct used to group Predictions) to the database.
            If a PredictionSet is halted then running schedulers will not kick off the jobs. Otherwise, they will be queued
            depending on the priority of the PredictionSet (higher numbers mean higher priority).
@@ -1053,6 +1056,10 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             ProteinStability    = contains_protein_stability_predictions,
             BindingAffinity     = contains_binding_affinity_predictions,
             BatchSize           = batch_size,
+            SeriesName          = series_name,
+            SeriesColor         = series_color,
+            SeriesAlpha         = series_alpha,
+            Description         = description,
         )
         self.DDG_db.insertDictIfNew("PredictionSet", d, ['ID'])
         return True

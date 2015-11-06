@@ -348,9 +348,13 @@ class PDBStructure(DBObject):
     # At the time of writing, these PDB IDs had no JRNL lines
     NoPublicationData = ['2FX5']
 
-    def __init__(self, ddGdb, pdb_id, content = None, protein = None, contains_membrane_protein = None, file_source = None, filepath = None, UniProtAC = None, UniProtID = None, testonly = False, techniques = None):
+    def __init__(self, ddGdb, pdb_id, content = None, protein = None, contains_membrane_protein = None, file_source = None, filepath = None, UniProtAC = None, UniProtID = None, testonly = False, techniques = None, derived_from = None, notes = None):
         '''UniProtACs have forms like 'P62937' whereas UniProtIDs have forms like 'PPIA_HUMAN.'''
         super(PDBStructure, self).__init__(ddGdb)
+
+        if derived_from != None:
+            assert(isinstance(derived_from, str) and len(derived_from) == 4)
+
         self.dict = dict(
             ID = pdb_id,
             FileSource = file_source,
@@ -361,7 +365,10 @@ class PDBStructure(DBObject):
             BFactors = None,
             Publication =  None,
             Transmembrane = contains_membrane_protein,
+            Notes = notes,
+            DerivedFrom = derived_from,
         )
+
         self.testonly = testonly
         self.filepath = filepath
         self.UniProtAC = UniProtAC
@@ -433,17 +440,18 @@ class PDBStructure(DBObject):
 
         #UniqueIDs[pdb_id] = True
         pdb_id = self.dict['ID']
-        if pdb_id not in self.NoUniProtIDs:
+        ref_pdb_id = self.dict['DerivedFrom'] or self.dict['ID']
+        if ref_pdb_id not in self.NoUniProtIDs:
             read_UniProt_map(self.ddGdb)
-            if not PDBToUniProt.get(pdb_id):
+            if not PDBToUniProt.get(ref_pdb_id):
                 if not (self.UniProtAC and self.UniProtID):
                     ACtoID_mapping, PDBtoAC_mapping = None, None
                     try:
-                        getUniProtMapping(pdb_id, storeInDatabase = False, ddGdb = self.ddGdb)
+                        getUniProtMapping(ref_pdb_id, storeInDatabase = False, ddGdb = self.ddGdb)
                         if not (PDBtoAC_mapping and ACtoID_mapping):
-                            raise Exception("Could not find a UniProt mapping for %s in %s." % (pdb_id, uniprotmapping))
+                            raise Exception("Could not find a UniProt mapping for %s in %s." % (ref_pdb_id, uniprotmapping))
                     except:
-                        colortext.error("Could not find a UniProt mapping for %s in %s." % (pdb_id, uniprotmapping))
+                        colortext.error("Could not find a UniProt mapping for %s in %s." % (ref_pdb_id, uniprotmapping))
                     self.ACtoID_mapping = ACtoID_mapping
                     self.PDBtoAC_mapping = PDBtoAC_mapping
 
@@ -539,8 +547,11 @@ class PDBStructure(DBObject):
         # #todo: Implement this later
         pass
 
-    def commit(self, testonly = False):
-        '''Returns the database record ID if an insert occurs but will typically return None if the PDB is already in the database.'''
+    def commit(self, testonly = False, allow_missing_molecules = False):
+        '''Returns the database record ID if an insert occurs but will typically return None if the PDB is already in the database.
+           allow_missing_molecules should be set if molecules have been removed from the file e.g. Rosetta-generated structure
+           but the headers still contain this information.
+        '''
         d = self.dict
         pdb_id = d['ID']
         ddGdb = self.ddGdb
@@ -563,7 +574,7 @@ class PDBStructure(DBObject):
                     self.ddGdb.insertDict('UniProtKB', UniProtMapping)
 
         # Either add a new PDBFile record or update an existing one. todo: not all fields are currently updated
-        results = self.ddGdb.locked_execute("SELECT * FROM PDBFile WHERE ID=%s", parameters = (d['ID']))
+        results = self.ddGdb.locked_execute("SELECT * FROM PDBFile WHERE ID=%s", parameters = (d['ID'],))
         if results:
             assert(len(results) == 1)
             result = results[0]
@@ -610,12 +621,16 @@ class PDBStructure(DBObject):
                 md[k] = molecule[k]
             self.ddGdb.insertDictIfNew('PDBMolecule', md, ['PDBFileID', 'MoleculeID'])
             for c in chains:
-                mcd = dict(
-                    PDBFileID = pdb_id,
-                    MoleculeID = md['MoleculeID'],
-                    Chain = c
-                )
-                self.ddGdb.insertDictIfNew('PDBMoleculeChain', mcd, ['PDBFileID', 'MoleculeID', 'Chain'])
+                try:
+                    mcd = dict(
+                        PDBFileID = pdb_id,
+                        MoleculeID = md['MoleculeID'],
+                        Chain = c
+                    )
+                    self.ddGdb.insertDictIfNew('PDBMoleculeChain', mcd, ['PDBFileID', 'MoleculeID', 'Chain'])
+                except:
+                    if allow_missing_molecules: pass
+                    else: raise
 
         # Add PDBResidue records
         for c, seq in pdb_object.atom_sequences.iteritems():
@@ -660,10 +675,11 @@ class PDBStructure(DBObject):
                     self.ddGdb.insertDict('UniProtKBMapping', UniProtPDBMapping)
 
         # Store the UniProt mapping in the database
-        if d['ID'] not in self.NoUniProtIDs:
+        ref_pdb_id = self.dict['DerivedFrom'] or self.dict['ID']
+        if ref_pdb_id not in self.NoUniProtIDs:
             if not (self.ACtoID_mapping and self.PDBtoAC_mapping):
                 try:
-                    self.ACtoID_mapping, self.PDBtoAC_mapping = getUniProtMapping(d['ID'], storeInDatabase = testonly)
+                    self.ACtoID_mapping, self.PDBtoAC_mapping = getUniProtMapping(ref_pdb_id, storeInDatabase = testonly)
                 except:
                     if False and self.dict['Techniques'] != 'Rosetta model':
                         raise
@@ -750,8 +766,9 @@ class PDBStructure(DBObject):
         d = self.dict
         str = []
         str.append("PDBFileID: %s" % d['ID'])
-        str.append("Protein: %s" % d['Protein'])
+        str.append("Protein: %s" % d['FileSource'])
         return join(str, "\n")
+
 
 MutantMatchFudges = {
     # This dict is used to help match up mutants where the length does not match.
