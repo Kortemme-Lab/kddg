@@ -1746,7 +1746,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     ################################################################################################
     ## Application layer
-    ## These functions combine the database and prediction data with useful tools
+    ## These functions combine the database and prediction data with useful klab
     ################################################################################################
 
 
