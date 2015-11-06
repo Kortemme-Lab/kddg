@@ -836,7 +836,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @informational_job
-    def get_job_files(self, prediction_id, truncate_content = None):
+    def get_job_files(self, prediction_id, truncate_content = None, clean_pdbs = True):
         '''Returns a dict mapping the stages (e.g. 'input', 'output', 'analysis') of a job with the files associated with
            that stage.
            If truncate_content is set, it should be an integer specifying the amount of characters to include. This is useful
@@ -850,6 +850,9 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             if truncate_content and str(truncate_content).isdigit():
                 if len(r['Content']) > int(truncate_content):
                     r['Content'] = '%s...' % r['Content'][:int(truncate_content)]
+            if clean_pdbs:
+                pdb = PDB(r["Content"].split("\n"))
+                r['Content'] = '\n'.join(pdb.GetAllATOMLines())
             job_stage = r['Stage']
             del r['Stage']
             job_files[job_stage] = job_files.get(job_stage, [])

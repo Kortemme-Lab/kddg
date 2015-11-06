@@ -200,14 +200,14 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @informational_job
-    def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
+    def get_job_details(self, prediction_id, include_files = True, truncate_content = None, clean_pdbs = True):
         prediction_record = self.DDG_db.execute_select('SELECT * FROM PredictionPPI WHERE ID=%s', parameters=(prediction_id,))
         if not prediction_record:
             raise Exception('No details could be found for prediction #%d in the database.' % prediction_id)
         prediction_record = prediction_record[0]
         prediction_record['Files'] = {}
         if include_files:
-            prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
+            prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content, clean_pdbs = True)
 
         # mutfile_content = self.create_mutfile(prediction_id)
 
