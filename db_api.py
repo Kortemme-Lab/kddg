@@ -327,11 +327,51 @@ class ddG(object):
             raise Exception("An exception occurred committing %s to the database." % filepath)
 
 
+    def get_ddg_monomer_prediction_score_range(self, first_prediction_id, last_prediction_id):
+
+        kellogg_score_id = self.get_score_method_id('global', method_type = 'protocol 16', method_authors = 'kellogg', fuzzy = True)
+        noah_score_id = self.get_score_method_id('local', method_type = 'position', method_parameters = '8Å radius', method_authors = 'Noah Ollikainen', fuzzy = False)
+        print(kellogg_score_id)
+        print(noah_score_id)
+        import time
+        t1 = time.time()
+
+        kellogg_scores_query = self.DDG_db.execute_select('''
+SELECT PredictionID, DDG
+FROM PredictionStructureScore
+WHERE ScoreType="DDG" AND StructureID=-1 AND ScoreMethodID=%s AND PredictionID>=%s AND PredictionID<=%s''',
+            parameters=(kellogg_score_id, first_prediction_id, last_prediction_id))
+
+        noah_scores_query = self.DDG_db.execute_select('''
+SELECT PredictionID, DDG
+FROM PredictionStructureScore
+INNER JOIN ScoreMethod ON ScoreMethod.ID=ScoreMethodID
+WHERE ScoreType="DDG" AND StructureID=-1 AND ScoreMethodID=%s AND PredictionID>=%s AND PredictionID<=%s''',
+            parameters=(noah_score_id, first_prediction_id, last_prediction_id))
+
+        colortext.message('Took {0}s.'.format(time.time() - t1))
+
+        kellogg_scores = dict.fromkeys(range(first_prediction_id, last_prediction_id + 1), None)
+        noah_scores = dict.fromkeys(range(first_prediction_id, last_prediction_id + 1), None)
+        for s in kellogg_scores_query:
+            kellogg_scores[s['PredictionID']] = s['DDG']
+        for s in noah_scores_query:
+            noah_scores[s['PredictionID']] = s['DDG']
+        return dict(
+            kellogg = kellogg_scores,
+            noah8A = noah_scores,
+        )
+
+
     @alien
-    def get_flattened_prediction_results(self, PredictionSet):
+    def get_flattened_prediction_results_old(self, PredictionSet):
         '''This is defined here as an API function but should be defined as a stored procedure.'''
-        return self.DDG_db.execute_select('''
-SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, Experiment.PDBFileID, ExperimentMutations.FlattenedMutations, Prediction.Scores, TIMEDIFF(Prediction.EndDate, Prediction.StartDate) AS TimeTaken FROM Prediction INNER JOIN
+
+        #Ubiquitin scan: 1UBQ p16
+        #Prediction.Scores no longer exists
+
+        records = self.DDG_db.execute_select('''
+SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, Experiment.PDBFileID, ExperimentMutations.FlattenedMutations, PredictionScores_DEPRECATED.Scores, TIMEDIFF(Prediction.EndDate, Prediction.StartDate) AS TimeTaken FROM Prediction INNER JOIN
 (
   SELECT ExperimentID, GROUP_CONCAT(Mutation SEPARATOR ', ') AS FlattenedMutations FROM
   (
@@ -341,10 +381,66 @@ SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, Experiment.PDBFil
 ) AS ExperimentMutations
 ON Prediction.ExperimentID=ExperimentMutations.ExperimentID
 INNER JOIN Experiment ON Prediction.ExperimentID=Experiment.ID
-WHERE Prediction.PredictionSet=%s AND Prediction.Scores IS NOT NULL
+INNER JOIN PredictionScores_DEPRECATED ON Prediction.ID=PredictionScores_DEPRECATED.PredictionID
+WHERE Prediction.PredictionSet=%s AND Prediction.Status="done"
 ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
+        return records
+
+    @alien
+    def get_flattened_prediction_results_2(self, PredictionSet):
+        '''This is defined here as an API function but should be defined as a stored procedure.'''
+
+        #Ubiquitin scan: 1UBQ p16
+        #Prediction.Scores no longer exists
+
+        records = self.DDG_db.execute_select('''
+SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, Experiment.PDBFileID, ExperimentMutations.FlattenedMutations, TIMEDIFF(Prediction.EndDate, Prediction.StartDate) AS TimeTaken FROM Prediction INNER JOIN
+(
+  SELECT ExperimentID, GROUP_CONCAT(Mutation SEPARATOR ', ') AS FlattenedMutations FROM
+  (
+    SELECT ExperimentID, CONCAT(Chain, ' ', WildTypeAA, ResidueID, MutantAA) As Mutation FROM ExperimentMutation
+  ) AS FlattenedMutation
+  GROUP BY ExperimentID
+) AS ExperimentMutations
+ON Prediction.ExperimentID=ExperimentMutations.ExperimentID
+INNER JOIN Experiment ON Prediction.ExperimentID=Experiment.ID
+WHERE Prediction.PredictionSet=%s AND Prediction.Status="done"
+ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
+        first_prediction_id = min([r['PredictionID'] for r in records])
+        last_prediction_id = max([r['PredictionID'] for r in records])
+        return records, self.get_ddg_monomer_prediction_score_range(first_prediction_id, last_prediction_id)
 
 
+    @alien
+    def get_flattened_prediction_results(self, PredictionSet):
+        '''This is defined here as an API function but should be defined as a stored procedure.'''
+
+        #Ubiquitin scan: 1UBQ p16
+        #Prediction.Scores no longer exists
+        kellogg_score_id = self.get_score_method_id('global', method_type = 'protocol 16', method_authors = 'kellogg', fuzzy = True)
+        noah_score_id = self.get_score_method_id('local', method_type = 'position', method_parameters = '8Å radius', method_authors = 'Noah Ollikainen', fuzzy = False)
+
+        score_ids = {}
+        score_ids['kellogg'] = kellogg_score_id
+        score_ids['noah8A'] = noah_score_id
+
+        records = self.DDG_db.execute_select('''
+SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, Experiment.PDBFileID, ExperimentMutations.FlattenedMutations, TIMEDIFF(Prediction.EndDate, Prediction.StartDate) AS TimeTaken, PredictionStructureScore.ScoreMethodID, PredictionStructureScore.DDG
+FROM Prediction INNER JOIN
+(
+  SELECT ExperimentID, GROUP_CONCAT(Mutation SEPARATOR ', ') AS FlattenedMutations FROM
+  (
+    SELECT ExperimentID, CONCAT(Chain, ' ', WildTypeAA, ResidueID, MutantAA) As Mutation FROM ExperimentMutation
+  ) AS FlattenedMutation
+  GROUP BY ExperimentID
+) AS ExperimentMutations
+ON Prediction.ExperimentID=ExperimentMutations.ExperimentID
+INNER JOIN Experiment ON Prediction.ExperimentID=Experiment.ID
+INNER JOIN PredictionStructureScore ON Prediction.ID=PredictionStructureScore.PredictionID
+WHERE Prediction.PredictionSet=%s AND Prediction.Status="done" AND ScoreType="DDG" AND StructureID=-1 AND (ScoreMethodID=%s OR ScoreMethodID=%s)
+ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_score_id))
+
+        return records, score_ids
 
     #== Broken functions ====================================================================
 
