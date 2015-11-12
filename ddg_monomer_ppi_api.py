@@ -61,11 +61,8 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             if os.path.isdir( ddg_output_path ):
                 self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force, score_method_id = score_method_id)
 
-    @job_completion
-    def parse_prediction_scores(self, prediction_id, root_directory = None, score_method_id = None):
-        '''Returns a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
-        root_directory = root_directory or self.prediction_data_path
-        ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
+    def find_structs_with_both_rounds(self, ddg_output_path):
+        '''Searchs directory ddg_output_path to find ddg_monomer output structures for all rounds with both wt and mut structures'''
         output_pdbs = [x for x in os.listdir(ddg_output_path) if '.pdb' in x]
         mut_output_pdbs = { int(x.split('.')[0].split('_')[3]) : x for x in output_pdbs if x.startswith('mut')}
         wt_output_pdbs = { int(x.split('.')[0].split('_')[3]) : x for x in output_pdbs if '_wt_' in x}
@@ -81,14 +78,25 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                     os.path.join(ddg_output_path, wt_output_pdbs[round_num]),
                     os.path.join(ddg_output_path, mut_output_pdbs[round_num]),
                 )
+        return structs_with_both_rounds
+
+    @job_completion
+    def parse_prediction_scores(self, prediction_id, root_directory = None, ddg_output_path = None, chains_to_move = None, score_method_id = None):
+        '''Returns a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
+        root_directory = root_directory or self.prediction_data_path
+        if not ddg_output_path:
+            ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
+        structs_with_both_rounds = find_structs_with_both_rounds(ddg_output_path)
 
         scores = []
         output_db3s = {}
         score_method_details = self.get_score_method_details()[score_method_id]
         method_name = score_method_details['MethodName']
         author = score_method_details['Authors']
-        job_details = self.get_job_details(prediction_id)
-        substitution_parameters = json.loads(job_details['JSONParameters'])
+        if not chains_to_move:
+            job_details = self.get_job_details(prediction_id)
+            substitution_parameters = json.loads(job_details['JSONParameters'])
+            chains_to_move = substitution_parameters['%%chainstomove%%']
         if method_name.startswith('Rescore-') and author == 'Kyle Barlow':
             score_fxn = method_name[8:].lower()
         else:
@@ -116,7 +124,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 p.apply_async( interface_calc.rescore_ddg_monomer_pdb, (
                     os.path.abspath(wt_pdb),
                     self.rosetta_scripts_path,
-                    substitution_parameters['%%chainstomove%%'],
+                    chains_to_move,
                     ), kwargs, callback=finish_rescore )
 
                 kwargs = {
@@ -128,7 +136,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 p.apply_async( interface_calc.rescore_ddg_monomer_pdb, (
                     os.path.abspath(mutant_pdb),
                     self.rosetta_scripts_path,
-                    substitution_parameters['%%chainstomove%%'],
+                    chains_to_move,
                     ), kwargs, callback=finish_rescore )
             p.close()
             p.join()

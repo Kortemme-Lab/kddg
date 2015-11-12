@@ -570,7 +570,7 @@ class BindingAffinityDDGInterface(ddG):
                 cur.execute(qry, (dev_protocol_id, prediction_id))
 
                 if rosetta_script:
-                # Add the Rosetta script to the database, not using cursor
+                    # Add the Rosetta script to the database, not using cursor
                     self._add_prediction_file(prediction_id, rosetta_script, os.path.basename(rosetta_script_file), 'RosettaScript', 'RosettaScript', 'Input', rm_trailing_line_whitespace = True)
 
 
@@ -1345,7 +1345,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     def _get_dev_protocol_id(self, name):
-        dev_protocol_ids = self.DDG_db.execute_select("SELECT ID FROM DevelopmentProtocol WHERE Name=%s", parameters = (name))
+        dev_protocol_ids = self.DDG_db.execute_select("SELECT ID FROM DevelopmentProtocol WHERE Name=%s", parameters = (name,))
         if len(dev_protocol_ids) == 0:
             return None
         elif len(dev_protocol_ids) == 1:

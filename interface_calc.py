@@ -8,6 +8,7 @@ rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
 output_db3 = 'output.db3'
 
 def rescore_ddg_monomer_pdb(pdb_path, rosetta_scripts_path, chains_to_move, rosetta_database_path = None, scratch_dir = '/tmp', score_fxn = 'interface', round_num = None, struct_type = None):
+    '''Used to rescore ddg monomer pdb on the fly'''
     if ',' in chains_to_move:
         chains_to_move = chains_to_move.split(',')
     else:
