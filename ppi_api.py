@@ -15,10 +15,10 @@ import pprint
 from io import BytesIO
 import os
 import sys
+import copy
 import json
 import zipfile
 import traceback
-import StringIO
 import gzip
 import shutil
 import sqlite3
@@ -395,7 +395,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @informational_job
-    def get_predictions_experimental_details(self, prediction_id, userdatset_experiment_ids_to_subset_ddgs = None, include_files = False, reference_ids = set()):
+    def get_predictions_experimental_details(self, prediction_id, userdatset_experiment_ids_to_subset_ddgs = None, include_files = False, reference_ids = set(), include_experimental_data = True):
 
         details = self.get_job_details(prediction_id, include_files = include_files)
 
@@ -420,9 +420,12 @@ class BindingAffinityDDGInterface(ddG):
 
         # Add the DDG values for the related analysis sets
         user_dataset_experiment_id = details['UserPPDataSetExperimentID']
-        userdatset_experiment_ids_to_subset_ddgs = userdatset_experiment_ids_to_subset_ddgs or self.get_experimental_ddgs_by_analysis_set(user_dataset_experiment_id, reference_ids = reference_ids)
-        assert('DDG' not in details)
-        details['DDG'] = userdatset_experiment_ids_to_subset_ddgs[user_dataset_experiment_id]
+        if include_experimental_data:
+            userdatset_experiment_ids_to_subset_ddgs = userdatset_experiment_ids_to_subset_ddgs or self.get_experimental_ddgs_by_analysis_set(user_dataset_experiment_id, reference_ids = reference_ids)
+            assert('DDG' not in details)
+            details['DDG'] = userdatset_experiment_ids_to_subset_ddgs[user_dataset_experiment_id]
+        else:
+            details['DDG'] = None
 
         return details
 
@@ -1062,7 +1065,7 @@ class BindingAffinityDDGInterface(ddG):
         if expectn != None:
             num_cases = 0
             for k in scores.keys():
-                if type(k) == type(1L):
+                if isinstance(k, int) or isinstance(k, long):
                     num_cases += 1
             if num_cases != expectn:
                 raise Exception('Expected scores for {0} runs; found {1}.'.format(expectn, num_cases))
@@ -1074,6 +1077,7 @@ class BindingAffinityDDGInterface(ddG):
         # if you are going to do the calculation in Python, pull scores out to the top level
         # otherwise, we can add a stored procedure to determine the TopX
         # if we go the Python route, we can implement different variations on TopX (including a stored procedure) and pass the function pointers as an argument to the main analysis function
+
 
     def get_top_x_ddg_total_score(self, scores, top_x):
         # total_scores = [(np.average([scores[struct_num][score_type]['total'] for score_type in scores[struct_num]]), struct_num) for struct_num in scores]
@@ -1094,8 +1098,10 @@ class BindingAffinityDDGInterface(ddG):
             for wt_struct_num, mut_struct_num in zip(top_x_wt_struct_nums, top_x_mut_struct_nums)
             ] )
 
+
     @analysis_api
     def get_analysis_dataframe(self, prediction_set_id,
+            experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
@@ -1113,165 +1119,21 @@ class BindingAffinityDDGInterface(ddG):
             allow_failures = False,
             extract_data_for_case_if_missing = True,
             ):
-        '''This function uses experimental data from the database and prediction data from the Prediction*StructureScore
-           table to build a pandas dataframe and store it in the database. See .analyze for an explanation of the
-           parameters.
 
-           The dataframes mostly contain redundant data so their storage could be seen to break a key database design
-           principal. However, we store the dataframe in the database as it can take a while to build it from scratch and
-           pre-built dataframes can be used to run quick analysis, for rapid development of the analysis methods, or to
-           plug into webservers where responsiveness is important.
-
-           If use_existing_benchmark_data is True and the dataframe already exists then it is returned as a BindingAffinityBenchmarkRun object.
-           Otherwise, it is built from the Prediction*StructureScore records.
-           If the Prediction*StructureScore records do not exist, this function falls back into extract_data_for_case
-           to generate them in which case root_directory needs to be specified (this is the only use for the root_directory
-           parameter).
-        '''
         #todo: rename function since we return BenchmarkRun objects
 
         assert(score_method_id)
         ddg_analysis_type = 'DDG_Top%d' % take_lowest
+        dataframe_type = 'Binding affinity'
 
-        hdf_store_blob = None
-        if use_existing_benchmark_data:
-            hdf_store_blob = self.DDG_db.execute_select('''
-            SELECT PandasHDFStore FROM AnalysisDataFrame WHERE
-               PredictionSet=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND BurialCutoff=%s AND
-               StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
-               IncludesDerivedMutations=%s AND DDGAnalysisType=%s''', parameters=(
-                    prediction_set_id, score_method_id, use_single_reported_value, take_lowest, burial_cutoff,
-                    stability_classication_experimental_cutoff, stability_classication_predicted_cutoff, include_derived_mutations, ddg_analysis_type))
-            if hdf_store_blob:
-                assert(len(hdf_store_blob) == 1)
-                mem_zip = StringIO.StringIO()
-                mem_zip.write(hdf_store_blob[0]['PandasHDFStore'])
-                mem_zip.seek(0)
-                hdf_store_blob = gzip.GzipFile(fileobj = mem_zip, mode='rb').read()
-
-        # This dict is similar to dataset_cases in the benchmark capture (dataset.json)
-        prediction_set_case_details = None
-        prediction_ids = []
-        if not(use_existing_benchmark_data and hdf_store_blob):
-            print('Retrieving the associated experimental data for the user dataset.')
-            prediction_set_case_details = self.get_prediction_set_case_details(prediction_set_id, retrieve_references = True)
-            prediction_ids = prediction_set_case_details['Data'].keys()
-            prediction_set_case_details = prediction_set_case_details['Data']
-
-        analysis_data = {}
-        top_level_dataframe_attributes = {}
-        if not(use_existing_benchmark_data and hdf_store_blob):
-            if extract_data_for_case_if_missing and not silent:
-                print('Computing the TopX values for each prediction case, extracting data if need be.')
-            elif not extract_data_for_case_if_missing and not silent:
-                print('Computing the TopX values for each prediction case; skipping missing data without attempting to extract.')
-            num_predictions_in_prediction_set = len(prediction_ids)
-            failed_cases = set()
-            for prediction_id in prediction_ids:
-                try:
-                    top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = take_lowest, expectn = expectn)
-                except Exception, e:
-                    colortext.pcyan(str(e))
-                    colortext.warning(traceback.format_exc())
-                    if extract_data_for_case_if_missing:
-                        self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
-                    else:
-                        if not allow_failures:
-                            raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
-                        failed_cases.add(prediction_id) 
-                try:
-                    top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = take_lowest, expectn = expectn)
-                    if not top_x_ddg:
-                        if not allow_failures:
-                            raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
-                        failed_cases.add(prediction_id)
-                    else:
-                        # best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
-                        analysis_data[prediction_id] = {
-                            ddg_analysis_type : top_x_ddg,
-                        }
-                except Exception, e:
-                    if not allow_failures:
-                        raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
-                    failed_cases.add(prediction_id)
-
-            if failed_cases:
-                colortext.error('Failed to determine the TopX score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
-            working_prediction_ids = sorted(set(prediction_ids).difference(failed_cases))
-            top_level_dataframe_attributes = dict(
-                num_predictions_in_prediction_set = num_predictions_in_prediction_set,
-                num_predictions_in_dataframe = len(working_prediction_ids)
-            )
-
-        prediction_set_details = self.get_prediction_set_details(prediction_set_id)
-        prediction_set_series_name = prediction_set_series_name or prediction_set_details['SeriesName'] or prediction_set_details['ID']
-        prediction_set_description = prediction_set_description or prediction_set_details['Description']
-        prediction_set_color = prediction_set_color or prediction_set_details['SeriesColor']
-        prediction_set_alpha = prediction_set_alpha or prediction_set_details['SeriesAlpha']
-
-        # Initialize the BindingAffinityBenchmarkRun object
-        # Note: prediction_set_case_details, analysis_data, and top_level_dataframe_attributes will not be filled in
-        benchmark_run = BindingAffinityBenchmarkRun(
-                prediction_set_series_name,
-                prediction_set_case_details,
-                analysis_data,
-                store_data_on_disk = False,
-                benchmark_run_directory = None,
-                use_single_reported_value = use_single_reported_value,
-                description = prediction_set_description,
-                dataset_description = prediction_set_description,
-                credit = prediction_set_credit,
-                include_derived_mutations = include_derived_mutations,
-                take_lowest = take_lowest,
-                generate_plots = False,
-                report_analysis = report_analysis,
-                silent = silent,
-                burial_cutoff = burial_cutoff,
-                stability_classication_x_cutoff = stability_classication_experimental_cutoff,
-                stability_classication_y_cutoff = stability_classication_predicted_cutoff,
-                use_existing_benchmark_data = False,
-                recreate_graphs = False,
-                misc_dataframe_attributes = top_level_dataframe_attributes,
-            )
-
-        if not(use_existing_benchmark_data and hdf_store_blob):
-            hdf_store_blob = benchmark_run.create_dataframe(pdb_data = self.get_prediction_set_pdb_chain_details(prediction_set_id))
-            d = dict(
-                PredictionSet                           = prediction_set_id,
-                ScoreMethodID                           = score_method_id,
-                UseSingleReportedValue                  = use_single_reported_value,
-                TopX                                    = take_lowest,
-                BurialCutoff                            = burial_cutoff,
-                StabilityClassicationExperimentalCutoff = stability_classication_experimental_cutoff,
-                StabilityClassicationPredictedCutoff    = stability_classication_predicted_cutoff,
-                IncludesDerivedMutations                = include_derived_mutations,
-                DDGAnalysisType                         = ddg_analysis_type,
-                SeriesName                              = prediction_set_series_name,
-                SeriesColor                             = prediction_set_color,
-                SeriesAlpha                             = prediction_set_alpha,
-                Description                             = prediction_set_description,
-                Credit                                  = prediction_set_credit,
-                DDGAnalysisTypeDescription              = benchmark_run.ddg_analysis_type_description,
-                PandasHDFStore                          = hdf_store_blob,
-            )
-            self.DDG_db.execute('''DELETE FROM AnalysisDataFrame WHERE PredictionSet=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND
-                                    BurialCutoff=%s AND StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
-                                    IncludesDerivedMutations=%s AND DDGAnalysisType=%s''',
-                                    parameters = (prediction_set_id, score_method_id, use_single_reported_value, take_lowest,
-                                                  burial_cutoff, stability_classication_experimental_cutoff, stability_classication_predicted_cutoff,
-                                                  include_derived_mutations, ddg_analysis_type
-                                    ))
-            self.DDG_db.insertDictIfNew('AnalysisDataFrame', d, ['PredictionSet', 'ScoreMethodID', 'UseSingleReportedValue', 'TopX', 'BurialCutoff',
-                                                                 'StabilityClassicationExperimentalCutoff', 'StabilityClassicationPredictedCutoff',
-                                                                 'IncludesDerivedMutations', 'DDGAnalysisType'])
-        else:
-            benchmark_run.read_dataframe_from_content(hdf_store_blob)
-
-        return benchmark_run
+        parameters = copy.copy(locals())
+        del parameters['self']
+        return super(BindingAffinityDDGInterface, self)._get_analysis_dataframe(BindingAffinityBenchmarkRun, **parameters)
 
 
     @analysis_api
     def analyze(self, prediction_set_ids, score_method_id,
+            experimental_data_exists = True,
             analysis_set_ids = [],
             prediction_set_series_names = {}, prediction_set_descriptions = {}, prediction_set_credits = {}, prediction_set_colors = {}, prediction_set_alphas = {},
             use_published_data = False,
@@ -1331,6 +1193,7 @@ class BindingAffinityDDGInterface(ddG):
         for prediction_set_id in prediction_set_ids:
             print(prediction_set_id)
             benchmark_run = self.get_analysis_dataframe(prediction_set_id,
+                experimental_data_exists = experimental_data_exists,
                 prediction_set_series_name = prediction_set_series_names.get(prediction_set_id),
                 prediction_set_description = prediction_set_descriptions.get(prediction_set_id),
                 prediction_set_credit = prediction_set_credits.get(prediction_set_id),
@@ -1356,10 +1219,9 @@ class BindingAffinityDDGInterface(ddG):
             if analysis_set_ids:
                 analysis_sets_to_run = set(analysis_sets_to_run).intersection(set(analysis_set_ids))
             analysis_sets_to_run = sorted(analysis_sets_to_run)
-
-            analysis_sets_to_run = ['ZEMu'] # ['BeAtMuSiC', 'SKEMPI', 'ZEMu']
-
-            # todo: this currently seems to expect all datapoints to be present
+            if experimental_data_exists:
+                #todo: hack. this currently seems to expect all datapoints to be present. handle the case when we are missing data e.g. prediction set "ZEMu run 1"
+                analysis_sets_to_run = ['ZEMu'] # ['BeAtMuSiC', 'SKEMPI', 'ZEMu']
 
             for analysis_set_id in analysis_sets_to_run:
                 colortext.message(analysis_set_id)

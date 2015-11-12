@@ -19,6 +19,7 @@ from io import BytesIO
 import os
 import zipfile
 import traceback
+import copy
 
 from api_layers import *
 from db_api import ddG
@@ -498,7 +499,10 @@ class MonomericStabilityDDGInterface(ddG):
 
     @analysis_api
     def get_analysis_dataframe(self, prediction_set_id,
+            experimental_data_exists = True,
+            create_binding_affinity_dataframe = False, # Hack added for PUBS class
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
+            prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
             use_single_reported_value = False,
@@ -508,78 +512,29 @@ class MonomericStabilityDDGInterface(ddG):
             stability_classication_predicted_cutoff = 1.0,
             report_analysis = True,
             silent = False,
-            root_directory = None,
+            root_directory = None, # where to find the prediction data on disk
             score_method_id = None,
             expectn = None,
             allow_failures = False,
+            extract_data_for_case_if_missing = True,
             ):
-        '''This function uses experimental data from the database and prediction data from the Prediction*StructureScore
-           table to build a pandas dataframe and store it in the database. See .analyze for an explanation of the
-           parameters.
 
-           The dataframes mostly contain redundant data so their storage could be seen to break a key database design
-           principal. However, we store the dataframe in the database as it can take a while to build it from scratch and
-           pre-built dataframes can be used to run quick analysis, for rapid development of the analysis methods, or to
-           plug into webservers where responsiveness is important.
-
-           If use_existing_benchmark_data is True and the dataframe already exists then it is returned as a BindingAffinityBenchmarkRun object.
-           Otherwise, it is built from the Prediction*StructureScore records.
-           If the Prediction*StructureScore records do not exist, this function falls back into extract_data_for_case
-           to generate them in which case root_directory needs to be specified (this is the only use for the root_directory
-           parameter).
-        '''
+        #todo: rename function since we return BenchmarkRun objects
 
         assert(score_method_id)
+        assert(experimental_data_exists == False) # todo: I am implementing the case needed for the PUBS class - the general case still needs to be implemented
+        ddg_analysis_type = 'DDG_Top%d' % take_lowest
 
-        dataframe = None
-        if use_existing_benchmark_data and dataframe:
-            return dataframe
+        # We allow different dataframe types as sometimes there will be no associated experimental data
+        dataframe_type = "Stability"
+        if (not experimental_data_exists) and create_binding_affinity_dataframe:
+            # A hacky case used for the PUBS year 1 results which were monomeric stability predictions rescored to be used as binding affinity predictions
+            dataframe_type = "Binding affinity"
+        assert(create_binding_affinity_dataframe == False or (not experimental_data_exists)) # Part of the PUBS hack. We cannot create this dataframe since we do not have associated experimental data
 
-        raise Exception('Implement once the new DB structure is up.')
-
-        print('Retrieving the associated experimental data for the user dataset.')
-        prediction_set_case_details = self.get_prediction_set_case_details(prediction_set_id, retrieve_references = True)
-        prediction_ids = prediction_set_case_details['Data'].keys()
-
-        print('Computing the TopX values for each prediction case, extracting data if need be.')
-        num_predictions_in_prediction_set = len(prediction_ids)
-        failed_cases = set()
-        for prediction_id in prediction_ids:
-            colortext.message(prediction_id)
-            try:
-                top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = take_lowest, expectn = expectn)
-            except:
-                self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
-            try:
-                top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = take_lowest, expectn = expectn)
-                best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
-                print(top_x_ddg, best_pair_id)
-            except Exception, e:
-                if not allow_failures:
-                    raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
-                failed_cases.add(prediction_id)
-        if failed_cases:
-            colortext.error('Failed to determine the TopX score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
-        working_prediction_ids = sorted(set(prediction_ids).difference(failed_cases))
-
-        top_level_dataframe_attributes = dict(
-            num_predictions_in_prediction_set = num_predictions_in_prediction_set,
-            num_predictions_in_dataframe = len(working_prediction_ids)
-        )
-        # For Shane: this extracts the dataset_description and dataset_cases data that DDGBenchmarkManager currently takes care of in the capture.
-        # The analysis_data variable of DDGBenchmarkManager should be compiled via queries calls to the Prediction*StructureScore table.
-
-
-        a='''prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
-        recreate_graphs = False,
-        include_derived_mutations = False,
-        use_single_reported_value = False,
-        take_lowest = 3,
-        burial_cutoff = 0.25,
-        stability_classication_experimental_cutoff = 1.0,
-        stability_classication_predicted_cutoff = 1.0,
-        report_analysis = True,
-        silent = False,'''
+        parameters = copy.copy(locals())
+        del parameters['self']
+        return super(MonomericStabilityDDGInterface, self)._get_analysis_dataframe(BindingAffinityBenchmarkRun, **parameters)
 
 
     ################################################################################################
@@ -615,7 +570,9 @@ class MonomericStabilityDDGInterface(ddG):
             if (mutant_filename in file_list) and (wildtype_filename in file_list):
                 wildtype_pdb = zipped_content.open(wildtype_filename, 'r').read()
                 mutant_pdb = zipped_content.open(mutant_filename, 'U').read()
-                chain_mapper = ScaffoldModelChainMapper.from_file_contents(wildtype_pdb, mutant_pdb)
+
+                # todo: this should be structure_1_name = 'Wildtype', structure_2_name = 'Mutant' but the underlying PyMOL script needs to be parameterized
+                chain_mapper = ScaffoldModelChainMapper.from_file_contents(wildtype_pdb, mutant_pdb, structure_1_name = 'Scaffold', structure_2_name = 'Model')
                 PyMOL_session = chain_mapper.generate_pymol_session(pymol_executable = pymol_executable)
 
             zipped_content.close()
