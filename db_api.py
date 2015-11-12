@@ -104,6 +104,9 @@ class ddG(object):
         self._get_job_fn_call_counter = {}
         self._get_job_fn_call_counter_max = ddG.GET_JOB_FN_CALL_COUNTER_MAX
 
+        # Caching dictionaries
+        self.cached_score_method_details = None
+
 
     def __del__(self):
         pass         #self.DDG_db.close()         #self.ddGDataDB.close()
@@ -636,10 +639,14 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     @informational_misc
     def get_score_method_details(self):
         '''Returns all defined ScoreMethod records.'''
-        score_methods = {}
-        for r in self.DDG_db_utf.execute_select('SELECT * FROM ScoreMethod'):
-            score_methods[r['ID']] = r
-        return score_methods
+        if self.cached_score_method_details:
+            return self.cached_score_method_details
+        else:
+            score_methods = {}
+            for r in self.DDG_db_utf.execute_select('SELECT * FROM ScoreMethod'):
+                score_methods[r['ID']] = r
+            self.cached_score_method_details = score_methods
+            return score_methods
 
 
     @informational_misc

@@ -9,16 +9,28 @@ import sys
 import shutil
 import multiprocessing
 import random
+from ddglib.ppi_api import get_interface
+import klab.cluster_template.parse_settings as parse_settings
+from klab.Reporter import Reporter
+from klab.fs.zip_util import zip_file_with_gzip
+from klab.cluster_template.write_run_file import process as write_run_file
+import time
+import getpass
 
+# Constants for cluster runs
+rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
+output_db3 = 'output.db3'
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a DDGMonomerInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
     return GenericUserInterface.generate(DDGMonomerInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
 
-
-
 class DDGMonomerInterface(BindingAffinityDDGInterface):
+    def __init__(self, passwd = None, username = None, hostname = None, rosetta_scripts_path = None, rosetta_database_path = None):
+        super(DDGMonomerInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+        self.rescore_args = {} # Stores arguments for rescoring step, to be dumped later
+
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
         '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
         '''
@@ -30,7 +42,100 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         for r in self.DDG_db.execute_select(q):
             return_set.add( r['PredictionPPIID'] )
         return return_set
+
+    def create_cluster_run_rescore_dir(self, output_dir):
+        settings = parse_settings.get_dict()
+        job_name = '%s-%s_rescore_ddg_monomer' % (time.strftime("%y%m%d"), getpass.getuser())
+        job_output_dir = os.path.join(output_dir, job_name)
+        if not os.path.isdir(job_output_dir):
+            os.makedirs(job_output_dir)
+
+        num_jobs = 0
+        for ddg_output_path in self.rescore_args:
+            for arg_tuple in self.rescore_args[ddg_output_path]:
+                num_jobs += 1
             
+        settings['scriptname'] = 'rescore_ddg_monomer'
+        settings['tasks_per_process'] = 50
+        settings['numjobs'] = num_jobs
+        settings['mem_free'] = '1.2G'
+        settings['appname'] = 'rosetta_scripts'
+        settings['output_dir'] = job_output_dir
+        job_dict = {}
+        job_data_dir = os.path.join(job_output_dir, 'data')
+        if not os.path.isdir(job_data_dir):
+            os.makedirs(job_data_dir)
+        data_protocol_path = os.path.join(job_data_dir, os.path.basename(rosetta_scripts_xml_file))
+        if not os.path.isfile(data_protocol_path):
+            shutil.copy(rosetta_scripts_xml_file, data_protocol_path)
+        rel_protocol_path = os.path.relpath(data_protocol_path, job_output_dir)
+        settings['rosetta_args_list'] = ['-inout:dbms:database_name', output_db3, '-parser:protocol', rel_protocol_path]
+
+        r = Reporter('copying/zipping ddG output PDBs', entries='PDBs')
+        print 'Total number of tasks: %d' % num_jobs
+        r.set_total_count(num_jobs)
+        for ddg_output_path in self.rescore_args:
+            for prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type in self.rescore_args[ddg_output_path]:
+                prediction_id_data_dir = os.path.join(job_data_dir, str(prediction_id))
+                if not os.path.isdir(prediction_id_data_dir):
+                    os.makedirs(prediction_id_data_dir)
+                pdb_name = os.path.basename(pdb_path)
+                if pdb_name.endswith('.gz'):
+                    pdb_name_zipped = pdb_name
+                else:
+                    pdb_name_zipped = pdb_name + '.gz'
+                data_pdb_path = os.path.join(prediction_id_data_dir, pdb_name_zipped)
+                if os.path.isfile(data_pdb_path):
+                    r.decrement_total_count()
+                else:
+                    new_pdb = os.path.join(prediction_id_data_dir, pdb_name)
+                    shutil.copy(pdb_path, new_pdb)
+                    if not new_pdb.endswith('.gz'):
+                        new_pdb = zip_file_with_gzip(new_pdb)
+                    assert( os.path.abspath(data_pdb_path) == os.path.abspath(new_pdb) )
+                    r.increment_report()
+                rel_pdb_path = os.path.relpath(data_pdb_path, job_output_dir)
+                arg_dict = {
+                    '-parser:script_vars' : ['chainstomove=%s' % chains_to_move,  'currentscorefxn=%s' % score_fxn],
+                    '-s' : rel_pdb_path,
+                }
+                job_dict['%d_%d_%s' % (prediction_id, round_num, struct_type)] = arg_dict
+        r.done()
+        write_run_file(settings, job_dict = job_dict
+
+    def add_rescore_cluster_run(self, ddg_output_path, chains_to_move, score_method_id, prediction_id):
+        structs_with_both_rounds = self.find_structs_with_both_rounds(ddg_output_path)
+
+        score_method_details = self.get_score_method_details()[score_method_id]
+        method_name = score_method_details['MethodName']
+        author = score_method_details['Authors']
+        if method_name.startswith('Rescore-') and author == 'Kyle Barlow':
+            score_fxn = method_name[8:].lower()
+        else:
+            score_fxn = 'interface'
+
+        if ddg_output_path not in self.rescore_args:
+            self.rescore_args[ddg_output_path] = []
+            
+        for round_num in structs_with_both_rounds:
+            wt_pdb, mutant_pdb = structs_with_both_rounds[round_num]
+            self.rescore_args[ddg_output_path].append([
+                prediction_id,
+                os.path.abspath(wt_pdb),
+                chains_to_move,
+                score_fxn,
+                round_num,
+                'wt'
+            ])
+            self.rescore_args[ddg_output_path].append([
+                prediction_id,
+                os.path.abspath(mutant_pdb),
+                chains_to_move,
+                score_fxn,
+                round_num,
+                'mut'
+            ])
+
     @job_completion
     def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None):
         '''Extracts the data for the prediction set run and stores it into the database.
