@@ -15,10 +15,11 @@ import shutil
 import glob
 import traceback
 import pickle
-import md5
 import random
 import datetime
 import zipfile
+import StringIO
+import gzip
 import pprint
 try:
     import magic
@@ -333,8 +334,20 @@ class ddG(object):
     @alien
     def get_flattened_prediction_results(self, PredictionSet):
         '''This is defined here as an API function but should be defined as a stored procedure.'''
-        return self.DDG_db.execute_select('''
-SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, Experiment.PDBFileID, ExperimentMutations.FlattenedMutations, Prediction.Scores, TIMEDIFF(Prediction.EndDate, Prediction.StartDate) AS TimeTaken FROM Prediction INNER JOIN
+
+        # @todo: this is the monomeric stability implementation - move this into that API
+        #Ubiquitin scan: 1UBQ p16
+        #Prediction.Scores no longer exists
+        kellogg_score_id = self.get_score_method_id('global', method_type = 'protocol 16', method_authors = 'kellogg', fuzzy = True)
+        noah_score_id = self.get_score_method_id('local', method_type = 'position', method_parameters = '8Å radius', method_authors = 'Noah Ollikainen', fuzzy = False)
+
+        score_ids = {}
+        score_ids['kellogg'] = kellogg_score_id
+        score_ids['noah8A'] = noah_score_id
+
+        records = self.DDG_db.execute_select('''
+SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, Experiment.PDBFileID, ExperimentMutations.FlattenedMutations, TIMEDIFF(Prediction.EndDate, Prediction.StartDate) AS TimeTaken, PredictionStructureScore.ScoreMethodID, PredictionStructureScore.DDG
+FROM Prediction INNER JOIN
 (
   SELECT ExperimentID, GROUP_CONCAT(Mutation SEPARATOR ', ') AS FlattenedMutations FROM
   (
@@ -344,10 +357,11 @@ SELECT Prediction.ID AS PredictionID, Prediction.ExperimentID, Experiment.PDBFil
 ) AS ExperimentMutations
 ON Prediction.ExperimentID=ExperimentMutations.ExperimentID
 INNER JOIN Experiment ON Prediction.ExperimentID=Experiment.ID
-WHERE Prediction.PredictionSet=%s AND Prediction.Scores IS NOT NULL
-ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
+INNER JOIN PredictionStructureScore ON Prediction.ID=PredictionStructureScore.PredictionID
+WHERE Prediction.PredictionSet=%s AND Prediction.Status="done" AND ScoreType="DDG" AND StructureID=-1 AND (ScoreMethodID=%s OR ScoreMethodID=%s)
+ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_score_id))
 
-
+        return records, score_ids
 
     #== Broken functions ====================================================================
 
@@ -989,18 +1003,20 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
 
     @informational_job
-    def get_prediction_set_case_details(self, prediction_set_id, retrieve_references = True):
+    def get_prediction_set_case_details(self, prediction_set_id, retrieve_references = True, include_experimental_data = True):
         '''Returns a dict containing the case information for prediction cases in the prediction set with a structure
            expected by the analysis class.'''
 
         # Read the Prediction details
         reference_ids = set()
         prediction_ids = self.get_prediction_ids(prediction_set_id)
-        userdatset_experiment_ids_to_subset_ddgs = self.get_experimental_ddgs_by_analysis_set(reference_ids = reference_ids)
+        userdatset_experiment_ids_to_subset_ddgs = {}
+        if include_experimental_data:
+            userdatset_experiment_ids_to_subset_ddgs = self.get_experimental_ddgs_by_analysis_set(reference_ids = reference_ids)
 
         prediction_cases = {}
         for prediction_id in prediction_ids:
-            prediction_cases[prediction_id] = self.get_predictions_experimental_details(prediction_id, userdatset_experiment_ids_to_subset_ddgs)
+            prediction_cases[prediction_id] = self.get_predictions_experimental_details(prediction_id, userdatset_experiment_ids_to_subset_ddgs, include_experimental_data = include_experimental_data)
 
         references = {}
         if retrieve_references:
@@ -1539,7 +1555,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
     ###########################################################################################
 
     @analysis_api
-    def get_prediction_scores(self, prediction_id):
+    def get_prediction_scores(self, prediction_id, expectn = None):
         '''Returns the scores for the prediction using nested dicts with the structure:
                 ScoreMethodID -> StructureID -> ScoreType -> database record
         '''
@@ -1558,6 +1574,16 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             del scores[ScoreMethodID][StructureID][ScoreType]['ScoreType']
             del scores[ScoreMethodID][StructureID][ScoreType][self._get_prediction_id_field()]
             del scores[ScoreMethodID][StructureID][ScoreType]['ID']
+
+        if expectn != None:
+            for score_method_id, score_method_scores in scores.iteritems():
+                num_cases = 0
+                for k in score_method_scores.keys():
+                    if isinstance(k, int) or isinstance(k, long):
+                        num_cases += 1
+                if num_cases != expectn:
+                    raise Exception('Expected scores for {0} runs with score method {1}; found {2}.'.format(expectn, score_method_id, num_cases))
+
         return scores
 
 
@@ -1570,6 +1596,7 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
 
     @analysis_api
     def get_analysis_dataframe(self, prediction_set_id,
+            experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
@@ -1581,10 +1608,11 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
             stability_classication_predicted_cutoff = 1.0,
             report_analysis = True,
             silent = False,
-            root_directory = None,
+            root_directory = None, # where to find the prediction data on disk
             score_method_id = None,
             expectn = None,
             allow_failures = False,
+            extract_data_for_case_if_missing = True,
             ):
         '''This function uses experimental data from the database and prediction data from the Prediction*StructureScore
            table to build a pandas dataframe and store it in the database. See .analyze for an explanation of the
@@ -1602,6 +1630,160 @@ ORDER BY Prediction.ExperimentID''', parameters=(PredictionSet,))
            parameter).
         '''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @analysis_api
+    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None):
+        '''Returns a dictionary with values relevant to predictions e.g. binding affinity, monomeric stability.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    def _get_analysis_dataframe(self, benchmark_run_class,
+            dataframe_type = None,
+            prediction_set_id = None,
+            experimental_data_exists = True,
+            prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
+            prediction_set_color = None, prediction_set_alpha = None,
+            use_existing_benchmark_data = True,
+            include_derived_mutations = False,
+            use_single_reported_value = False,
+            take_lowest = 3,
+            burial_cutoff = 0.25,
+            stability_classication_experimental_cutoff = 1.0,
+            stability_classication_predicted_cutoff = 1.0,
+            report_analysis = True,
+            silent = False,
+            root_directory = None, # where to find the prediction data on disk
+            score_method_id = None,
+            expectn = None,
+            allow_failures = False,
+            extract_data_for_case_if_missing = True):
+        '''This 'private' function does most of the work for get_analysis_dataframe.'''
+
+        ddg_analysis_type = 'DDG_Top%d' % take_lowest
+        assert(dataframe_type != None and prediction_set_id != None)
+        hdf_store_blob = None
+        if use_existing_benchmark_data:
+            hdf_store_blob = self.DDG_db.execute_select('''
+            SELECT PandasHDFStore FROM AnalysisDataFrame WHERE
+               PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND BurialCutoff=%s AND
+               StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
+               IncludesDerivedMutations=%s AND DDGAnalysisType=%s''', parameters=(
+                    prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, take_lowest, burial_cutoff,
+                    stability_classication_experimental_cutoff, stability_classication_predicted_cutoff, include_derived_mutations, ddg_analysis_type))
+            if hdf_store_blob:
+                assert(len(hdf_store_blob) == 1)
+                mem_zip = StringIO.StringIO()
+                mem_zip.write(hdf_store_blob[0]['PandasHDFStore'])
+                mem_zip.seek(0)
+                hdf_store_blob = gzip.GzipFile(fileobj = mem_zip, mode='rb').read()
+
+        # This dict is similar to dataset_cases in the benchmark capture (dataset.json)
+        prediction_set_case_details = None
+        prediction_ids = []
+        if not(use_existing_benchmark_data and hdf_store_blob):
+            print('Retrieving the associated experimental data for the user dataset.')
+            prediction_set_case_details = self.get_prediction_set_case_details(prediction_set_id, retrieve_references = True, include_experimental_data = experimental_data_exists)
+            prediction_ids = prediction_set_case_details['Data'].keys()
+            prediction_set_case_details = prediction_set_case_details['Data']
+
+        analysis_data = {}
+        top_level_dataframe_attributes = {}
+        if not(use_existing_benchmark_data and hdf_store_blob):
+            if extract_data_for_case_if_missing and not silent:
+                print('Computing the TopX values for each prediction case, extracting data if need be.')
+            elif not extract_data_for_case_if_missing and not silent:
+                print('Computing the TopX values for each prediction case; skipping missing data without attempting to extract.')
+            num_predictions_in_prediction_set = len(prediction_ids)
+            failed_cases = set()
+            for prediction_id in prediction_ids:
+                try:
+                    analysis_data[prediction_id] = self.get_prediction_data(prediction_id, score_method_id, ddg_analysis_type, top_x = take_lowest, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory)
+                except Exception, e:
+                    if not allow_failures:
+                        raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
+                    failed_cases.add(prediction_id)
+
+                # best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
+
+            if failed_cases:
+                colortext.error('Failed to determine the TopX score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
+            working_prediction_ids = sorted(set(prediction_ids).difference(failed_cases))
+            top_level_dataframe_attributes = dict(
+                num_predictions_in_prediction_set = num_predictions_in_prediction_set,
+                num_predictions_in_dataframe = len(working_prediction_ids),
+                dataframe_type = dataframe_type,
+                contains_experimental_data = experimental_data_exists,
+            )
+
+        prediction_set_details = self.get_prediction_set_details(prediction_set_id)
+        prediction_set_series_name = prediction_set_series_name or prediction_set_details['SeriesName'] or prediction_set_details['ID']
+        prediction_set_description = prediction_set_description or prediction_set_details['Description']
+        prediction_set_color = prediction_set_color or prediction_set_details['SeriesColor']
+        prediction_set_alpha = prediction_set_alpha or prediction_set_details['SeriesAlpha']
+
+        # Initialize the BindingAffinityBenchmarkRun object
+        # Note: prediction_set_case_details, analysis_data, and top_level_dataframe_attributes will not be filled in
+        benchmark_run = benchmark_run_class(
+                prediction_set_series_name,
+                prediction_set_case_details,
+                analysis_data,
+                contains_experimental_data = experimental_data_exists,
+                store_data_on_disk = False,
+                benchmark_run_directory = None,
+                use_single_reported_value = use_single_reported_value,
+                description = prediction_set_description,
+                dataset_description = prediction_set_description,
+                credit = prediction_set_credit,
+                include_derived_mutations = include_derived_mutations,
+                take_lowest = take_lowest,
+                generate_plots = False,
+                report_analysis = report_analysis,
+                silent = silent,
+                burial_cutoff = burial_cutoff,
+                stability_classication_x_cutoff = stability_classication_experimental_cutoff,
+                stability_classication_y_cutoff = stability_classication_predicted_cutoff,
+                use_existing_benchmark_data = False,
+                recreate_graphs = False,
+                misc_dataframe_attributes = top_level_dataframe_attributes,
+            )
+
+        if not(use_existing_benchmark_data and hdf_store_blob):
+            hdf_store_blob = benchmark_run.create_dataframe(pdb_data = self.get_prediction_set_pdb_chain_details(prediction_set_id))
+            d = dict(
+                PredictionSet                           = prediction_set_id,
+                DataFrameType                           = dataframe_type,
+                ContainsExperimentalData                = experimental_data_exists,
+                ScoreMethodID                           = score_method_id,
+                UseSingleReportedValue                  = use_single_reported_value,
+                TopX                                    = take_lowest,
+                BurialCutoff                            = burial_cutoff,
+                StabilityClassicationExperimentalCutoff = stability_classication_experimental_cutoff,
+                StabilityClassicationPredictedCutoff    = stability_classication_predicted_cutoff,
+                IncludesDerivedMutations                = include_derived_mutations,
+                DDGAnalysisType                         = ddg_analysis_type,
+                SeriesName                              = prediction_set_series_name,
+                SeriesColor                             = prediction_set_color,
+                SeriesAlpha                             = prediction_set_alpha,
+                Description                             = prediction_set_description,
+                Credit                                  = prediction_set_credit,
+                DDGAnalysisTypeDescription              = benchmark_run.ddg_analysis_type_description,
+                PandasHDFStore                          = hdf_store_blob,
+            )
+            self.DDG_db.execute('''DELETE FROM AnalysisDataFrame WHERE PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND
+                                    BurialCutoff=%s AND StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
+                                    IncludesDerivedMutations=%s AND DDGAnalysisType=%s''',
+                                    parameters = (prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, take_lowest,
+                                                  burial_cutoff, stability_classication_experimental_cutoff, stability_classication_predicted_cutoff,
+                                                  include_derived_mutations, ddg_analysis_type
+                                    ))
+            self.DDG_db.insertDictIfNew('AnalysisDataFrame', d, ['PredictionSet', 'DataFrameType', 'ContainsExperimentalData', 'ScoreMethodID', 'UseSingleReportedValue', 'TopX', 'BurialCutoff',
+                                                                 'StabilityClassicationExperimentalCutoff', 'StabilityClassicationPredictedCutoff',
+                                                                 'IncludesDerivedMutations', 'DDGAnalysisType'])
+        else:
+            benchmark_run.read_dataframe_from_content(hdf_store_blob)
+
+        return benchmark_run
 
         # if use_existing_benchmark_data and dataframe exists: return dataframe
         # else retrieve all of the Score records from the database

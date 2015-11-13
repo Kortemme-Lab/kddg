@@ -13,6 +13,8 @@ Created by Shane O'Connor 2015.
 Copyright (c) 2015 __UCSF__. All rights reserved.
 """
 
+from klab.stats.misc import _get_xy_dataset_statistics as get_xy_dataset_correlations
+
 class AnalysisBreakdown(object):
 
     def __init__(self, amino_acids, pdb_details, predictions, analysis_datasets):
