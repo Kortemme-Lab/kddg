@@ -12,6 +12,7 @@ import random
 from ddglib.ppi_api import get_interface
 import klab.cluster_template.parse_settings as parse_settings
 from klab.Reporter import Reporter
+from klab.MultiWorker import MultiWorker
 from klab.fs.zip_util import zip_file_with_gzip
 from klab.cluster_template.write_run_file import process as write_run_file
 import time
@@ -20,6 +21,7 @@ import getpass
 # Constants for cluster runs
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
 output_db3 = 'output.db3'
+setup_run_with_multiprocessing = True
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a DDGMonomerInterface object. It hides the private methods
@@ -58,7 +60,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         settings['scriptname'] = 'rescore_ddg_monomer'
         settings['tasks_per_process'] = 50
         settings['numjobs'] = num_jobs
-        settings['mem_free'] = '1.2G'
+        settings['mem_free'] = '1.4G'
         settings['appname'] = 'rosetta_scripts'
         settings['output_dir'] = job_output_dir
         job_dict = {}
@@ -69,39 +71,32 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         if not os.path.isfile(data_protocol_path):
             shutil.copy(rosetta_scripts_xml_file, data_protocol_path)
         rel_protocol_path = os.path.relpath(data_protocol_path, job_output_dir)
-        settings['rosetta_args_list'] = ['-inout:dbms:database_name', output_db3, '-parser:protocol', rel_protocol_path]
+        settings['rosetta_args_list'] = ['-inout:dbms:database_name', output_db3]
 
         r = Reporter('copying/zipping ddG output PDBs', entries='PDBs')
         print 'Total number of tasks: %d' % num_jobs
         r.set_total_count(num_jobs)
+
+
+        if setup_run_with_multiprocessing:
+            worker = MultiWorker(process_cluster_rescore_helper, n_cpu=min(multiprocessing.cpu_count(), 16), reporter=r)
+
         for ddg_output_path in self.rescore_args:
             for prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type in self.rescore_args[ddg_output_path]:
-                prediction_id_data_dir = os.path.join(job_data_dir, str(prediction_id))
-                if not os.path.isdir(prediction_id_data_dir):
-                    os.makedirs(prediction_id_data_dir)
-                pdb_name = os.path.basename(pdb_path)
-                if pdb_name.endswith('.gz'):
-                    pdb_name_zipped = pdb_name
+                if setup_run_with_multiprocessing:
+                    worker.addJob( (ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path ) )
                 else:
-                    pdb_name_zipped = pdb_name + '.gz'
-                data_pdb_path = os.path.join(prediction_id_data_dir, pdb_name_zipped)
-                if os.path.isfile(data_pdb_path):
-                    r.decrement_total_count()
-                else:
-                    new_pdb = os.path.join(prediction_id_data_dir, pdb_name)
-                    shutil.copy(pdb_path, new_pdb)
-                    if not new_pdb.endswith('.gz'):
-                        new_pdb = zip_file_with_gzip(new_pdb)
-                    assert( os.path.abspath(data_pdb_path) == os.path.abspath(new_pdb) )
+                    task_name, arg_dict = process_cluster_rescore_helper( ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path )
+                    job_dict[task_name] = arg_dict
                     r.increment_report()
-                rel_pdb_path = os.path.relpath(data_pdb_path, job_output_dir)
-                arg_dict = {
-                    '-parser:script_vars' : ['chainstomove=%s' % chains_to_move,  'currentscorefxn=%s' % score_fxn],
-                    '-s' : rel_pdb_path,
-                }
-                job_dict['%d_%d_%s' % (prediction_id, round_num, struct_type)] = arg_dict
-        r.done()
-        write_run_file(settings, job_dict = job_dict
+
+        if setup_run_with_multiprocessing:
+            worker.finishJobs()
+            for task_name, arg_dict in worker.data:
+                job_dict[task_name] = arg_dict
+        else:
+            r.done()
+        write_run_file(settings, job_dict = job_dict)
 
     def add_rescore_cluster_run(self, ddg_output_path, chains_to_move, score_method_id, prediction_id):
         structs_with_both_rounds = self.find_structs_with_both_rounds(ddg_output_path)
@@ -298,3 +293,28 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 raise Exception('Matched too many score rows')
         score_dict['StructureID'] = round_num
         return score_dict
+
+def process_cluster_rescore_helper(ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path):
+    task_name = '%d_%d_%s' % (prediction_id, round_num, struct_type)
+    prediction_id_data_dir = os.path.join(job_data_dir, task_name)
+    pdb_name = os.path.basename(pdb_path)
+    if pdb_name.endswith('.gz'):
+        pdb_name_zipped = pdb_name
+    else:
+        pdb_name_zipped = pdb_name + '.gz'
+    data_pdb_path = os.path.join(prediction_id_data_dir, pdb_name_zipped)
+    if not os.path.isdir(prediction_id_data_dir):
+        os.mkdir(prediction_id_data_dir)
+        new_pdb = os.path.join(prediction_id_data_dir, pdb_name)
+        shutil.copy(pdb_path, new_pdb)
+        if not new_pdb.endswith('.gz'):
+            new_pdb = zip_file_with_gzip(new_pdb)
+        assert( os.path.abspath(data_pdb_path) == os.path.abspath(new_pdb) )
+
+    rel_pdb_path = os.path.relpath(data_pdb_path, job_output_dir)
+    arg_dict = {
+        '-parser:script_vars' : ['chainstomove=%s' % chains_to_move,  'currentscorefxn=%s' % score_fxn],
+        '-s' : rel_pdb_path,
+        '-parser:protocol' : rel_protocol_path,
+    }
+    return (task_name, arg_dict)
