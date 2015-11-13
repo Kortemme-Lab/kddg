@@ -1432,8 +1432,9 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
            PredictionPPIStructureScore records.
            This function uses a transaction so if any of the insertions fail then they are all rolled back.
 
-           The deafult scores table and prediction_id_field can be (evilly) overrideden to put scores in the wrong table
+           The default scores table and prediction_id_field can be (evilly) overridden to put scores in the wrong table
            '''
+        print 'store_scores', prediction_id, scores
         if prediction_set:
             # Only check prediction is in prediction set if prediction set is passed in
             self._check_prediction(prediction_id, prediction_set)
