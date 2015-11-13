@@ -186,7 +186,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         root_directory = root_directory or self.prediction_data_path
         if not ddg_output_path:
             ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
-        structs_with_both_rounds = find_structs_with_both_rounds(ddg_output_path)
+        structs_with_both_rounds = self.find_structs_with_both_rounds(ddg_output_path)
 
         scores = []
         output_db3s = {}
