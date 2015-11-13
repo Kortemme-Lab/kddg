@@ -1056,27 +1056,45 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
+    def determine_best_pair(self, prediction_id, score_method_id, expectn = None, returnn = 1):
+        '''This returns the best wildtype/mutant pair for a prediction given a scoring method. NOTE: Consider generalising this to the n best pairs.'''
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        pprint.pprint(scores)
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
+    @analysis_api
+    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None):
+        try:
+            top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+        except Exception, e:
+            colortext.pcyan(str(e))
+            colortext.warning(traceback.format_exc())
+            if extract_data_for_case_if_missing:
+                self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
+            top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+
+        top_x_ddg_stability = self.get_top_x_ddg_stability(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+        return {
+            main_ddg_analysis_type : top_x_ddg,
+            'DDGStability_Top%d' % top_x : top_x_ddg_stability,
+        }
+
+
+    @analysis_api
     def get_top_x_ddg(self, prediction_id, score_method_id, top_x = 3, expectn = None):
         '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
            case computed using the associated Score records in the database.'''
 
-        # Make sure that we have as many cases as we expect
-        scores = self.get_prediction_scores(prediction_id).get(score_method_id)
-        if expectn != None:
-            num_cases = 0
-            for k in scores.keys():
-                if isinstance(k, int) or isinstance(k, long):
-                    num_cases += 1
-            if num_cases != expectn:
-                raise Exception('Expected scores for {0} runs; found {1}.'.format(expectn, num_cases))
-
-        return self.get_top_x_ddg_total_score(scores, top_x)
-
-        # Kyle - start here
         # scores is a mapping from nstruct -> ScoreType -> score record where ScoreType is one of 'DDG', 'WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex'
-        # if you are going to do the calculation in Python, pull scores out to the top level
+        # if we do the calculation in Python, pull scores out to the top level first
         # otherwise, we can add a stored procedure to determine the TopX
         # if we go the Python route, we can implement different variations on TopX (including a stored procedure) and pass the function pointers as an argument to the main analysis function
+
+        # Make sure that we have as many cases as we expect
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        # todo: move get_top_x_ddg_total_score into this function
+        return self.get_top_x_ddg_total_score(scores, top_x)
 
 
     def get_top_x_ddg_total_score(self, scores, top_x):
@@ -1097,6 +1115,26 @@ class BindingAffinityDDGInterface(ddG):
             (scores[wt_struct_num]['WildTypeComplex']['total'] - scores[wt_struct_num]['WildTypeLPartner']['total'] - scores[wt_struct_num]['WildTypeRPartner']['total'])
             for wt_struct_num, mut_struct_num in zip(top_x_wt_struct_nums, top_x_mut_struct_nums)
             ] )
+
+
+    @analysis_api
+    def get_top_x_ddg_stability(self, prediction_id, score_method_id, top_x = 3, expectn = None):
+        '''Returns the TopX value for the prediction only considering the complex scores. This computation may work as a
+           measure of a stability DDG value.'''
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        if scores == None:
+            return None
+
+        wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
+        wt_total_scores.sort()
+        top_x_wt_struct_nums = [t[1] for t in wt_total_scores[:top_x]]
+
+        mut_total_scores = [(scores[struct_num]['MutantComplex']['total'], struct_num) for struct_num in scores]
+        mut_total_scores.sort()
+        top_x_mut_struct_nums = [t[1] for t in mut_total_scores[:top_x]]
+
+        return np.average([scores[mut_struct_num]['MutantComplex']['total'] - scores[wt_struct_num]['WildTypeComplex']['total']
+                           for wt_struct_num, mut_struct_num in zip(top_x_wt_struct_nums, top_x_mut_struct_nums)])
 
 
     @analysis_api
@@ -1123,7 +1161,6 @@ class BindingAffinityDDGInterface(ddG):
         #todo: rename function since we return BenchmarkRun objects
 
         assert(score_method_id)
-        ddg_analysis_type = 'DDG_Top%d' % take_lowest
         dataframe_type = 'Binding affinity'
 
         parameters = copy.copy(locals())

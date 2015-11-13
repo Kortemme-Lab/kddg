@@ -1534,7 +1534,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     ###########################################################################################
 
     @analysis_api
-    def get_prediction_scores(self, prediction_id):
+    def get_prediction_scores(self, prediction_id, expectn = None):
         '''Returns the scores for the prediction using nested dicts with the structure:
                 ScoreMethodID -> StructureID -> ScoreType -> database record
         '''
@@ -1553,6 +1553,16 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             del scores[ScoreMethodID][StructureID][ScoreType]['ScoreType']
             del scores[ScoreMethodID][StructureID][ScoreType][self._get_prediction_id_field()]
             del scores[ScoreMethodID][StructureID][ScoreType]['ID']
+
+        if expectn != None:
+            for score_method_id, score_method_scores in scores.iteritems():
+                num_cases = 0
+                for k in score_method_scores.keys():
+                    if isinstance(k, int) or isinstance(k, long):
+                        num_cases += 1
+                if num_cases != expectn:
+                    raise Exception('Expected scores for {0} runs with score method {1}; found {2}.'.format(expectn, score_method_id, num_cases))
+
         return scores
 
 
@@ -1601,9 +1611,14 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 
+    @analysis_api
+    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None):
+        '''Returns a dictionary with values relevant to predictions e.g. binding affinity, monomeric stability.'''
+        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+
+
     def _get_analysis_dataframe(self, benchmark_run_class,
             dataframe_type = None,
-            ddg_analysis_type = None,
             prediction_set_id = None,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
@@ -1622,8 +1637,10 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             expectn = None,
             allow_failures = False,
             extract_data_for_case_if_missing = True):
+        '''This 'private' function does most of the work for get_analysis_dataframe.'''
 
-        assert(dataframe_type != None and ddg_analysis_type != None and prediction_set_id != None)
+        ddg_analysis_type = 'DDG_Top%d' % take_lowest
+        assert(dataframe_type != None and prediction_set_id != None)
         hdf_store_blob = None
         if use_existing_benchmark_data:
             hdf_store_blob = self.DDG_db.execute_select('''
@@ -1660,31 +1677,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             failed_cases = set()
             for prediction_id in prediction_ids:
                 try:
-                    top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = take_lowest, expectn = expectn)
-                except Exception, e:
-                    colortext.pcyan(str(e))
-                    colortext.warning(traceback.format_exc())
-                    if extract_data_for_case_if_missing:
-                        self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
-                    else:
-                        if not allow_failures:
-                            raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
-                        failed_cases.add(prediction_id)
-                try:
-                    top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = take_lowest, expectn = expectn)
-                    if not top_x_ddg:
-                        if not allow_failures:
-                            raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
-                        failed_cases.add(prediction_id)
-                    else:
-                        # best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
-                        analysis_data[prediction_id] = {
-                            ddg_analysis_type : top_x_ddg,
-                        }
+                    analysis_data[prediction_id] = self.get_prediction_data(prediction_id, score_method_id, ddg_analysis_type, top_x = take_lowest, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory)
                 except Exception, e:
                     if not allow_failures:
                         raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
                     failed_cases.add(prediction_id)
+
+                # best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
 
             if failed_cases:
                 colortext.error('Failed to determine the TopX score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
