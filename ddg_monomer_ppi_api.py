@@ -340,7 +340,8 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
 
         for prediction_id, round_num in db3_files_to_process:
             wt_output_db3, mut_output_db3 = available_db3_files[(prediction_id, round_num)]
-            self.read_db3_scores_helper(prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field)
+            args, kwargs = self.read_db3_scores_helper(prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field)
+            self.store_scores(*args, **kwargs)
             r.increment_report()
         r.done()
         # worker.finishJobs()
