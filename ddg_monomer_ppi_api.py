@@ -13,10 +13,11 @@ from ddglib.ppi_api import get_interface
 import klab.cluster_template.parse_settings as parse_settings
 from klab.Reporter import Reporter
 from klab.MultiWorker import MultiWorker
-from klab.fs.zip_util import zip_file_with_gzip
+from klab.fs.zip_util import zip_file_with_gzip, unzip_file
 from klab.cluster_template.write_run_file import process as write_run_file
 import time
 import getpass
+import tempfile
 
 # Constants for cluster runs
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
@@ -132,7 +133,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             ])
 
     @job_completion
-    def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None):
+    def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None, max_prediction_ids_to_process=None):
         '''Extracts the data for the prediction set run and stores it into the database.
 
            For all PredictionIDs associated with the PredictionSet:
@@ -156,10 +157,15 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
 
         random.shuffle( prediction_ids )
         print '%d prediction_ids to process' % len(prediction_ids)
+        processed_count = 0
         for prediction_id in prediction_ids:
             ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
             if os.path.isdir( ddg_output_path ):
                 self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force, score_method_id = score_method_id)
+                processed_count += 1
+            if max_prediction_ids_to_process and processed_count >= max_prediction_ids_to_process:
+                print 'Breaking early; processed %d prediction ids' % processed_count
+                break
 
     def find_structs_with_both_rounds(self, ddg_output_path):
         '''Searchs directory ddg_output_path to find ddg_monomer output structures for all rounds with both wt and mut structures'''
@@ -276,6 +282,14 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         return output_db3
 
     def add_scores_from_db3_file(self, db3_file, struct_id, round_num, score_dict):
+        if db3_file.endswith('.gz'):
+            tmp_dir = tempfile.mkdtemp(prefix='unzip_db3_')
+            new_db3_path = os.path.join(tmp_dir, os.path.basename(db3_file))
+            shutil.copy(db3_file, new_db3_path)
+            db3_file = unzip_file(new_db3_path)
+        else:
+            tmp_dir = None
+
         conn = sqlite3.connect(db3_file)
         c = conn.cursor()
         score_types = set()
@@ -292,6 +306,9 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             elif len(score_rows) > 1:
                 raise Exception('Matched too many score rows')
         score_dict['StructureID'] = round_num
+        conn.close()
+        if tmp_dir:
+            shutil.rmtree(tmp_dir)
         return score_dict
 
 def process_cluster_rescore_helper(ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path):
