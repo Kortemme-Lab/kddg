@@ -8,6 +8,7 @@ Created by Shane O'Connor 2012.
 Copyright (c) 2012 __UCSF__. All rights reserved.
 """
 
+import sys
 import os
 import string
 import re
@@ -107,6 +108,9 @@ class ddG(object):
         # If the API is misused then get_job may be called infinitely on one job - this is meant to protect against that
         self._get_job_fn_call_counter = {}
         self._get_job_fn_call_counter_max = ddG.GET_JOB_FN_CALL_COUNTER_MAX
+
+        # Caching dictionaries
+        self.cached_score_method_details = None
 
 
     def __del__(self):
@@ -653,10 +657,14 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     @informational_misc
     def get_score_method_details(self):
         '''Returns all defined ScoreMethod records.'''
-        score_methods = {}
-        for r in self.DDG_db_utf.execute_select('SELECT * FROM ScoreMethod'):
-            score_methods[r['ID']] = r
-        return score_methods
+        if self.cached_score_method_details:
+            return self.cached_score_method_details
+        else:
+            score_methods = {}
+            for r in self.DDG_db_utf.execute_select('SELECT * FROM ScoreMethod'):
+                score_methods[r['ID']] = r
+            self.cached_score_method_details = score_methods
+            return score_methods
 
 
     @informational_misc
@@ -698,9 +706,12 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @informational_misc
-    def get_score_dict(self, prediction_id = None, score_method_id = None, score_type = None, structure_id = None):
+    def get_score_dict(self, prediction_id = None, score_method_id = None, score_type = None, structure_id = None, prediction_structure_scores_table = None, prediction_id_field = None):
         '''Returns a dict with keys for all fields in the Score table. The optional arguments can be used to set the
            corresponding fields of the dict. All other fields are set to None.'''
+
+        prediction_structure_scores_table = prediction_structure_scores_table or self._get_prediction_structure_scores_table()
+        prediction_id_field = prediction_id_field or self._get_prediction_id_field()
 
         # Relax the typing
         if structure_id: structure_id = int(structure_id)
@@ -711,9 +722,9 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             if  score_type not in allowed_score_types:
                 raise Exception('"{0}" is not an allowed score type. Allowed types are: "{1}".'.format(score_type, '", "'.join(sorted(allowed_score_types))))
 
-        fieldnames = set([f for f in self.DDG_db.FieldNames.__dict__[self._get_prediction_structure_scores_table()].__dict__.keys() if not(f.startswith('_'))])
+        fieldnames = set([f for f in self.DDG_db.FieldNames.__dict__[prediction_structure_scores_table].__dict__.keys() if not(f.startswith('_'))])
         d = dict.fromkeys(fieldnames, None)
-        d[self._get_prediction_id_field()] = prediction_id
+        d[prediction_id_field] = prediction_id
         d['ScoreMethodID'] = score_method_id
         d['ScoreType'] = score_type
         d['StructureID'] = structure_id
@@ -1400,41 +1411,83 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @job_completion
-    def store_scores_for_many_predictions(self, prediction_set, scores, safe = True):
+    def store_scores_for_many_predictions(self, prediction_set, scores, safe = True, prediction_structure_scores_table = None, prediction_id_field = None):
         '''Stores scores for many predictions.
            scores should be a list of dicts suitable for database storage e.g. PredictionStructureScore or
            PredictionPPIStructureScore records.
-           Note: This function is not very clever - it does not group scores per prediction and it creates garbage (the [score] list).
         '''
 
-        prediction_id_field = self._get_prediction_id_field()
+        prediction_id_field = prediction_id_field or self._get_prediction_id_field()
+        prediction_structure_scores_table = prediction_structure_scores_table or self._get_prediction_structure_scores_table()
+        
         if safe:
             # Sanity checks
             for score in scores:
                 if prediction_id_field not in score:
                     raise Exception('The score record is missing a {0} field: {1}.'.format(prediction_id_field, pprint.pformat(score)))
                 self._check_prediction(score[prediction_id_field], prediction_set)
+        con = self.DDG_db.connection
+        cursor = con.cursor()
+        sql_query = None
+        if safe:
+            params_to_insert = set()
+        else:
+            params_to_insert = []
         for score in scores:
-            self.store_scores(prediction_set, score[prediction_id_field], [score])
+            if safe:
+                sql, params, record_exists = self.DDG_db.create_insert_dict_string(prediction_structure_scores_table, score, PKfields = [prediction_id_field, 'ScoreMethodID', 'ScoreType', 'StructureID'], check_existing = True)
+            else:
+                sql, params, record_exists = self.DDG_db.create_insert_dict_string(prediction_structure_scores_table, score, PKfields = [prediction_id_field, 'ScoreMethodID', 'ScoreType', 'StructureID'], check_existing = False)
+                
+            if sql_query:
+                assert( sql == sql_query )
+            else:
+                sql_query = sql
+            if safe:
+                if params in params_to_insert or record_exists:
+                    print params
+                    print params_list
+                    raise Exception('Duplicate params')
+                params_to_insert.add(params)
+            else:
+                params_to_insert.append(params)
 
-
+        with con:
+            db_cursor = con.cursor()
+            if safe:
+                db_cursor.executemany(sql_query, [x for x in params_to_insert])
+            else:
+                # print params_to_insert
+                db_cursor.executemany(sql_query, params_to_insert)
+           
     @job_completion
-    def store_scores(self, prediction_set, prediction_id, scores):
+    def store_scores(self, prediction_set, prediction_id, scores, prediction_structure_scores_table = None, prediction_id_field = None):
         '''Stores scores for one prediction.
            scores should be a list of dicts suitable for database storage e.g. PredictionStructureScore or
            PredictionPPIStructureScore records.
            This function uses a transaction so if any of the insertions fail then they are all rolled back.
-           '''
-        self._check_prediction(prediction_id, prediction_set)
-        self._check_scores_for_main_fields(scores, prediction_id)
-        self._check_score_fields(scores)
 
+           The default scores table and prediction_id_field can be (evilly) overridden to put scores in the wrong table
+           '''
+        if prediction_set:
+            # Only check prediction is in prediction set if prediction set is passed in
+            self._check_prediction(prediction_id, prediction_set)
+        if prediction_id_field == None:
+            # Only check for self-consistency if we're not (evilly) overriding everything that is good in the world
+            self._check_scores_for_main_fields(scores, prediction_id)
+        if prediction_structure_scores_table == None:
+            # Only check for self-consistency if we're not (evilly) overriding everything our forefathers died for
+            self._check_score_fields(scores)
+
+        prediction_structure_scores_table = prediction_structure_scores_table or self._get_prediction_structure_scores_table()
+        prediction_id_field = prediction_id_field or self._get_prediction_id_field()
+        
         try:
             con = self.DDG_db.connection
             with con:
                 db_cursor = con.cursor()
                 for score in scores:
-                    sql, params, record_exists = self.DDG_db.create_insert_dict_string(self._get_prediction_structure_scores_table(), score, PKfields = [self._get_prediction_id_field(), 'ScoreMethodID', 'ScoreType', 'StructureID'], check_existing = True)
+                    sql, params, record_exists = self.DDG_db.create_insert_dict_string(prediction_structure_scores_table, score, PKfields = [prediction_id_field, 'ScoreMethodID', 'ScoreType', 'StructureID'], check_existing = True)
                     if not record_exists:
                         db_cursor.execute(sql, params)
         except Exception, e:
