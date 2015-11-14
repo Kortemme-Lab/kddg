@@ -20,6 +20,7 @@ import time
 import getpass
 import tempfile
 import cPickle as pickle
+import copy
 
 # Constants for cluster runs
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
@@ -286,7 +287,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 mut_output_db3 = None
 
             if wt_output_db3 and mut_output_db3:
-                scores_list = self.make_scores_list(wt_output_db3, mut_output_db3, prediction_id, round_num, score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
+                scores_list = make_scores_list(self.get_score_dict(prediction_id=prediction_id, score_method_id=score_method_id, structure_id=round_num, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field), wt_output_db3, mut_output_db3, prediction_id, round_num, score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
                 scores.extend(scores_list)
 
             if wt_output_db3:
@@ -342,78 +343,42 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         r = Reporter('parsing output db3 files and saving scores in database', entries='scores')
         r.set_total_count( len(db3_files_to_process) )
 
-        # p = multiprocessing.Pool(min(multiprocessing.cpu_count(), 8))
+        p = multiprocessing.Pool(min(multiprocessing.cpu_count(), 2)) # Multiprocessing
         def save_scores_helper(return_tuple):
             args, kwargs = return_tuple
             prediction_set_id, prediction_id, scores_list = args
             self.master_scores_list.extend(scores_list)
-            if len(self.master_scores_list) >= 100:
+            if len(self.master_scores_list) >= 100: # Save scores in batches
                 self.store_scores_for_many_predictions(None, self.master_scores_list, safe=False, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
                 self.master_scores_list = []
+            #### self.store_scores(None, prediction_id, scores_list, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field) # Save each score one at a time
             r.increment_report()
             
         for prediction_id, round_num in db3_files_to_process:
+            empty_score_dict = self.get_score_dict(prediction_id=prediction_id, score_method_id=score_method_id, structure_id=round_num, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
             mut_output_db3, wt_output_db3 = available_db3_files[(prediction_id, round_num)]
-            # p.apply_async( self.read_db3_scores_helper, (prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field), callback=save_scores_helper)
-            save_scores_helper( self.read_db3_scores_helper(prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field) )
-        # p.close()
-        # p.join()
+            p.apply_async( read_db3_scores_helper, (empty_score_dict, prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field), callback=save_scores_helper) # Multiprocessing
+            ####save_scores_helper( read_db3_scores_helper(empty_score_dict, prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field) ) # Non-multiprocessing
+        p.close() # Multiprocessing
+        p.join() # Multiprocessing
+        if len(self.master_scores_list) > 0:
+            self.store_scores_for_many_predictions(None, self.master_scores_list, safe=False, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
         r.done()
 
-    def make_scores_list(self, wt_output_db3, mut_output_db3, prediction_id, round_num, score_method_id, prediction_structure_scores_table = None, prediction_id_field = None):
-        # "left" structure has struct_id=1
-        wtl_score = self.add_scores_from_db3_file(wt_output_db3, 1, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeLPartner', score_method_id = score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field))
-        wtr_score = self.add_scores_from_db3_file(wt_output_db3, 2, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeRPartner', score_method_id = score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field))
-        wtc_score = self.add_scores_from_db3_file(wt_output_db3, 3, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'WildTypeComplex', score_method_id = score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field))
-        ml_score = self.add_scores_from_db3_file(mut_output_db3, 1, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantLPartner', score_method_id = score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field))
-        mr_score = self.add_scores_from_db3_file(mut_output_db3, 2, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantRPartner', score_method_id = score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field))
-        mc_score = self.add_scores_from_db3_file(mut_output_db3, 3, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantComplex', score_method_id = score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field))
-        return [wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score]
-        
-    def add_scores_from_db3_file(self, db3_file, struct_id, round_num, score_dict):
-        if db3_file.endswith('.gz'):
-            tmp_dir = tempfile.mkdtemp(prefix='unzip_db3_')
-            new_db3_path = os.path.join(tmp_dir, os.path.basename(db3_file))
-            shutil.copy(db3_file, new_db3_path)
-            db3_file = unzip_file(new_db3_path)
-        else:
-            tmp_dir = None
+def read_db3_scores_helper(empty_score_dict, prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field):
+    tmp_dir = tempfile.mkdtemp(prefix='unzip_db3_')
+    new_wt_output_db3_path = os.path.join(tmp_dir, os.path.basename(wt_output_db3))
+    shutil.copy(wt_output_db3, new_wt_output_db3_path)
+    wt_output_db3 = unzip_file(new_wt_output_db3_path)
 
-        conn = sqlite3.connect(db3_file)
-        c = conn.cursor()
-        score_types = set()
-        for row in c.execute('SELECT score_type_name FROM score_types WHERE batch_id=1'):
-            score_types.add(row[0])
-        for empty_score_type in score_dict:
-            if empty_score_type == 'total':
-                score_type = 'total_score'
-            else:
-                score_type = empty_score_type
-            score_rows = [row for row in c.execute('SELECT structure_scores.score_value from structure_scores INNER JOIN score_types ON score_types.batch_id=structure_scores.batch_id AND score_types.score_type_id=structure_scores.score_type_id WHERE structure_scores.struct_id=%d AND score_type_name="%s"' % (struct_id, score_type))]
-            if len(score_rows) == 1:
-                score_dict[empty_score_type] = float( score_rows[0][0] )
-            elif len(score_rows) > 1:
-                raise Exception('Matched too many score rows')
-        score_dict['StructureID'] = round_num
-        conn.close()
-        if tmp_dir:
-            shutil.rmtree(tmp_dir)
-        return score_dict
+    new_mut_output_db3_path = os.path.join(tmp_dir, os.path.basename(mut_output_db3))
+    shutil.copy(mut_output_db3, new_mut_output_db3_path)
+    mut_output_db3 = unzip_file(new_mut_output_db3_path)
 
-    def read_db3_scores_helper(self, prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field):
-        tmp_dir = tempfile.mkdtemp(prefix='unzip_db3_')
-        new_wt_output_db3_path = os.path.join(tmp_dir, os.path.basename(wt_output_db3))
-        shutil.copy(wt_output_db3, new_wt_output_db3_path)
-        wt_output_db3 = unzip_file(new_wt_output_db3_path)
+    scores_list = make_scores_list(empty_score_dict, wt_output_db3, mut_output_db3, prediction_id, round_num, score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
 
-        new_mut_output_db3_path = os.path.join(tmp_dir, os.path.basename(mut_output_db3))
-        shutil.copy(mut_output_db3, new_mut_output_db3_path)
-        mut_output_db3 = unzip_file(new_mut_output_db3_path)
-
-        scores_list = self.make_scores_list(wt_output_db3, mut_output_db3, prediction_id, round_num, score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
-
-        shutil.rmtree(tmp_dir)
-        return ( (None, prediction_id, scores_list), {'prediction_structure_scores_table' : prediction_structure_scores_table, 'prediction_id_field' : prediction_id_field} )
+    shutil.rmtree(tmp_dir)
+    return ( (None, prediction_id, scores_list), {'prediction_structure_scores_table' : prediction_structure_scores_table, 'prediction_id_field' : prediction_id_field} )
     
 def process_cluster_rescore_helper(ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path):
     task_name = '%d_%d_%s' % (prediction_id, round_num, struct_type)
@@ -443,3 +408,51 @@ def process_cluster_rescore_helper(ddg_output_path, prediction_id, pdb_path, cha
         '-parser:protocol' : rel_protocol_path,
     }
     return (task_name, arg_dict)
+
+def fill_empty_score_dict(score_dict, prediction_id, structure_id, score_type, score_method_id, prediction_structure_scores_table, prediction_id_field):
+    d = copy.deepcopy(score_dict)
+    d[prediction_id_field] = prediction_id
+    d['ScoreMethodID'] = score_method_id
+    d['ScoreType'] = score_type
+    d['StructureID'] = structure_id
+    return d
+
+def make_scores_list(empty_score_dict, wt_output_db3, mut_output_db3, prediction_id, round_num, score_method_id, prediction_structure_scores_table = None, prediction_id_field = None):
+    # "left" structure has struct_id=1
+    wtl_score = add_scores_from_db3_file(wt_output_db3, 1, round_num, fill_empty_score_dict(empty_score_dict, prediction_id, round_num, 'WildTypeLPartner', score_method_id, prediction_structure_scores_table, prediction_id_field))
+    wtr_score = add_scores_from_db3_file(wt_output_db3, 2, round_num, fill_empty_score_dict(empty_score_dict, prediction_id, round_num, 'WildTypeRPartner', score_method_id, prediction_structure_scores_table, prediction_id_field))
+    wtc_score = add_scores_from_db3_file(wt_output_db3, 3, round_num, fill_empty_score_dict(empty_score_dict, prediction_id, round_num, 'WildTypeComplex', score_method_id, prediction_structure_scores_table, prediction_id_field))
+    ml_score = add_scores_from_db3_file(mut_output_db3, 1, round_num, fill_empty_score_dict(empty_score_dict, prediction_id, round_num, 'MutantLPartner', score_method_id, prediction_structure_scores_table, prediction_id_field))
+    mr_score = add_scores_from_db3_file(mut_output_db3, 2, round_num, fill_empty_score_dict(empty_score_dict, prediction_id, round_num, 'MutantRPartner', score_method_id, prediction_structure_scores_table, prediction_id_field))
+    mc_score = add_scores_from_db3_file(mut_output_db3, 3, round_num, fill_empty_score_dict(empty_score_dict, prediction_id, round_num, 'MutantComplex', score_method_id, prediction_structure_scores_table, prediction_id_field))
+    return [wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score]
+
+def add_scores_from_db3_file(db3_file, struct_id, round_num, score_dict):
+    if db3_file.endswith('.gz'):
+        tmp_dir = tempfile.mkdtemp(prefix='unzip_db3_')
+        new_db3_path = os.path.join(tmp_dir, os.path.basename(db3_file))
+        shutil.copy(db3_file, new_db3_path)
+        db3_file = unzip_file(new_db3_path)
+    else:
+        tmp_dir = None
+
+    conn = sqlite3.connect(db3_file)
+    c = conn.cursor()
+    score_types = set()
+    for row in c.execute('SELECT score_type_name FROM score_types WHERE batch_id=1'):
+        score_types.add(row[0])
+    for empty_score_type in score_dict:
+        if empty_score_type == 'total':
+            score_type = 'total_score'
+        else:
+            score_type = empty_score_type
+        score_rows = [row for row in c.execute('SELECT structure_scores.score_value from structure_scores INNER JOIN score_types ON score_types.batch_id=structure_scores.batch_id AND score_types.score_type_id=structure_scores.score_type_id WHERE structure_scores.struct_id=%d AND score_type_name="%s"' % (struct_id, score_type))]
+        if len(score_rows) == 1:
+            score_dict[empty_score_type] = float( score_rows[0][0] )
+        elif len(score_rows) > 1:
+            raise Exception('Matched too many score rows')
+    score_dict['StructureID'] = round_num
+    conn.close()
+    if tmp_dir:
+        shutil.rmtree(tmp_dir)
+    return score_dict

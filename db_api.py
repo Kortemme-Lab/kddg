@@ -1449,11 +1449,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             else:
                 params_to_insert.append(params)
 
-        db_cursor = con.cursor()
-        if safe:
-            db_cursor.executemany(sql_query, [x for x in params_to_insert])
-        else:
-            db_cursor.executemany(sql_query, params_to_insert)
+        with con:
+            db_cursor = con.cursor()
+            if safe:
+                db_cursor.executemany(sql_query, [x for x in params_to_insert])
+            else:
+                # print params_to_insert
+                db_cursor.executemany(sql_query, params_to_insert)
            
     @job_completion
     def store_scores(self, prediction_set, prediction_id, scores, prediction_structure_scores_table = None, prediction_id_field = None):
