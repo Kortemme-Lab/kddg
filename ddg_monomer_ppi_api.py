@@ -308,7 +308,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         DDGdb = self.DDG_db
 
         prediction_ids_and_structs_score_count = {}
-        for row in DDGdb.execute_select("SELECT %s, ScoreType, StructureID FROM %s WHERE ScoreType IN ('WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex')" % (prediction_id_field, prediction_structure_scores_table)):
+        for row in DDGdb.execute_select("SELECT %s, ScoreType, StructureID FROM %s WHERE ScoreType IN ('WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex') AND ScoreMethodID=%d" % (prediction_id_field, prediction_structure_scores_table, score_method_id)):
             prediction_id = long(row[prediction_id_field])
             score_type = row['ScoreType']
             structure_id = int(row['StructureID'])
