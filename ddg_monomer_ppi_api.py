@@ -36,6 +36,11 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
     def __init__(self, passwd = None, username = None, hostname = None, rosetta_scripts_path = None, rosetta_database_path = None):
         super(DDGMonomerInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
         self.rescore_args = {} # Stores arguments for rescoring step, to be dumped later
+        self.all_score_types = ['WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex']
+        self.all_score_types_index = {}
+        for i, score_type in enumerate(self.all_score_types):
+            self.all_score_types_index[score_type] = i
+        self.master_scores_list = []
 
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
         '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
@@ -309,10 +314,10 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             if (prediction_id, structure_id) not in prediction_ids_and_structs_score_count:
                 prediction_ids_and_structs_score_count[(prediction_id, structure_id)] = 0
             prediction_ids_and_structs_score_count[(prediction_id, structure_id)] += 1
-        structs_with_all_scores = set()
+        structs_with_some_scores = set()
         for prediction_id, structure_id in prediction_ids_and_structs_score_count:
-            if prediction_ids_and_structs_score_count[(prediction_id, structure_id)] == 6:
-                structs_with_all_scores.add( (prediction_id, structure_id) )
+            if prediction_ids_and_structs_score_count[(prediction_id, structure_id)] > 0:
+                structs_with_some_scores.add( (prediction_id, structure_id) )
 
         available_db3_files = {}
         available_db3_files_set = set()
@@ -329,22 +334,31 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             wt_db3_file = os.path.join(wt_task_dir, 'output.db3.gz')
             mut_db3_file = os.path.join(mut_task_dir, 'output.db3.gz')
             if os.path.isfile(wt_db3_file) and os.path.isfile(mut_db3_file):
+                available_db3_files[(prediction_id, round_num)] = (mut_db3_file, wt_db3_file)
                 available_db3_files_set.add( (prediction_id, round_num) )
-                available_db3_files[(prediction_id, round_num)] = (wt_db3_file, mut_db3_file)
 
-        db3_files_to_process = available_db3_files_set.difference(structs_with_all_scores)
-        print 'Found %d output db3 files to add to score database' % len(db3_files_to_process)
-        r = Reporter('parsing output db3 files and saving scores in database', entries='db3 files')
+        db3_files_to_process = available_db3_files_set.difference(structs_with_some_scores)
+        print 'Found %d scores in db3 files needed to add to database' % len(db3_files_to_process)
+        r = Reporter('parsing output db3 files and saving scores in database', entries='scores')
         r.set_total_count( len(db3_files_to_process) )
-        # worker = MultiWorker(self.read_db3_scores_helper, n_cpu=min(multiprocessing.cpu_count(), 8), reporter=r, cb_func=self.store_scores)
 
-        for prediction_id, round_num in db3_files_to_process:
-            wt_output_db3, mut_output_db3 = available_db3_files[(prediction_id, round_num)]
-            args, kwargs = self.read_db3_scores_helper(prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field)
-            self.store_scores(*args, **kwargs)
+        # p = multiprocessing.Pool(min(multiprocessing.cpu_count(), 8))
+        def save_scores_helper(return_tuple):
+            args, kwargs = return_tuple
+            prediction_set_id, prediction_id, scores_list = args
+            self.master_scores_list.extend(scores_list)
+            if len(self.master_scores_list) >= 100:
+                self.store_scores_for_many_predictions(None, self.master_scores_list, safe=False, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
+                self.master_scores_list = []
             r.increment_report()
+            
+        for prediction_id, round_num in db3_files_to_process:
+            mut_output_db3, wt_output_db3 = available_db3_files[(prediction_id, round_num)]
+            # p.apply_async( self.read_db3_scores_helper, (prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field), callback=save_scores_helper)
+            save_scores_helper( self.read_db3_scores_helper(prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field) )
+        # p.close()
+        # p.join()
         r.done()
-        # worker.finishJobs()
 
     def make_scores_list(self, wt_output_db3, mut_output_db3, prediction_id, round_num, score_method_id, prediction_structure_scores_table = None, prediction_id_field = None):
         # "left" structure has struct_id=1
@@ -356,9 +370,6 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         mc_score = self.add_scores_from_db3_file(mut_output_db3, 3, round_num, self.get_score_dict(prediction_id = prediction_id, structure_id = round_num, score_type = 'MutantComplex', score_method_id = score_method_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field))
         return [wtl_score, wtr_score, wtc_score, ml_score, mr_score, mc_score]
         
-    def rescore_ddg_monomer_pdb(self, pdb_file, prediction_id, score_method_id):
-        return output_db3
-
     def add_scores_from_db3_file(self, db3_file, struct_id, round_num, score_dict):
         if db3_file.endswith('.gz'):
             tmp_dir = tempfile.mkdtemp(prefix='unzip_db3_')
