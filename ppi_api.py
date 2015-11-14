@@ -24,10 +24,10 @@ import shutil
 import sqlite3
 import cPickle as pickle
 
-import numpy as np
+import numpy
 
 from api_layers import *
-from db_api import ddG
+from db_api import ddG, PartialDataException
 from klab import colortext
 from klab.bio.pdb import PDB
 from klab.bio.basics import ChainMutation
@@ -36,10 +36,12 @@ from klab.rosetta.input_files import Mutfile, Resfile
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 
 
+
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
     return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+
 
 def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None, get_interface_factory = get_interface):
     # Uses ~/.my.cnf to get authentication information
@@ -1064,7 +1066,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
-    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None):
+    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None, dataframe_type = "Binding affinity"):
         try:
             top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
         except Exception, e:
@@ -1072,8 +1074,12 @@ class BindingAffinityDDGInterface(ddG):
             colortext.warning(traceback.format_exc())
             if extract_data_for_case_if_missing:
                 self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
-            top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
-
+            try:
+                top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+            except PartialDataException, e:
+                raise
+            except Exception, e:
+                raise
         top_x_ddg_stability = self.get_top_x_ddg_stability(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
         return {
             main_ddg_analysis_type : top_x_ddg,
@@ -1098,23 +1104,26 @@ class BindingAffinityDDGInterface(ddG):
 
 
     def get_top_x_ddg_total_score(self, scores, top_x):
-        # total_scores = [(np.average([scores[struct_num][score_type]['total'] for score_type in scores[struct_num]]), struct_num) for struct_num in scores]
         if scores == None:
             return None
 
-        wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
-        wt_total_scores.sort()
-        top_x_wt_struct_nums = [t[1] for t in wt_total_scores[:top_x]]
+        try:
+            wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
+            wt_total_scores.sort()
+            top_x_wt_struct_nums = [t[1] for t in wt_total_scores[:top_x]]
 
-        mut_total_scores = [(scores[struct_num]['MutantComplex']['total'], struct_num) for struct_num in scores]
-        mut_total_scores.sort()
-        top_x_mut_struct_nums = [t[1] for t in mut_total_scores[:top_x]]
+            mut_total_scores = [(scores[struct_num]['MutantComplex']['total'], struct_num) for struct_num in scores]
+            mut_total_scores.sort()
+            top_x_mut_struct_nums = [t[1] for t in mut_total_scores[:top_x]]
 
-        return np.average( [
-            (scores[mut_struct_num]['MutantComplex']['total'] - scores[mut_struct_num]['MutantLPartner']['total'] - scores[mut_struct_num]['MutantRPartner']['total']) -
-            (scores[wt_struct_num]['WildTypeComplex']['total'] - scores[wt_struct_num]['WildTypeLPartner']['total'] - scores[wt_struct_num]['WildTypeRPartner']['total'])
-            for wt_struct_num, mut_struct_num in zip(top_x_wt_struct_nums, top_x_mut_struct_nums)
-            ] )
+            top_x_score = numpy.average([
+                (scores[mut_struct_num]['MutantComplex']['total'] - scores[mut_struct_num]['MutantLPartner']['total'] - scores[mut_struct_num]['MutantRPartner']['total']) -
+                (scores[wt_struct_num]['WildTypeComplex']['total'] - scores[wt_struct_num]['WildTypeLPartner']['total'] - scores[wt_struct_num]['WildTypeRPartner']['total'])
+                for wt_struct_num, mut_struct_num in zip(top_x_wt_struct_nums, top_x_mut_struct_nums)
+            ])
+            return top_x_score
+        except:
+            raise PartialDataException('The case is missing some data.')
 
 
     @analysis_api
@@ -1133,7 +1142,7 @@ class BindingAffinityDDGInterface(ddG):
         mut_total_scores.sort()
         top_x_mut_struct_nums = [t[1] for t in mut_total_scores[:top_x]]
 
-        return np.average([scores[mut_struct_num]['MutantComplex']['total'] - scores[wt_struct_num]['WildTypeComplex']['total']
+        return numpy.average([scores[mut_struct_num]['MutantComplex']['total'] - scores[wt_struct_num]['WildTypeComplex']['total']
                            for wt_struct_num, mut_struct_num in zip(top_x_wt_struct_nums, top_x_mut_struct_nums)])
 
 

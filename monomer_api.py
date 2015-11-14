@@ -20,11 +20,17 @@ import os
 import zipfile
 import traceback
 import copy
+import pprint
+
+import numpy
 
 from api_layers import *
-from db_api import ddG
+from db_api import ddG, PartialDataException
 from klab import colortext
 from klab.bio.alignment import ScaffoldModelChainMapper
+
+from klab.benchmarking.analysis.ddg_monomeric_stability_analysis import DBBenchmarkRun as MonomericStabilityBenchmarkRun
+from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
@@ -69,6 +75,108 @@ class MonomericStabilityDDGInterface(ddG):
     @informational_pdb
     def get_pdb_chains_for_prediction(self, prediction_id):
         raise Exception('This needs to be implemented.')
+
+
+
+    #todo: remove this and replace with get_pdb_mutations_for_mutagenesis
+    @informational_pdb
+    def get_pdb_mutations_for_experiment(self, experiment_id):
+        '''Returns the PDB mutations for a mutagenesis experiment as well as the PDB residue information.'''
+        pdb_mutations = []
+
+#            SELECT ExperimentMutation.*, Experiment.PDBFileID, PDBResidue.ResidueType,
+#            PDBResidue.BFactorMean, PDBResidue.BFactorDeviation,
+#            PDBResidue.ComplexExposure, PDBResidue.ComplexDSSP, PDBResidue.MonomericExposure, PDBResidue.MonomericDSSP
+#            FROM
+#            Experiment INNER JOIN ExperimentMutation ON Experiment.ID = ExperimentMutation.ExperimentID
+#            INNER JOIN
+#            PDBResidue ON Experiment.PDBFileID = PDBResidue.PDBFileID AND ExperimentMutation.Chain = PDBResidue.Chain AND ExperimentMutation.ResidueID = PDBResidue.ResidueID AND ExperimentMutation.WildTypeAA = PDBResidue.ResidueAA
+#            WHERE Experiment.ID=%s ORDER BY Chain, ResidueID''', parameters=(experiment_id,)):
+
+
+        for pdb_mutation in self.DDG_db.execute_select('''
+            SELECT ExperimentMutation.*, Experiment.PDBFileID
+            FROM
+            Experiment INNER JOIN ExperimentMutation ON Experiment.ID = ExperimentMutation.ExperimentID
+            WHERE Experiment.ID=%s ORDER BY Chain, ResidueID''', parameters=(experiment_id,)):
+
+                pdb_mutation['ResidueType'] = None
+                pdb_mutation['BFactorMean'] = None
+                pdb_mutation['BFactorDeviation'] = None
+                pdb_mutation['ComplexExposure'] = None
+                pdb_mutation['ComplexDSSP'] = None
+                pdb_mutation['MonomericExposure'] = None
+                pdb_mutation['MonomericDSSP'] = None
+                pdb_mutations.append(pdb_mutation)
+        return pdb_mutations
+
+
+    #todo: remove this and replace with get_user_dataset_experiment_details
+    def get_experiment_details(self, experiment_id):
+        e = self.DDG_db.execute_select('SELECT * FROM Experiment WHERE ID=%s', parameters=(experiment_id,))
+        if len(e) != 1:
+            raise colortext.Exception('Experiment %d does not exist.' % (experiment_id, ))
+        e = e[0]
+
+        pdb_mutations = self.get_pdb_mutations_for_experiment(experiment_id)
+        assert(len(pdb_mutations) > 0)
+        pdb_id = set([m['PDBFileID'] for m in pdb_mutations])
+        assert(len(pdb_id) == 1)
+        pdb_id = pdb_id.pop()
+        return dict(
+            Mutagenesis = dict(
+                ExperimentID = e['ID'],
+            ),
+            Structure = dict(
+                PDBFileID = pdb_id,
+            ),
+            PDBMutations = pdb_mutations,
+        )
+
+
+    @informational_job
+    def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
+        prediction_record = self.DDG_db.execute_select('SELECT * FROM Prediction WHERE ID=%s', parameters=(prediction_id,))
+        if not prediction_record:
+            raise Exception('No details could be found for prediction #%d in the database.' % prediction_id)
+        prediction_record = prediction_record[0]
+        prediction_record['Files'] = {}
+        if include_files:
+            prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
+
+        # mutfile_content = self.create_mutfile(prediction_id)
+
+        # Read the UserPPDataSetExperiment details
+        user_dataset_experiment_id = prediction_record['UserDataSetExperimentID']
+        if user_dataset_experiment_id:
+            ude_details = self.get_user_dataset_experiment_details(user_dataset_experiment_id)
+            assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record['PPMutagenesisID'])
+            for k, v in ude_details.iteritems():
+                assert(k not in prediction_record)
+                prediction_record[k] = v
+        else:
+            # todo: Remove this later
+            e_details = self.get_experiment_details(prediction_record['ExperimentID'])
+            for k, v in e_details.iteritems():
+                assert(k not in prediction_record)
+                prediction_record[k] = v
+        return prediction_record
+
+
+    @informational_job
+    def get_predictions_experimental_details(self, prediction_id, userdatset_experiment_ids_to_subset_ddgs = None, include_files = False, reference_ids = set(), include_experimental_data = True):
+
+        details = self.get_job_details(prediction_id, include_files = include_files)
+
+        # Add the DDG values for the related analysis sets
+        if include_experimental_data:
+            userdatset_experiment_ids_to_subset_ddgs = userdatset_experiment_ids_to_subset_ddgs or self.get_experimental_ddgs_by_analysis_set(user_dataset_experiment_id, reference_ids = reference_ids)
+            assert('DDG' not in details)
+            details['DDG'] = userdatset_experiment_ids_to_subset_ddgs[user_dataset_experiment_id]
+        else:
+            details['DDG'] = None
+
+        return details
 
 
     ###########################################################################################
@@ -474,6 +582,81 @@ class MonomericStabilityDDGInterface(ddG):
 
 
     @analysis_api
+    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None, dataframe_type = "Stability"):
+        assert(dataframe_type == "Binding affinity") # todo: stability case needs to be written
+        try:
+            top_x_ddg = self.get_top_x_ddg_affinity(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+        except Exception, e:
+            colortext.pcyan(str(e))
+            colortext.warning(traceback.format_exc())
+            if extract_data_for_case_if_missing:
+                self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
+            try:
+                top_x_ddg = self.get_top_x_ddg_affinity(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+            except PartialDataException, e:
+                raise
+            except Exception, e:
+                raise
+        top_x_ddg_stability = self.get_top_x_ddg_stability(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+        return {
+            main_ddg_analysis_type : top_x_ddg,
+            'DDGStability_Top%d' % top_x : top_x_ddg_stability,
+        }
+
+
+    @analysis_api
+    def get_top_x_ddg_affinity(self, prediction_id, score_method_id, top_x = 3, expectn = None):
+        '''This function was taken from the PPI API.'''
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        if scores == None:
+            return None
+        try:
+            colortext.warning(prediction_id)
+            pprint.pprint(scores)
+            wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
+            wt_total_scores.sort()
+            top_x_wt_struct_nums = [t[1] for t in wt_total_scores[:top_x]]
+            print(wt_total_scores)
+
+            mut_total_scores = [(scores[struct_num]['MutantComplex']['total'], struct_num) for struct_num in scores]
+            mut_total_scores.sort()
+            top_x_mut_struct_nums = [t[1] for t in mut_total_scores[:top_x]]
+            print(mut_total_scores)
+
+            top_x_score = numpy.average([
+                (scores[mut_struct_num]['MutantComplex']['total'] - scores[mut_struct_num]['MutantLPartner']['total'] - scores[mut_struct_num]['MutantRPartner']['total']) -
+                (scores[wt_struct_num]['WildTypeComplex']['total'] - scores[wt_struct_num]['WildTypeLPartner']['total'] - scores[wt_struct_num]['WildTypeRPartner']['total'])
+                for wt_struct_num, mut_struct_num in zip(top_x_wt_struct_nums, top_x_mut_struct_nums)
+            ])
+            return top_x_score
+        except Exception, e:
+            print(e)
+            colortext.warning(traceback.format_exc())
+            raise PartialDataException('The case is missing some data.')
+
+
+
+    @analysis_api
+    def get_top_x_ddg_stability(self, prediction_id, score_method_id, top_x = 3, expectn = None):
+        '''Returns the TopX value for the prediction only considering the complex scores. This computation may work as a
+           measure of a stability DDG value.'''
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        if scores == None:
+            return None
+
+        wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
+        wt_total_scores.sort()
+        top_x_wt_struct_nums = [t[1] for t in wt_total_scores[:top_x]]
+
+        mut_total_scores = [(scores[struct_num]['MutantComplex']['total'], struct_num) for struct_num in scores]
+        mut_total_scores.sort()
+        top_x_mut_struct_nums = [t[1] for t in mut_total_scores[:top_x]]
+
+        return numpy.average([scores[mut_struct_num]['MutantComplex']['total'] - scores[wt_struct_num]['WildTypeComplex']['total']
+                           for wt_struct_num, mut_struct_num in zip(top_x_wt_struct_nums, top_x_mut_struct_nums)])
+
+
+    @analysis_api
     def get_top_x_ddg(self, prediction_id, score_method_id, top_x = 3, expectn = None):
         '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
            case computed using the associated Score records in the database.'''
@@ -522,8 +705,7 @@ class MonomericStabilityDDGInterface(ddG):
         #todo: rename function since we return BenchmarkRun objects
 
         assert(score_method_id)
-        assert(experimental_data_exists == False) # todo: I am implementing the case needed for the PUBS class - the general case still needs to be implemented
-        ddg_analysis_type = 'DDG_Top%d' % take_lowest
+        assert(experimental_data_exists == False) # todo: I am implementing the case needed for the PUBS class - the general case still needs to be implemented. Change BindingAffinityBenchmarkRun below accordingly (BindingAffinityBenchmarkRun for affinity, MonomericStabilityBenchmarkRun for stability)
 
         # We allow different dataframe types as sometimes there will be no associated experimental data
         dataframe_type = "Stability"
@@ -534,6 +716,7 @@ class MonomericStabilityDDGInterface(ddG):
 
         parameters = copy.copy(locals())
         del parameters['self']
+        del parameters['create_binding_affinity_dataframe']
         return super(MonomericStabilityDDGInterface, self)._get_analysis_dataframe(BindingAffinityBenchmarkRun, **parameters)
 
 
