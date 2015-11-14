@@ -319,6 +319,8 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         for prediction_id, structure_id in prediction_ids_and_structs_score_count:
             if prediction_ids_and_structs_score_count[(prediction_id, structure_id)] > 0:
                 structs_with_some_scores.add( (prediction_id, structure_id) )
+                if prediction_ids_and_structs_score_count[(prediction_id, structure_id)] != 6:
+                    print 'Missing data:', prediction_id, structure_id, prediction_ids_and_structs_score_count[(prediction_id, structure_id)]
 
         available_db3_files = {}
         available_db3_files_set = set()
