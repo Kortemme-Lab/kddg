@@ -707,8 +707,10 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         '''Returns a dict with keys for all fields in the Score table. The optional arguments can be used to set the
            corresponding fields of the dict. All other fields are set to None.'''
 
-        prediction_structure_scores_table = prediction_structure_scores_table or self._get_prediction_structure_scores_table()
-        prediction_id_field = prediction_id_field or self._get_prediction_id_field()
+        if prediction_structure_scores_table == None:
+            prediction_structure_scores_table = self._get_prediction_structure_scores_table()
+        if prediction_id_field == None:
+            prediction_id_field = self._get_prediction_id_field()
 
         # Relax the typing
         if structure_id: structure_id = int(structure_id)
@@ -721,7 +723,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
         fieldnames = set([f for f in self.DDG_db.FieldNames.__dict__[prediction_structure_scores_table].__dict__.keys() if not(f.startswith('_'))])
         d = dict.fromkeys(fieldnames, None)
-        d[prediction_id_field] = prediction_id
+        if prediction_id_field != None:
+            d[prediction_id_field] = prediction_id
         d['ScoreMethodID'] = score_method_id
         d['ScoreType'] = score_type
         d['StructureID'] = structure_id
@@ -2062,7 +2065,9 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         for score in scores:
             score_keys = score.keys()
             if sorted(fieldnames.intersection(score_keys)) != sorted(score_keys):
-                raise Exception('These score table fieldnames were not recognized: %s.'.format(', '.join(sorted(score_keys.difference(fieldnames)))))
+                print score_keys
+                print fieldnames
+                raise Exception('These score table fieldnames were not recognized: %s.'.format(', '.join(sorted(set(score_keys).difference(fieldnames)))))
 
 
     ###########################################################################################
