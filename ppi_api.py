@@ -1061,7 +1061,7 @@ class BindingAffinityDDGInterface(ddG):
     def determine_best_pair(self, prediction_id, score_method_id, expectn = None, returnn = 1):
         '''This returns the best wildtype/mutant pair for a prediction given a scoring method. NOTE: Consider generalising this to the n best pairs.'''
         scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
-        pprint.pprint(scores)
+        #pprint.pprint(scores)
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
 

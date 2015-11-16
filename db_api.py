@@ -819,6 +819,11 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
         pdb_ids = [r['PDBFileID'] for r in self.DDG_db.execute_select('SELECT DISTINCT PDBFileID FROM {0} INNER JOIN {1} ON {1}ID={1}.ID WHERE PredictionSet=%s ORDER BY PDBFileID'.format(self._get_prediction_table(), self._get_user_dataset_experiment_table()), parameters=(PredictionSet,))]
 
+        if not pdb_ids:
+            try:
+                pdb_ids = [r['PDBFileID'] for r in self.DDG_db.execute_select('SELECT DISTINCT PDBFileID FROM {0} INNER JOIN {1} ON {1}ID={1}.ID WHERE PredictionSet=%s ORDER BY PDBFileID'.format(self._get_prediction_table(), 'Experiment'), parameters=(PredictionSet,))]
+            except: pass
+
         pdbs = {}
         cached_pdb_ids = []
         if cached_pdb_details:
@@ -1963,7 +1968,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         pruned_data = []
         for k, r in sorted(sortable_results.iteritems()):
             line = []
-            print(json.loads(r['Scores'])['data'][scoring_method][scoring_type]['ddG'], r['FlattenedMutations'])
+            #print(json.loads(r['Scores'])['data'][scoring_method][scoring_type]['ddG'], r['FlattenedMutations'])
             for m in sorted(set_of_mutations):
                 if r['FlattenedMutations'].find(m[1]) != -1:
                     line.append(1)

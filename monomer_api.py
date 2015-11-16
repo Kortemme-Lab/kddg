@@ -611,17 +611,17 @@ class MonomericStabilityDDGInterface(ddG):
         if scores == None:
             return None
         try:
-            colortext.warning(prediction_id)
-            pprint.pprint(scores)
+            #colortext.warning(prediction_id)
+            #pprint.pprint(scores)
             wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
             wt_total_scores.sort()
             top_x_wt_struct_nums = [t[1] for t in wt_total_scores[:top_x]]
-            print(wt_total_scores)
+            #print(wt_total_scores)
 
             mut_total_scores = [(scores[struct_num]['MutantComplex']['total'], struct_num) for struct_num in scores]
             mut_total_scores.sort()
             top_x_mut_struct_nums = [t[1] for t in mut_total_scores[:top_x]]
-            print(mut_total_scores)
+            #print(mut_total_scores)
 
             top_x_score = numpy.average([
                 (scores[mut_struct_num]['MutantComplex']['total'] - scores[mut_struct_num]['MutantLPartner']['total'] - scores[mut_struct_num]['MutantRPartner']['total']) -
