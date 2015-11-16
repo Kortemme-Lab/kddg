@@ -570,6 +570,29 @@ class MonomericStabilityDDGInterface(ddG):
         # Note: There are multiple ways to select the best pair. For example, if multiple mutants have the same minimal total
         # score, we could have multiple wildtype structures to choose from. In this case, we choose a pair where the wildtype
         # structure has the minimal total score.
+
+        lowest_wt_score = self.DDG_db.execute_select('SELECT StructureID, total FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="WildType" ORDER BY total LIMIT 1', parameters=(prediction_id, score_method_id))
+        lowest_mutant_score = self.DDG_db.execute_select('SELECT StructureID, total FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" ORDER BY total LIMIT 1', parameters=(prediction_id, score_method_id))
+        if lowest_wt_score and lowest_mutant_score:
+            return lowest_wt_score[0]['StructureID'], lowest_mutant_score[0]['StructureID']
+        return None, None
+
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        mutant_complexes = []
+        wildtype_complexes = []
+        for structure_id, scores in scores.iteritems():
+            if scores.get('MutantComplex'):
+                mutant_complexes.append((scores['MutantComplex']['total'], structure_id))
+            if scores.get('WildTypeComplex'):
+                wildtype_complexes.append((scores['WildTypeComplex']['total'], structure_id))
+        wildtype_complexes = sorted(wildtype_complexes)
+        mutant_complexes = sorted(mutant_complexes)
+        if wildtype_complexes and mutant_complexes:
+            return wildtype_complexes[0][1], mutant_complexes[0][1]
+        return None, None
+
+
+
         lowest_mutant_score = self.DDG_db.execute_select('SELECT total FROM PredictionStructureScore WHERE PredictionID=%s AND ScoreMethodID=%s AND ScoreType="Mutant" ORDER BY total LIMIT 1', parameters=(prediction_id, score_method_id))
         if lowest_mutant_score:
             lowest_mutant_score = lowest_mutant_score[0]['total']
@@ -730,7 +753,7 @@ class MonomericStabilityDDGInterface(ddG):
 
 
     @app_pymol
-    def create_pymol_session_in_memory(self, prediction_id, task_number, pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol'):
+    def create_pymol_session_in_memory(self, prediction_id, wt_task_number, mutant_task_number, pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol'):
 
         # Retrieve and unzip results
         archive = self.get_job_data(prediction_id)
@@ -738,11 +761,11 @@ class MonomericStabilityDDGInterface(ddG):
 
         try:
             # Get the name of the files from the zip
-            wildtype_filename = os.path.join(str(prediction_id), 'repacked_wt_round_%d.pdb' % task_number)
+            wildtype_filename = os.path.join(str(prediction_id), 'repacked_wt_round_%d.pdb' % wt_task_number)
             mutant_filename = None
             for filepath in sorted(zipped_content.namelist()):
                 filename = os.path.split(filepath)[1]
-                if filename.startswith('mut_') and filename.endswith('_round_%d.pdb' % task_number):
+                if filename.startswith('mut_') and filename.endswith('_round_%d.pdb' % mutant_task_number):
                     mutant_filename = os.path.join(str(prediction_id), filename)
                     break
 

@@ -31,9 +31,10 @@ from db_api import ddG, PartialDataException
 from klab import colortext
 from klab.bio.pdb import PDB
 from klab.bio.basics import ChainMutation
-from klab.fs.fsio import read_file
+from klab.fs.fsio import read_file, write_temp_file
 from klab.rosetta.input_files import Mutfile, Resfile
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
+from klab.bio.alignment import ScaffoldModelChainMapper
 
 
 
@@ -1061,8 +1062,79 @@ class BindingAffinityDDGInterface(ddG):
     def determine_best_pair(self, prediction_id, score_method_id, expectn = None, returnn = 1):
         '''This returns the best wildtype/mutant pair for a prediction given a scoring method. NOTE: Consider generalising this to the n best pairs.'''
         scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
-        #pprint.pprint(scores)
-        raise Exception('Abstract method. This needs to be overridden by a subclass.')
+        mutant_complexes = []
+        wildtype_complexes = []
+        for structure_id, scores in scores.iteritems():
+            if scores.get('MutantComplex'):
+                mutant_complexes.append((scores['MutantComplex']['total'], structure_id))
+            if scores.get('WildTypeComplex'):
+                wildtype_complexes.append((scores['WildTypeComplex']['total'], structure_id))
+        wildtype_complexes = sorted(wildtype_complexes)
+        mutant_complexes = sorted(mutant_complexes)
+        if wildtype_complexes and mutant_complexes:
+            return wildtype_complexes[0][1], mutant_complexes[0][1]
+        return None, None
+
+
+    def get_pubs_job_archive(self, *args, **kw):
+        prediction_type = kw.get('PredictionType')
+        prediction_id = kw.get('PredictionID')
+        if prediction_id and prediction_type:
+            if prediction_type == 'Binding affinity':
+                source_path = os.path.join('/home/kyleb/gits/ddg/job_output/151106-kyleb_dipubs/{0}-ddg/'.format(str(prediction_id)))
+                return self.zip_job_files(source_path, 'job_data_{0}_ba.zip'.format(prediction_id))
+            elif prediction_type == 'Monomeric stability':
+                source_filepath = os.path.join('/kortemmelab', 'shared', 'DDG', 'jobs', '{0}.zip'.format(str(prediction_id)))
+                try:
+                    assert(os.path.exists(source_filepath))
+                    archive = read_file(source_filepath)
+                    tg.response.headers['Content-type'] = 'application/zip'
+                    tg.response.headers['Content-Disposition'] = 'attachment;filename=job_data_{0}_ms.zip'.format(prediction_id)
+                    return archive
+                except Exception, e:
+                    return {'success' : False, 'message' : traceback.format_exc()}
+        else:
+            return {'success' : False}
+
+    @app_pymol
+    def create_pymol_session_in_memory(self, prediction_id, wt_task_number, mutant_task_number, pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol'):
+
+        # Retrieve and unzip results
+        archive = self.get_job_data(prediction_id)
+        zipped_content = zipfile.ZipFile(BytesIO(archive), 'r', zipfile.ZIP_DEFLATED)
+
+        try:
+            # Get the name of the files from the zip
+            wildtype_filename = 'repacked_wt_round_%d.pdb.gz' % wt_task_number
+            mutant_filename = None
+            for filepath in sorted(zipped_content.namelist()):
+                filename = os.path.split(filepath)[1]
+                if filename.startswith('mut_') and filename.endswith('_round_%d.pdb.gz' % mutant_task_number):
+                    mutant_filename = filename
+                    break
+            print(wildtype_filename, mutant_filename)
+            PyMOL_session = None
+            file_list = zipped_content.namelist()
+            print(file_list)
+
+            # If both files exist in the zip, extract their contents in memory and create a PyMOL session pair (PSE, script)
+            if (mutant_filename in file_list) and (wildtype_filename in file_list):
+                wildtype_pdb = zipped_content.open(wildtype_filename, 'r').read()
+                mutant_pdb = zipped_content.open(mutant_filename, 'U').read()
+
+                wildtype_pdb = read_file(write_temp_file('/tmp', wildtype_pdb, ftype = 'w', suffix = '.gz', prefix = ''))
+                mutant_pdb = read_file(write_temp_file('/tmp', mutant_pdb, ftype = 'w', suffix = '.gz', prefix = ''))
+
+                # todo: this should be structure_1_name = 'Wildtype', structure_2_name = 'Mutant' but the underlying PyMOL script needs to be parameterized
+                chain_mapper = ScaffoldModelChainMapper.from_file_contents(wildtype_pdb, mutant_pdb, structure_1_name = 'Scaffold', structure_2_name = 'Model')
+                PyMOL_session = chain_mapper.generate_pymol_session(pymol_executable = pymol_executable)
+
+            zipped_content.close()
+            return PyMOL_session
+
+        except Exception, e:
+            zipped_content.close()
+            raise Exception(str(e))
 
 
     @analysis_api
