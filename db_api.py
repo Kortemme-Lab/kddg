@@ -58,6 +58,9 @@ from klab.hash.md5 import get_hexdigest
 from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
 
 
+class FatalException(Exception): pass
+class PartialDataException(Exception): pass
+
 
 class MutationSet(object):
     '''This class is a leftover from Lin's work and should probably be folded into an API function along with the functions that call this.
@@ -970,7 +973,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @informational_job
-    def get_predictions_experimental_details(self, prediction_id, userdatset_experiment_ids_to_subset_ddgs = None, include_files = False, reference_ids = set()):
+    def get_predictions_experimental_details(self, prediction_id, userdatset_experiment_ids_to_subset_ddgs = None, include_files = False, reference_ids = set(), include_experimental_data = True):
         '''Returns a dict containing the experimental details for the Prediction. This is what is used by export_prediction_cases_to_json etc.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
@@ -1733,7 +1736,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             failed_cases = set()
             for prediction_id in prediction_ids:
                 try:
-                    analysis_data[prediction_id] = self.get_prediction_data(prediction_id, score_method_id, ddg_analysis_type, top_x = take_lowest, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory)
+                    analysis_data[prediction_id] = self.get_prediction_data(prediction_id, score_method_id, ddg_analysis_type, top_x = take_lowest, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory, dataframe_type = dataframe_type)
+                except FatalException, e:
+                    raise
+                except PartialDataException, e:
+                    if not allow_failures:
+                        raise Exception('Prediction {0} has partial data. Skipping.'.format(prediction_id))
+                    failed_cases.add(prediction_id)
                 except Exception, e:
                     if not allow_failures:
                         raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
@@ -2138,7 +2147,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         '''Returns the list of Prediction IDs associated with the PredictionSet.'''
         assert(self._get_prediction_type() and self._get_prediction_type_description())
         if (self.get_prediction_set_details(PredictionSetID) or {}).get(self._get_prediction_type()) != 1:
-            raise Exception('This PredictionSet either does not exist or else contains no %s predictions.' % self.self._get_prediction_type_description())
+            raise Exception('This PredictionSet either does not exist or else contains no %s predictions.' % self._get_prediction_type_description())
 
 
     def _set_prediction_set_status(self, PredictionSetID, status):
