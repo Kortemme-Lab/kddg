@@ -1309,8 +1309,10 @@ class BindingAffinityDDGInterface(ddG):
     # Concrete functions
 
 
-    def _get_prediction_table(self): return 'PredictionPPI'
-    def _get_prediction_structure_scores_table(self): return 'PredictionPPIStructureScore'
+    prediction_table = 'PredictionPPI'
+    def _get_prediction_table(self): return self.prediction_table
+    prediction_structure_scores_table = 'PredictionPPIStructureScore'
+    def _get_prediction_structure_scores_table(self): return self.prediction_structure_scores_table
     def _get_prediction_type(self): return 'BindingAffinity'
     def _get_prediction_dataset_type(self): return 'Binding affinity'
     def _get_prediction_type_description(self): return 'binding affinity'

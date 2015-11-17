@@ -21,6 +21,7 @@ import getpass
 import tempfile
 import cPickle as pickle
 import copy
+import zipfile
 
 # Constants for cluster runs
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
@@ -48,8 +49,10 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         '''
         if score_method_id:
             q = "SELECT DISTINCT PredictionPPIID FROM PredictionPPIStructureScore INNER JOIN PredictionPPI ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID WHERE PredictionPPI.PredictionSet='%s' AND PredictionPPIStructureScore.ScoreMethodID=%d" % (prediction_set_id, score_method_id)
+            # q = "SELECT DISTINCT %s FROM %s INNER JOIN %s ON %s.ID=%s.%s WHERE %s.PredictionSet='%s' AND %s.ScoreMethodID=%d" % (prediction_set_id, score_method_id)
         else:
             q = "SELECT DISTINCT PredictionPPIID FROM PredictionPPIStructureScore INNER JOIN PredictionPPI ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID WHERE PredictionPPI.PredictionSet='%s'" % (prediction_set_id)
+            # q = "SELECT DISTINCT %s FROM %s INNER JOIN %s ON %s.ID=PredictionPPIStructureScore.%s WHERE %s.PredictionSet='%s'" % (_get_prediction_structure_scores_table, prediction_set_id)
         return_set = set()
         for r in self.DDG_db.execute_select(q):
             return_set.add( r['PredictionPPIID'] )
@@ -194,15 +197,24 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         random.shuffle( prediction_ids )
         print '%d prediction_ids to process' % len(prediction_ids)
         if setup_cluster_run:
-            job_name = sanitize_filename(prediction_set_id)
+            job_name = '%s-%s' % (time.strftime("%y%m%d"), sanitize_filename(prediction_set_id))
             r = Reporter('fetching job details for prediction_ids', entries='job details')
             r.set_total_count(len(prediction_ids))
             for prediction_id in prediction_ids:
                 ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
+                tmp_dir = None
+                if not os.path.isdir( ddg_output_path ):
+                    ddg_output_zip = os.path.join(root_directory, '%d.zip' % prediction_id)
+                    if os.path.isfile(ddg_output_zip):
+                        tmp_dir = unzip_to_tmp_dir(prediction_id, ddg_output_zip)
+                        ddg_output_path = os.path.join(tmp_dir, '%d-ddg' % prediction_id)
                 job_details = self.get_job_details(prediction_id)
                 substitution_parameters = json.loads(job_details['JSONParameters'])
                 chains_to_move = substitution_parameters['%%chainstomove%%']
-                self.add_rescore_cluster_run(ddg_output_path, chains_to_move, score_method_id, prediction_id)
+                if os.path.isdir(ddg_output_path):
+                    self.add_rescore_cluster_run(ddg_output_path, chains_to_move, score_method_id, prediction_id)
+                if tmp_dir:
+                    shutil.rmtree(tmp_dir)
                 r.increment_report()
             r.done()
             self.create_cluster_run_rescore_dir( os.path.join(tmpdir_location, 'cluster_run'), passed_job_name = job_name )
@@ -213,6 +225,13 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 if os.path.isdir( ddg_output_path ):
                     self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force, score_method_id = score_method_id)
                     processed_count += 1
+                else:
+                    ddg_output_zip = os.path.join(root_directory, '%d.zip' % prediction_id)
+                    if os.path.isfile(ddg_output_zip):
+                        tmp_dir = unzip_to_tmp_dir(prediction_id, ddg_output_zip)
+                        self.extract_data_for_case(prediction_id, root_directory = tmp_dir, force = force, score_method_id = score_method_id)
+                        processed_count += 1
+                        shutil.rmtree(tmp_dir)
                 if max_prediction_ids_to_process and processed_count >= max_prediction_ids_to_process:
                     print 'Breaking early; processed %d prediction ids' % processed_count
                     break
@@ -320,18 +339,14 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 shutil.rmtree( os.path.dirname(mut_output_db3) )
         return scores
 
-    def add_scores_from_cluster_rescore(self, output_dir, prediction_structure_scores_table, prediction_id_field, score_method_id):
-        job_dict_path = os.path.join(os.path.join(output_dir, 'data'), 'job_dict.pickle')
-
-        with open(job_dict_path, 'r') as f:
-            job_dict = pickle.load(f)
-
+    def add_scores_from_cluster_rescore(self, output_dirs, prediction_structure_scores_table, prediction_id_field, score_method_id):
         settings = parse_settings.get_dict()
         rosetta_scripts_path = settings['local_rosetta_installation_path'] + '/source/bin/' + 'rosetta_scripts' + settings['local_rosetta_binary_type']
 
         DDGdb = self.DDG_db
 
         prediction_ids_and_structs_score_count = {}
+        print 'Running database query to find out which predictions need to be loaded'
         for row in DDGdb.execute_select("SELECT %s, ScoreType, StructureID FROM %s WHERE ScoreType IN ('WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex') AND ScoreMethodID=%d" % (prediction_id_field, prediction_structure_scores_table, score_method_id)):
             prediction_id = long(row[prediction_id_field])
             score_type = row['ScoreType']
@@ -346,21 +361,56 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 if prediction_ids_and_structs_score_count[(prediction_id, structure_id)] != 6:
                     print 'Missing data:', prediction_id, structure_id, prediction_ids_and_structs_score_count[(prediction_id, structure_id)]
 
+        if isinstance(output_dirs, basestring):
+            output_dirs = [output_dirs]
+
         available_db3_files = {}
         available_db3_files_set = set()
-        for task_name in job_dict:
-            prediction_id, round_num, struct_type = split_task_name_path(task_name)
-            if struct_type == 'wt':
-                continue
-            mut_task_name = task_name
-            wt_task_name = mut_task_name.replace('mut', 'wt')
-            wt_task_dir = os.path.join(output_dir, wt_task_name)
-            mut_task_dir = os.path.join(output_dir, mut_task_name)
-            wt_db3_file = os.path.join(wt_task_dir, 'output.db3.gz')
-            mut_db3_file = os.path.join(mut_task_dir, 'output.db3.gz')
-            if os.path.isfile(wt_db3_file) and os.path.isfile(mut_db3_file):
-                available_db3_files[(prediction_id, round_num)] = (mut_db3_file, wt_db3_file)
-                available_db3_files_set.add( (prediction_id, round_num) )
+        r = Reporter('looking for output .db3 files in output directories', entries = 'output dirs')
+        r.set_total_count( len(output_dirs) )
+        for output_dir in output_dirs:
+            job_dict_path = os.path.join(os.path.join(output_dir, 'data'), 'job_dict.pickle')
+
+            with open(job_dict_path, 'r') as f:
+                job_dict = pickle.load(f)
+
+            for task_name in job_dict:
+                prediction_id, round_num, struct_type = split_task_name_path(task_name)
+                if struct_type == 'wt':
+                    # We will process both wt and mut types below
+                    continue
+                mut_task_name = task_name
+                wt_task_name = mut_task_name.replace('mut', 'wt')
+                wt_task_dir = os.path.join(output_dir, wt_task_name)
+                mut_task_dir = os.path.join(output_dir, mut_task_name)
+                wt_db3_file = os.path.join(wt_task_dir, 'output.db3.gz')
+                mut_db3_file = os.path.join(mut_task_dir, 'output.db3.gz')
+                if os.path.isfile(wt_db3_file) and os.path.isfile(mut_db3_file):
+                    available_db3_files[(prediction_id, round_num)] = (mut_db3_file, wt_db3_file)
+                    available_db3_files_set.add( (prediction_id, round_num) )
+                else:
+                    # Check other output directories for db3 files
+                    if not os.path.isfile(wt_db3_file):
+                        wt_db3_file = None
+                    if not os.path.isfile(mut_db3_file):
+                        mut_db3_file = None
+                    for inner_output_dir in sorted(output_dirs, key=lambda k: random.random()):
+                        if not wt_db3_file:
+                            inner_wt_task_dir = os.path.join(inner_output_dir, wt_task_name)
+                            inner_wt_db3_file = os.path.join(wt_task_dir, 'output.db3.gz')
+                            if os.path.isfile(inner_wt_db3_file):
+                                wt_db3_file = inner_wt_db3_file
+                        if not mut_db3_file:
+                            inner_mut_task_dir = os.path.join(inner_output_dir, mut_task_name)
+                            inner_mut_db3_file = os.path.join(mut_task_dir, 'output.db3.gz')
+                            if os.path.isfile(inner_mut_db3_file):
+                                mut_db3_file = inner_mut_db3_file
+                        if wt_db3_file and mut_db3_file:
+                            available_db3_files[(prediction_id, round_num)] = (mut_db3_file, wt_db3_file)
+                            available_db3_files_set.add( (prediction_id, round_num) )
+                            break
+            r.increment_report()
+        r.done()
 
         db3_files_to_process = available_db3_files_set.difference(structs_with_some_scores)
         print 'Found %d scores in db3 files needed to add to database' % len(db3_files_to_process)
@@ -504,3 +554,11 @@ def add_scores_from_db3_file(db3_file, struct_id, round_num, score_dict):
     if tmp_dir:
         shutil.rmtree(tmp_dir)
     return score_dict
+
+def unzip_to_tmp_dir(prediction_id, zip_file):
+    tmp_dir = tempfile.mkdtemp(prefix='unzip_to_tmp_')
+    unzip_path = os.path.join(tmp_dir, '%d-ddg' % prediction_id)
+    os.makedirs(unzip_path)
+    with zipfile.ZipFile(zip_file, 'r') as job_zip:
+        job_zip.extractall(unzip_path)
+    return tmp_dir
