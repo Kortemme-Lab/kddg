@@ -22,6 +22,7 @@ functional_layer = {
     3 : 'Results layer',
     4 : 'Analysis layer',
     5 : 'Application layer',
+    6 : 'Consistency layer',
     None: 'Miscellanous'
 }
 
@@ -61,10 +62,16 @@ def informational_pdb(func):
     func._layer_order = 2
     return func
 
+def informational_complex(func):
+    func._helptype = 'Complex information API'
+    func._layer = 1
+    func._layer_order = 3
+    return func
+
 def informational_job(func):
     func._helptype = 'Prediction information API'
     func._layer = 1
-    func._layer_order = 3
+    func._layer_order = 4
     return func
 
 def job_creator(func):
@@ -106,6 +113,12 @@ def analysis_api(func):
 def app_pymol(func):
     func._helptype = 'PyMOL API'
     func._layer = 5
+    func._layer_order = 0
+    return func
+
+def sanity_check(func):
+    func._helptype = 'Data consistency /sanity checks'
+    func._layer = 6
     func._layer_order = 0
     return func
 
