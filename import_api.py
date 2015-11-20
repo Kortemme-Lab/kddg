@@ -9,9 +9,19 @@ Copyright (c) 2015 Shane O'Connor. All rights reserved.
 """
 
 import sys
+import pprint
+from io import BytesIO
+import os
+import copy
+import json
+import zipfile
+import traceback
+import gzip
+import shutil
+import sqlite3
+import cPickle as pickle
 
-if __name__ == '__main__':
-    sys.path.insert(0, '../../klab')
+import numpy
 
 from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy.orm import relationship, backref
@@ -19,57 +29,245 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy import create_engine
 
-from klab.fs.fsio import read_file
+if __name__ == '__main__':
+    sys.path.insert(0, '../../klab')
+
+from klab import colortext
+from klab.bio.pdb import PDB
+from klab.bio.basics import ChainMutation
+from klab.fs.fsio import read_file, write_temp_file
 
 from db_schema import PDBFile, PDBChain, PDBMolecule, PDBMoleculeChain, PDBResidue
+from api_layers import *
+from db_api import ddG, PartialDataException, SanityCheckException
+import ddgdbapi
+
+
+class DataImportInterface(object):
+    '''This is the data import API class which should be used when adding basic data (PDB files, complex definitions, etc.)
+       to the database.
+
+            from ddglib.interface_api import DataImportInterface
+            importer = DataImportInterface(read_file('ddgdb.pw'))
+            e.g.
+            importer.add_pdb_from_rcsb('1A2K')
+
+       Objects of this class and derived subclasses has three main members:
+
+          self.DDG_db - a database interface used to interact directly with the database via MySQL commands
+          self.DDG_db_utf - the same interface but with UTF support. This should be used when dealing with UTF fields e.g. publication data
+          self.prediction_data_path - this is the location on the file server where output form jobs of the derived class type (e.g. binding affinity jobs) should be stored.
+    '''
+
+
+    ##################
+    #                #
+    #  Constructors  #
+    #                #
+    ##################
+
+
+    def __init__(self, passwd, connect_string, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
+
+        # Set up MySQLdb connections
+        passwd = passwd.strip()
+        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname)
+        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True)
+
+        # Set up SQLAlchemy connections
+        self.connect_string = connect_string
+        self.engine, self.session = None, None
+        self.get_engine()
+        self.get_session()
+
+        self.rosetta_scripts_path = rosetta_scripts_path
+        self.rosetta_database_path = rosetta_database_path
+
+        from db_schema import test_schema_against_database_instance
+        test_schema_against_database_instance(self.DDG_db)
+
+        # This counter is used to check the number of times get_job is called and raise an exception if this exceeds a certain amount
+        # If the API is misused then get_job may be called infinitely on one job - this is meant to protect against that
+        self._get_job_fn_call_counter = {}
+        self._get_job_fn_call_counter_max = ddG.GET_JOB_FN_CALL_COUNTER_MAX
+
+        # Caching dictionaries
+        self.cached_score_method_details = None
+
+
+    @classmethod
+    def get_interface_with_config_file(cls, database = 'ddg', host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None, my_cnf_path = None):
+        # Uses ~/.my.cnf to get authentication information
+        ### Example .my.cnf (host_config_name will equal guybrush2):
+        ### [clientguybrush2]
+        ### user=kyleb
+        ### password=notmyrealpass
+        ### host=guybrush.ucsf.edu
+        if not my_cnf_path:
+            my_cnf_path = os.path.expanduser(os.path.join('~', '.my.cnf'))
+        if not os.path.isfile(os.path.expanduser(my_cnf_path)):
+            raise Exception("A .my.cnf file must exist at: " + my_cnf_path)
+
+        # These four variables must be set in a section of .my.cnf named host_config_name
+        user = None
+        password = None
+        host = None
+        connection_string = None
+        connection_string_key = 'sqlalchemy.{0}.url'.format(database)
+        with open(my_cnf_path, 'r') as f:
+            parsing_config_section = False
+            for line in f:
+                if line.strip() == '[client%s]' % host_config_name:
+                    parsing_config_section = True
+                elif line.strip() == '':
+                    parsing_config_section = False
+                elif parsing_config_section:
+                    if '=' in line:
+                        key, val = line.strip().split('=')
+                        key, val = key.strip(), val.strip()
+                        if key == 'user':
+                            user = val
+                        elif key == 'password':
+                            password = val
+                        elif key == 'host':
+                            host = val
+                        elif key == connection_string_key:
+                            connection_string = val
+                    else:
+                        parsing_config_section = False
+
+        if not user or not password or not host or not connection_string:
+            raise Exception("Couldn't find host(%s), username(%s), password, or connection string in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
+
+        return cls(password, connection_string, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+
+
+    def __del__(self):
+        pass         #self.DDG_db.close()         #self.ddGDataDB.close()
 
 
 
-###########################
-#                         #
-#  SQLAlchemy Engine      #
-#                         #
-###########################
-
-engine = None
-session = None
-
-def get_engine(connect_string):
-    global engine
-    if not engine:
-        engine = create_engine(connect_string)
-    return engine
+    #############################
+    #                           #
+    #  SQLAlchemy Engine setup  #
+    #                           #
+    #############################
 
 
-def get_connection(connect_string):
-    # e.g. connection = get_connection(); connection.execute("SELECT * FROM User")
-    global engine
-    engine = get_engine(connect_string)
-    return engine.connect()
+
+    def get_engine(self):
+        if not self.engine:
+            self.engine = create_engine(self.connect_string)
+        return self.engine
 
 
-def get_session(connect_string, new_session = False):
-    global engine
-    global session
-    print(connect_string)
-    engine = get_engine(connect_string)
-    if new_session or not(session):
-        maker_ddgdatabase = sessionmaker(autoflush = True, autocommit = False)
-        s = scoped_session(maker_ddgdatabase)
-        DeclarativeBaseDDG = declarative_base()
-        metadata_ddg = DeclarativeBaseDDG.metadata
-        s.configure(bind=engine)
-        metadata_ddg.bind = engine
-        if new_session:
-            return s
-        else:
-            session = s
-            return s
-    return session
+    def get_connection(self):
+        # e.g. connection = importer.get_connection(); connection.execute("SELECT * FROM User")
+        self.get_engine()
+        return self.engine.connect()
+
+
+    def get_session(self, new_session = False):
+        self.get_engine()
+        if new_session or not(self.session):
+            maker_ddgdatabase = sessionmaker(autoflush = True, autocommit = False)
+            s = scoped_session(maker_ddgdatabase)
+            DeclarativeBaseDDG = declarative_base()
+            metadata_ddg = DeclarativeBaseDDG.metadata
+            s.configure(bind=self.engine)
+            metadata_ddg.bind = self.engine
+            if new_session:
+                return s
+            else:
+                self.session = s
+        return self.session
+
+
+    def renew(self):
+        self.session = self.get_session(new_session = True)
+
+
+
+    #################################
+    #                               #
+    #  PDB file entry - public API  #
+    #                               #
+    #################################
+
+
+
+    def add_pdb_from_rcsb(self, pdb_id):
+        '''NOTE: This API is used to create and analysis predictions or retrieve information from the database.
+                 This function adds new raw data to the database and does not seem to belong here. It should be moved into
+                 an admin API instead.
+           This function adds imports a PDB into the database, creating the associated molecule, chain and residue etc. records.'''
+
+
+        contains_membrane_protein = None
+        protein = None
+        file_source = None
+        UniProtAC = None
+        UniProtID = None
+        testonly = False
+        force = False
+        techniques = None
+        derived_from = None
+        notes = None
+        allow_missing_molecules = False
+
+
+        #-------
+        p = PDB.retrieve(pdb_id)
+
+        pdbtmo = PDBTM(read_file('/kortemmelab/shared/mirror/PDBTM/pdbtmall.xml'))
+        pdb_id_map = pdbtmo.get_pdb_id_map()
+        uc_pdb_id_map = {}
+        for k, v in pdb_id_map.iteritems():
+            uc_pdb_id_map[k.upper()] = v
+        if pdb_id.upper() in uc_pdb_id_map:
+            print('{0} is a transmembrane protein.'.format(pdb_id))
+        return
+
+        user_ids = set([str(p.upper()) for p in json.loads(kw['pdb_ids'])])
+        common_pdb_ids = sorted(pdbtm_ids.intersection(user_ids))
+
+        comment = '%d of the PDB IDs are marked as membrane proteins in the PDBTM' % len(pdbtm_ids.intersection(user_ids))
+        #-------
+
+        assert(file_source)
+        if filepath:
+            if not os.path.exists(filepath):
+                raise Exception("The file %s does not exist." % filepath)
+            filename = os.path.split(filepath)[-1]
+            rootname, extension = os.path.splitext(filename)
+            if not extension.lower() == ".pdb":
+                raise Exception("Aborting: The file does not have a .pdb extension.")
+        if pdb_id:
+            rootname = pdb_id
+
+        try:
+            dbp = ddgdbapi.PDBStructure(self.DDG_db, rootname, contains_membrane_protein = contains_membrane_protein, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques, derived_from = derived_from, notes = notes)
+            #Structure.getPDBContents(self.DDG_db)
+            results = self.DDG_db.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters = (rootname,))
+
+            if results:
+                #ddgdbapi.getUniProtMapping(pdb_id, storeInDatabase = True)
+                #raise Exception("There is already a structure in the database with the ID %s." % rootname)
+                if force:
+                    dbp.commit(testonly = testonly, allow_missing_molecules = allow_missing_molecules)
+                return None
+            dbp.commit(testonly = testonly)
+            return rootname
+        except Exception, e:
+            colortext.error(str(e))
+            colortext.error(traceback.format_exc())
+            raise Exception("An exception occurred committing %s to the database." % filepath)
+
 
 
 def test():
-    session = get_session(read_file('db_connection_str'))
+    importer = DataImportInterface.get_interface_with_config_file()
+    session = importer.session
     pdbfile = session.query(PDBFile).filter(PDBFile.ID == '1A2K')[0]
 
     for m in session.query(PDBMoleculeChain).filter(PDBMoleculeChain.PDBFileID == '1A2K'):
