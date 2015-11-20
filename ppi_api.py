@@ -27,7 +27,7 @@ import cPickle as pickle
 import numpy
 
 from api_layers import *
-from db_api import ddG, PartialDataException
+from db_api import ddG, PartialDataException, SanityCheckException
 from klab import colortext
 from klab.bio.pdb import PDB
 from klab.bio.basics import ChainMutation
@@ -180,6 +180,42 @@ class BindingAffinityDDGInterface(ddG):
                     assert(pdb_mutation['PPComplexID'] == complex_id)
                 pdb_mutations.append(pdb_mutation)
         return pdb_mutations
+
+
+    @sanity_check
+    def find_pdb_files_involved_in_multiple_complexes(self):
+
+        known_exceptions = {
+            # These need to be checked - 1OYV only has 1 chain besides Subtilisin Carlsberg
+            '1OYV' : 2, # Subtilisin Carlsberg bound to: i) domain 1 of its inhibitor; and ii) domain 2 of its inhibitor.
+            '1QFW' : 2, # Human chorionic gonadotropin (chains A, B) bound to: i) Fv anti-alpha (chains L, H); and ii) Fv anti-beta (chain M, I).
+        }
+
+        d = {}
+        for r in self.DDG_db.execute_select('SELECT ID FROM PDBFile ORDER BY ID'):
+            pdb_id = r['ID']
+            complex_ids = self.search_complexes_by_pdb_id(pdb_id)
+            if pdb_id.upper() in known_exceptions:
+                assert(len(complex_ids) == known_exceptions[pdb_id])
+            else:
+                if len(complex_ids) > 1:
+                    d[pdb_id] = {'complex_ids' : complex_ids, 'complexes' : {}}
+                    for complex_id in complex_ids:
+                        d[pdb_id]['complexes'][complex_id] = self.get_complex_details(complex_id)
+        if d:
+            raise SanityCheckException('Some PDB files are associated with multiple complexes:\n{0}'.format(pprint.pformat(d)))
+
+
+    @informational_complex
+    def search_complexes_by_pdb_id(self, pdb_id):
+        '''Returns the list of PPComplexIDs which are related to the PDB ID. Typically this list will be empty or have one
+           ID. In rarer cases, the same structure may be used as a structural basis for multiple complexes.'''
+        results = self.DDG_db_utf.execute_select('''
+            SELECT DISTINCT PPIPDBSet.PPComplexID FROM PPIPDBPartnerChain
+            INNER JOIN PPIPDBSet ON PPIPDBPartnerChain.PPComplexID=PPIPDBSet.PPComplexID AND PPIPDBPartnerChain.SetNumber=PPIPDBSet.SetNumber
+            WHERE PDBFileID=%s AND IsComplex=1
+            ''', parameters=(pdb_id,))
+        return [r['PPComplexID'] for r in results]
 
 
     @informational_job
@@ -1405,9 +1441,25 @@ class BindingAffinityDDGInterface(ddG):
 
     @informational_job
     def get_development_protocol(self, development_protocol_id):
-        results = self.DDG_db.execute_select('SELECT * FROM DevelopmentProtocol WHERE ID = %s', parameters=(development_protocol_id) )
+        results = self.DDG_db.execute_select('SELECT * FROM DevelopmentProtocol WHERE ID = %s', parameters=(development_protocol_id,) )
         assert( len(results) == 1 )
         return results[0]
+
+
+    @informational_pdb
+    def get_complex_ids_matching_protein_name(self, partial_name):
+        '''Returns a list of PPComplex IDs where at least one of the partner names matches partial_name.'''
+        partial_name = '%{0}%'.format(partial_name)
+        results = self.DDG_db.execute_select('''
+            SELECT ID FROM PPComplex
+            WHERE
+            LName LIKE %s
+            OR LShortName LIKE %s
+            OR LHTMLName LIKE %s
+            OR RName LIKE %s
+            OR RShortName LIKE %s
+            OR RHTMLName LIKE %s ORDER BY ID''', parameters=(partial_name, partial_name, partial_name, partial_name, partial_name, partial_name))
+        return [r['ID'] for r in results]
 
 
     @informational_pdb
