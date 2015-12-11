@@ -1647,7 +1647,6 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     @analysis_api
     def get_top_x_scores(self, prediction_id, score_method_id, score_type, x, component = 'total', order_by = 'ASC'):
         '''get_top_x_ddg_stability'''
-        print('SELECT * FROM {0} WHERE {1}=%s AND ScoreMethodID=%s AND ScoreType=%s ORDER BY {2} {3}'.format(self._get_prediction_structure_scores_table(), self._get_prediction_id_field(), component, order_by), (prediction_id, score_method_id, score_type))
         results = self.DDG_db.execute_select('SELECT * FROM {0} WHERE {1}=%s AND ScoreMethodID=%s AND ScoreType=%s ORDER BY {2} {3}'.format(self._get_prediction_structure_scores_table(), self._get_prediction_id_field(), component, order_by), parameters=(prediction_id, score_method_id, score_type))
         if len(results) < x:
             raise Exception('The top {0} best scores were requested but only {1} results are stored in the database.'.format(x, len(results)))
