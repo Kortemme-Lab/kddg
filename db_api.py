@@ -30,6 +30,10 @@ import json
 
 from io import BytesIO
 from api_layers import *
+try:
+    import pandas
+except ImportError:
+    pass
 
 try:
     import matplotlib
@@ -42,12 +46,15 @@ except ImportError:
 
 import score
 import ddgdbapi
+from db_schema import test_schema_against_database_instance
 
 from klab.bio.pdb import PDB
 from klab.bio.basics import residue_type_3to1_map as aa1, dssp_elision
 from klab.bio.basics import Mutation
+from klab.bio.pdbtm import PDBTM
+
 #from Bio.PDB import *
-from klab.fs.fsio import write_file, read_file
+from klab.fs.fsio import write_file, read_file, open_temp_file
 from klab.process import Popen
 from klab.constants import rosetta_weights
 from klab import colortext
@@ -60,7 +67,7 @@ from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
 
 class FatalException(Exception): pass
 class PartialDataException(Exception): pass
-
+class SanityCheckException(Exception): pass
 
 class MutationSet(object):
     '''This class is a leftover from Lin's work and should probably be folded into an API function along with the functions that call this.
@@ -103,6 +110,9 @@ class ddG(object):
         self.prediction_data_path = None
         self.rosetta_scripts_path = rosetta_scripts_path
         self.rosetta_database_path = rosetta_database_path
+
+        # Before continuing, make sure that the SQLAlchemy definitions match the table definitions
+        test_schema_against_database_instance(self.DDG_db)
 
         # This counter is used to check the number of times get_job is called and raise an exception if this exceeds a certain amount
         # If the API is misused then get_job may be called infinitely on one job - this is meant to protect against that
@@ -298,8 +308,11 @@ class ddG(object):
         else:
             return None
 
+
+
+
     @alien
-    def add_PDB_to_database(self, filepath = None, pdbID = None, contains_membrane_protein = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False, techniques = None, derived_from = None, notes = None, allow_missing_molecules = False):
+    def add_PDB_to_database(self, filepath = None, pdb_id = None, contains_membrane_protein = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False, techniques = None, derived_from = None, notes = None, allow_missing_molecules = False):
         '''NOTE: This API is used to create and analysis predictions or retrieve information from the database.
                  This function adds new raw data to the database and does not seem to belong here. It should be moved into
                  an admin API instead.
@@ -313,8 +326,8 @@ class ddG(object):
             rootname, extension = os.path.splitext(filename)
             if not extension.lower() == ".pdb":
                 raise Exception("Aborting: The file does not have a .pdb extension.")
-        if pdbID:
-            rootname = pdbID
+        if pdb_id:
+            rootname = pdb_id
 
         try:
             dbp = ddgdbapi.PDBStructure(self.DDG_db, rootname, contains_membrane_protein = contains_membrane_protein, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques, derived_from = derived_from, notes = notes)
@@ -322,7 +335,7 @@ class ddG(object):
             results = self.DDG_db.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters = (rootname,))
 
             if results:
-                #ddgdbapi.getUniProtMapping(pdbID, storeInDatabase = True)
+                #ddgdbapi.getUniProtMapping(pdb_id, storeInDatabase = True)
                 #raise Exception("There is already a structure in the database with the ID %s." % rootname)
                 if force:
                     dbp.commit(testonly = testonly, allow_missing_molecules = allow_missing_molecules)
@@ -463,7 +476,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def addPrediction(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True): raise Exception('This function has been deprecated. Use add_job instead.')
 
     @deprecated
-    def add_pdb_file(self, filepath, pdb_id): raise Exception('This function has been deprecated. Use add_PDB_to_database instead.')
+    def add_pdb_file(self, filepath, pdb_id): raise Exception('This function has been deprecated. Use the import_api.add_pdb_* functions instead.')
 
     @deprecated
     def getPublications(self, result_set): raise Exception('This function has been deprecated. Use get_publications_for_result_set instead.')
@@ -754,6 +767,39 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 assert(existing_filecontent_id == None) # content uniqueness check
                 existing_filecontent_id = r['ID']
         return existing_filecontent_id
+
+
+    @informational_pdb
+    def get_pdb_chain_coordinates(self, pdb_id, chain_id):
+        '''Read a saved dataframe.'''
+        zipped_coordinates = self.DDG_db.execute_select('SELECT Coordinates FROM PDBChain WHERE PDBFileID=%s AND Chain=%s AND Coordinates IS NOT NULL', parameters=(pdb_id, chain_id))
+        if zipped_coordinates:
+            assert(len(zipped_coordinates) == 1)
+            buf = BytesIO(zipped_coordinates[0]['Coordinates'])
+            gf = gzip.GzipFile(fileobj=buf, mode="rb")
+
+            residue_matrix = None
+            try:
+                store = pandas.read_hdf(gf)
+                residue_matrix = store['dataframe']
+                store.close()
+            except NotImplementedError, e:
+                # "Support for generic buffers has not been implemented"
+                try:
+                    nfname = None
+                    f, nfname = open_temp_file('/tmp', suffix = '.hdf5')
+                    f.close()
+                    write_file(nfname, gf.read(), ftype = 'wb')
+                    store = pandas.HDFStore(nfname)
+                    residue_matrix = store['dataframe']
+                    store.close()
+                    os.remove(nfname)
+                    print('get_pdb_chain_coordinates here')
+                except:
+                    if nfname: os.remove(nfname)
+                    raise
+            return residue_matrix
+        return None
 
 
     @informational_pdb
@@ -1597,6 +1643,24 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     ## This part of the API is responsible for running analysis on completed predictions
     ###########################################################################################
 
+
+    @analysis_api
+    def get_top_x_scores(self, prediction_id, score_method_id, score_type, x, component = 'total', order_by = 'ASC'):
+        '''get_top_x_ddg_stability'''
+        print('SELECT * FROM {0} WHERE {1}=%s AND ScoreMethodID=%s AND ScoreType=%s ORDER BY {2} {3}'.format(self._get_prediction_structure_scores_table(), self._get_prediction_id_field(), component, order_by), (prediction_id, score_method_id, score_type))
+        results = self.DDG_db.execute_select('SELECT * FROM {0} WHERE {1}=%s AND ScoreMethodID=%s AND ScoreType=%s ORDER BY {2} {3}'.format(self._get_prediction_structure_scores_table(), self._get_prediction_id_field(), component, order_by), parameters=(prediction_id, score_method_id, score_type))
+        if len(results) < x:
+            raise Exception('The top {0} best scores were requested but only {1} results are stored in the database.'.format(x, len(results)))
+        results = results[:x]
+        return [{
+                    'PredictionID' : r[self._get_prediction_id_field()],
+                    'ScoreMethodID' : score_method_id,
+                    'ScoreType' : score_type,
+                    'StructureID' : r['StructureID'],
+                    component : r[component],
+                } for r in results]
+
+
     @analysis_api
     def get_prediction_scores(self, prediction_id, expectn = None):
         '''Returns the scores for the prediction using nested dicts with the structure:
@@ -1605,10 +1669,10 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         scores = {}
         for r in self.DDG_db.execute_select('SELECT * FROM {0} WHERE {1}=%s'.format(self._get_prediction_structure_scores_table(), self._get_prediction_id_field()), parameters=(prediction_id,)):
             ScoreMethodID = r['ScoreMethodID']
+            ScoreType = r['ScoreType']
             StructureID = r['StructureID']
             if StructureID == -1:
                 StructureID = 'None' # usually this indicates an overall or aggregate value
-            ScoreType = r['ScoreType']
             scores[ScoreMethodID] = scores.get(ScoreMethodID, {})
             scores[ScoreMethodID][StructureID] = scores[ScoreMethodID].get(StructureID, {})
             scores[ScoreMethodID][StructureID][ScoreType] = r

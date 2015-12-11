@@ -9,7 +9,7 @@ import sys
 import shutil
 import multiprocessing
 import random
-from ddglib.ppi_api import get_interface
+from ddg.ddglib.ppi_api import get_interface
 import klab.cluster_template.parse_settings as parse_settings
 from klab.Reporter import Reporter
 from klab.MultiWorker import MultiWorker

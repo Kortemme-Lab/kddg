@@ -340,7 +340,9 @@ def read_UniProt_map(ddGdb):
             else:
                 UniProtKBACToPDB[UPAC] = [pdbID]
 
-class PDBStructure(DBObject):
+class PDBStructure_deprecated(DBObject):
+
+    '''This was the old object used to import data into the database. I am transitioning this to import_api:PDBFile.'''
 
     # At the time of writing, these PDB IDs had no UniProt entries
     NoUniProtIDs = set(['1GTX', '1UOX', '1WSY', '1YYJ', '2IMM', '2MBP'])

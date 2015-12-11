@@ -17,8 +17,8 @@ from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.dialects.mysql import DOUBLE, TINYINT
-from sqlalchemy.types import DateTime, Enum, Integer, TIMESTAMP, Text, Unicode
+from sqlalchemy.dialects.mysql import DOUBLE, TINYINT, LONGBLOB
+from sqlalchemy.types import DateTime, Enum, Integer, TIMESTAMP, Text, Unicode, String
 
 if __name__ == '__main__':
     sys.path.insert(0, '../../klab')
@@ -58,6 +58,81 @@ class AminoAcid(DeclarativeBase):
 
 ######################################
 #                                    #
+#  Ligands and associated records    #
+#                                    #
+######################################
+
+
+class Ligand(DeclarativeBase):
+    __tablename__ = 'Ligand'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PDBCode = Column(String(3), nullable=False)
+    LigandCode = Column(String(512), nullable=False)
+    Formula = Column(String(256), nullable=False)
+    MolecularWeight = Column(DOUBLE, nullable=False)
+    LigandType = Column(String(256), nullable=False)
+    Solubility = Column(String(256), nullable=True)
+    CellPermeability = Column(Enum('Yes','No','Yes (probably)', nullable=True))
+    AssaysToDetermineConcentrationInCells = Column(String(256), nullable=True)
+    ProductionInCells = Column(Enum('Yes','No'), nullable=True)
+    ProductionInCellsNotes = Column(String(64), nullable=True)
+    Diagram = Column(LONGBLOB, nullable=True)
+    SimilarCompoundsDiagram = Column(LONGBLOB, nullable=True)
+    InChI = Column(Text, nullable=False)
+    InChIKey = Column(String(27), nullable=False)
+
+
+class LigandDescriptor(DeclarativeBase):
+    __tablename__ = 'LigandDescriptor'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False)
+    Descriptor = Column(Text, nullable=False)
+    DescriptorType = Column(String(128), nullable=False)
+    Program = Column(String(64), nullable=False)
+    Version = Column(String(16), nullable=False)
+
+
+class LigandIdentifier(DeclarativeBase):
+    __tablename__ = 'LigandIdentifier'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False)
+    Identifier = Column(String(1024), nullable=False)
+    IDType = Column(String(128), nullable=False)
+    Program = Column(String(64), nullable=False)
+    Version = Column(String(16), nullable=False)
+
+
+class LigandPrice(DeclarativeBase):
+    __tablename__ = 'LigandPrice'
+
+    LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False, primary_key=True)
+    PriceDate = Column(DateTime, nullable=False, primary_key=True)
+    USDPricePerGram = Column(DOUBLE, nullable=False)
+    PriceNote = Column(String(256), nullable=True)
+
+
+class LigandReference(DeclarativeBase):
+    __tablename__ = 'LigandReference'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False)
+    PublicationID = Column(String(64), ForeignKey('Publication.ID'), nullable=True)
+    Type = Column(Enum('Reference','Assay'), nullable=False, default=u'Reference')
+    Notes = Column(Text, nullable=True)
+
+
+class LigandSynonym(DeclarativeBase):
+    __tablename__ = 'LigandSynonym'
+
+    LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False, primary_key=True)
+    Synonym = Column(String(256), nullable=False, primary_key=True)
+
+
+######################################
+#                                    #
 #  PDB files and associated records  #
 #                                    #
 ######################################
@@ -91,11 +166,13 @@ class PDBChain(DeclarativeBase):
 
     PDBFileID = Column(Unicode(10), ForeignKey('PDBFile.ID'), nullable=False, primary_key=True)
     Chain = Column(Unicode(1), nullable=False, primary_key=True)
+    MoleculeType = Column(Enum('Protein','DNA','RNA','Ligand'), nullable=True)
     WildtypeProteinID = Column(Unicode(18), nullable=True)
     FullProteinID = Column(Unicode(18), nullable=True)
     SegmentProteinID = Column(Unicode(18), nullable=True)
     WildtypeAlignedProteinID = Column(Unicode(18), nullable=True)
     AcquiredProteinID = Column(Unicode(18), nullable=True)
+    Coordinates = Column(LONGBLOB, nullable=True)
 
     # Parent relationships
     pdb_file = relationship('PDBFile', primaryjoin="PDBChain.PDBFileID==PDBFile.ID")
@@ -177,6 +254,16 @@ class PDBResidue(DeclarativeBase):
         return 'PDBResidue {0}. {1} {2} {3} ({4}). Exposure: {5}. DSSP: {6}.'.format(self.residue.LongCode, self.PDBFileID, self.Chain, (self.ResidueAA + self.ResidueID.strip()).ljust(5), self.ResidueType, self.ComplexExposure, self.ComplexDSSP)
 
 
+class PDBLigand(DeclarativeBase):
+    __tablename__ = 'PDBLigand'
+
+    PDBFileID = Column(Unicode(10), ForeignKey('PDBChain.PDBFileID'), nullable=False, primary_key=True)
+    Chain = Column(Unicode(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
+    SeqID = Column(Unicode(5), nullable=False, primary_key=True)
+    PDBLigandCode = Column(Unicode(3), nullable=False)
+    LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False)
+    ParamsFileContentID = Column(Integer, ForeignKey('FileContent.ID'), nullable=False)
+
 
 ###########################
 #                         #
@@ -187,7 +274,7 @@ class PDBResidue(DeclarativeBase):
 
 
 
-def generate_sqlalchemy_definition(tablenames):
+def generate_sqlalchemy_definition(tablenames = []):
     '''This function generates the SQLAlchemy class definitions from the database. The generation does not parse the
        entire definition - it omits unique keys, foreign key constraints etc. but it saves a lot of manual work setting
        up the boilerplate field definitions. When the database schema changes, call this function to update the
@@ -201,7 +288,6 @@ def test_schema_against_database_instance(DDG_db):
     '''Make sure that our SQLAlchemy definitions match the database. This should be run by the API prior to connection
        as it lets the admin know that they need to update the schema here (use generate_sqlalchemy_definition to update
        the schema).'''
-
     database_to_class_mapping = {}
     clsmembers = inspect.getmembers(sys.modules[__name__], inspect.isclass)
     clsmembers = [c[1] for c in clsmembers if issubclass(c[1], DeclarativeBase) and c[1] != DeclarativeBase]
@@ -218,14 +304,16 @@ def test_schema_against_database_instance(DDG_db):
             if represented_columns.difference(tbl_columns):
                 colortext.warning('  The SQLAlchemy class has extra columns: {0}'.format(', '.join(sorted(represented_columns.difference(tbl_columns)))))
             if tbl_columns.difference(represented_columns):
-                colortext.pcyan('  The SQLAlchemy class has extra columns: {0}'.format(', '.join(sorted(tbl_columns.difference(represented_columns)))))
+                colortext.pcyan('  The MySQL schema definition has extra columns: {0}'.format(', '.join(sorted(tbl_columns.difference(represented_columns)))))
     if inconsistencies:
+        generate_sqlalchemy_definition(inconsistencies)
         raise colortext.Exception('The following SQLAlchemy classes do not match the database schema: {0}.'.format(', '.join(inconsistencies)))
 
 
 
 if __name__ == '__main__':
-    #generate_sqlalchemy_definition(['AminoAcid'])
+    generate_sqlalchemy_definition(['AminoAcid'])
+    sys.exit(0)
     #generate_sqlalchemy_definition(['PDBFile', 'PDBChain', 'PDBMolecule', 'PDBMoleculeChain', 'PDBResidue'])
     from ppi_api import get_interface as get_ppi_interface
     ppi_api = get_ppi_interface(read_file(os.path.join('..', 'pw')).strip())
