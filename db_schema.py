@@ -73,7 +73,7 @@ class Ligand(DeclarativeBase):
     MolecularWeight = Column(DOUBLE, nullable=False)
     LigandType = Column(String(256), nullable=False)
     Solubility = Column(String(256), nullable=True)
-    CellPermeability = Column(Enum('Yes','No','Yes (probably)', nullable=True))
+    CellPermeability = Column(Enum('Yes','No','Yes (probably)'), nullable=True)
     AssaysToDetermineConcentrationInCells = Column(String(256), nullable=True)
     ProductionInCells = Column(Enum('Yes','No'), nullable=True)
     ProductionInCellsNotes = Column(String(64), nullable=True)
