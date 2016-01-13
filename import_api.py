@@ -403,8 +403,10 @@ class DataImportInterface(object):
             self.add_pdb_data(tsession, pdb_id, update_sections = update_sections)
 
             previously_added.add(pdb_id)
+
             #tsession.commit()
             print('Success.\n')
+            raise Exception('Rollback') # todo: remove
         except:
             colortext.error('Failure.')
             tsession.rollback()
@@ -474,6 +476,9 @@ class DataImportInterface(object):
 
         db_chains_ids = sorted(db_chains.keys())
         chain_ids = sorted(set(pdb_object.seqres_sequences.keys() + pdb_object.atom_sequences.keys() + pdb_object.chain_types.keys()))
+
+        pprint.pprint(pdb_object.chain_types)
+
         if chain_ids != db_chains_ids:
             #colortext.warning('PDB chains: {0}\t DB chains: {1}'.format(','.join(chain_ids), ','.join(db_chains_ids)))
             #colortext.error('Missing chains.')
@@ -1028,10 +1033,11 @@ def test():
             importer.add_ligand_by_pdb_code(l)
 
     #importer.update_pdbs(pdb_ids = ['1a22'], update_sections = ['Chains'])
+    importer.add_pdb_from_rcsb('1ZZ7', update_sections = ['Chains'])
+    return
     importer.update_pdbs(update_sections = ['Chains'])
     return
 
-    importer.add_pdb_from_rcsb('1bn3')
 
     importer._update_pdb_residues()
     return
