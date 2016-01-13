@@ -797,6 +797,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def get_pdb_details(self, pdb_ids, cached_pdb_details = None):
         '''Returns the details stored in the database about the PDB files associated with pdb_ids e.g. chains, resolution,
            technique used to determine the structure etc.'''
+        raise Exception('Replace this with a call to import_api.py::DataImportInterface.get_pdb_details()')
+        return self.importer.get_pdb_details(pdb_ids, cached_pdb_details = None)
         pdbs = {}
         cached_pdb_ids = []
         if cached_pdb_details:
