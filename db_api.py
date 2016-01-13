@@ -1130,8 +1130,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             Status = 'active'
 
         existing_record = self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(prediction_set_id,))
-        if len(existing_record) > 0:
-            assert(len(existing_record) == 1)
+        if self.prediction_set_exists(prediction_set_id):
             if allow_existing_prediction_set == False:
                 raise Exception('The PredictionSet %s already exists.' % prediction_set_id)
             else:
@@ -1152,6 +1151,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         self.DDG_db.insertDictIfNew("PredictionSet", d, ['ID'])
         return True
 
+    def prediction_set_exists(self, prediction_set_id):
+        existing_record = self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(prediction_set_id,))
+        if len(existing_record) > 0:
+            assert(len(existing_record) == 1)
+            return True
+        else:
+            return False
 
     @job_creator
     def destroy_prediction_set(self, prediction_set_id):
