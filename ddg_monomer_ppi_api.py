@@ -9,7 +9,7 @@ import sys
 import shutil
 import multiprocessing
 import random
-from ddg.ddglib.ppi_api import get_interface
+from ddglib.ppi_api import get_interface
 import klab.cluster_template.parse_settings as parse_settings
 from klab.Reporter import Reporter
 from klab.MultiWorker import MultiWorker
@@ -220,21 +220,28 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             self.create_cluster_run_rescore_dir( os.path.join(tmpdir_location, 'cluster_run'), passed_job_name = job_name )
         else:
             processed_count = 0
+            r = Reporter('rescoring prediction directories with multiprocessing', entries='prediction ids')
+            if max_prediction_ids_to_process:
+                r.set_total_count( max_prediction_ids_to_process )
+            else:
+                r.set_total_count( len(prediction_ids) )
+
             for prediction_id in prediction_ids:
                 ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
                 if os.path.isdir( ddg_output_path ):
                     self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force, score_method_id = score_method_id)
-                    processed_count += 1
+                    r.increment_report()
                 else:
                     ddg_output_zip = os.path.join(root_directory, '%d.zip' % prediction_id)
                     if os.path.isfile(ddg_output_zip):
                         tmp_dir = unzip_to_tmp_dir(prediction_id, ddg_output_zip)
                         self.extract_data_for_case(prediction_id, root_directory = tmp_dir, force = force, score_method_id = score_method_id)
-                        processed_count += 1
+                        r.increment_report()
                         shutil.rmtree(tmp_dir)
                 if max_prediction_ids_to_process and processed_count >= max_prediction_ids_to_process:
                     print 'Breaking early; processed %d prediction ids' % processed_count
                     break
+            r.done()
 
     def find_structs_with_both_rounds(self, ddg_output_path):
         '''Searchs directory ddg_output_path to find ddg_monomer output structures for all rounds with both wt and mut structures'''
@@ -278,8 +285,8 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             score_fxn = 'interface'
 
         if len(structs_with_both_rounds) > 0:
-            print 'Opening rescoring pool for prediction', prediction_id
-            print '%d tasks to run' % (len(structs_with_both_rounds) * 2)
+            # print 'Opening rescoring pool for prediction', prediction_id
+            # print '%d tasks to run' % (len(structs_with_both_rounds) * 2)
             p = multiprocessing.Pool()
             def finish_rescore(tup):
                 round_num, struct_type, output_db3 = tup
@@ -315,8 +322,8 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                     ), kwargs, callback=finish_rescore )
             p.close()
             p.join()
-            print 'Rescoring pool finished for prediction', prediction_id
-            print
+            # print 'Rescoring pool finished for prediction', prediction_id
+            # print
 
         for round_num in output_db3s:
             if 'wt' in output_db3s[round_num]:
