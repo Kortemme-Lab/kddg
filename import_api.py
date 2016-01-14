@@ -84,7 +84,7 @@ class DataImportInterface(object):
         passwd = passwd.strip()
         self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname)
         self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True)
-        test_schema_against_database_instance(self.DDG_db)
+        # test_schema_against_database_instance(self.DDG_db)
 
         # Set up SQLAlchemy connections
         self.connect_string = connect_string
