@@ -141,21 +141,21 @@ class LigandSynonym(DeclarativeBase):
 class PDBFile(DeclarativeBase):
     __tablename__ = 'PDBFile'
 
-    ID = Column(Unicode(10), nullable=False, primary_key=True, default=u'')
+    ID = Column(String(10), nullable=False, primary_key=True, default=u'')
     FileSource = Column(Unicode(64), nullable=False, default=u'RCSB')
     Content = Column(Text, nullable=False)
     FASTA = Column(Text, nullable=False)
     Resolution = Column(DOUBLE, nullable=True)
     Techniques = Column(Unicode(256), nullable=False)
     BFactors = Column(Text, nullable=False)
-    Publication = Column(Unicode(64), nullable=True)
+    Publication = Column(Unicode(64), ForeignKey('Publication.ID'), nullable=True)
     Transmembrane = Column(TINYINT(1), nullable=True)
     UserID = Column(Unicode(64), nullable=True)
     Notes = Column(Text, nullable=True)
     DerivedFrom = Column(Unicode(4), nullable=True)
 
     # Relationships
-    # todo: add publication relationship publication = relationship('Publication', foreign_keys=[Publication])
+    residues = relationship('Publication', primaryjoin="PDBFile.Publication==Publication.ID")
 
     def __repr__(self):
         return 'PDBFile: {0}. Source: {1}. Resolution {2}. {3}'.format(self.ID, self.FileSource, self.Resolution, self.Notes or '')
@@ -164,9 +164,9 @@ class PDBFile(DeclarativeBase):
 class PDBChain(DeclarativeBase):
     __tablename__ = 'PDBChain'
 
-    PDBFileID = Column(Unicode(10), ForeignKey('PDBFile.ID'), nullable=False, primary_key=True)
-    Chain = Column(Unicode(1), nullable=False, primary_key=True)
-    MoleculeType = Column(Enum('Protein','DNA','RNA','Ligand'), nullable=True)
+    PDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=False, primary_key=True)
+    Chain = Column(String(1), nullable=False, primary_key=True)
+    MoleculeType = Column(Enum('Protein', 'DNA', 'RNA', 'Ligand', 'Protein skeleton', 'Heterogen', 'Solution', 'Unknown'), nullable=True)
     WildtypeProteinID = Column(Unicode(18), nullable=True)
     FullProteinID = Column(Unicode(18), nullable=True)
     SegmentProteinID = Column(Unicode(18), nullable=True)
@@ -180,14 +180,18 @@ class PDBChain(DeclarativeBase):
     # Children relationships
     residues = relationship('PDBResidue', primaryjoin="and_(PDBResidue.PDBFileID==PDBChain.PDBFileID, PDBResidue.Chain==PDBChain.Chain)")
 
+    def __init__(self, **kwargs):
+        super(PDBChain, self).__init__(**kwargs)
+        # do custom initialization here
+
     def __repr__(self):
-        return 'PDBChain: {0}, {1}'.format(self.PDBFileID, self.Chain)
+        return 'PDBChain: {0}, {1} ({2})'.format(self.PDBFileID, self.Chain, self.MoleculeType)
 
 
 class PDBMolecule(DeclarativeBase):
     __tablename__ = 'PDBMolecule'
 
-    PDBFileID = Column(Unicode(8), ForeignKey('PDBFile.ID'), nullable=False, primary_key=True)
+    PDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=False, primary_key=True)
     MoleculeID = Column(Integer, nullable=False, primary_key=True)
     Name = Column(Unicode(256), nullable=False)
     Organism = Column(Unicode(256), nullable=True)
@@ -211,7 +215,7 @@ class PDBMolecule(DeclarativeBase):
 class PDBMoleculeChain(DeclarativeBase):
     __tablename__ = 'PDBMoleculeChain'
 
-    PDBFileID = Column(Unicode(8), ForeignKey('PDBMolecule.PDBFileID'), ForeignKey('PDBChain.PDBFileID'), nullable=False, primary_key=True)
+    PDBFileID = Column(String(10), ForeignKey('PDBMolecule.PDBFileID'), ForeignKey('PDBChain.PDBFileID'), nullable=False, primary_key=True)
     MoleculeID = Column(Integer, ForeignKey('PDBMolecule.MoleculeID'), nullable=False, primary_key=True)
     Chain = Column(Unicode(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
 
@@ -227,11 +231,11 @@ class PDBResidue(DeclarativeBase):
     __tablename__ = 'PDBResidue'
 
     ID = Column(Integer, nullable=False, primary_key=True)
-    PDBFileID = Column(Unicode(10), ForeignKey('PDBChain.PDBFileID'), nullable=False)
+    PDBFileID = Column(String(10), ForeignKey('PDBChain.PDBFileID'), nullable=False)
     Chain = Column(Unicode(1), ForeignKey('PDBChain.Chain'), nullable=False)
     ResidueID = Column(Unicode(5), nullable=False)
     ResidueAA = Column(Unicode(1), ForeignKey('AminoAcid.Code'), nullable=False)
-    ResidueType = Column(Enum('Protein','DNA','RNA','Ligand'), nullable=False, default=u'Protein')
+    ResidueType = Column(Enum('Protein', 'DNA', 'RNA'), nullable=False, default=u'Protein')
     IndexWithinChain = Column(Integer, nullable=False)
     CoordinatesExist = Column(TINYINT(1), nullable=False)
     RecognizedByRosetta = Column(TINYINT(1), nullable=True)
@@ -257,12 +261,69 @@ class PDBResidue(DeclarativeBase):
 class PDBLigand(DeclarativeBase):
     __tablename__ = 'PDBLigand'
 
-    PDBFileID = Column(Unicode(10), ForeignKey('PDBChain.PDBFileID'), nullable=False, primary_key=True)
+    PDBFileID = Column(String(10), ForeignKey('PDBChain.PDBFileID'), nullable=False, primary_key=True)
     Chain = Column(Unicode(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
     SeqID = Column(Unicode(5), nullable=False, primary_key=True)
     PDBLigandCode = Column(Unicode(3), nullable=False)
     LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False)
     ParamsFileContentID = Column(Integer, ForeignKey('FileContent.ID'), nullable=False)
+
+
+#########################################
+#                                       #
+#  Publications and associated records  #
+#                                       #
+#########################################
+
+
+class Publication(DeclarativeBase):
+    __tablename__ = 'Publication'
+
+    ID = Column(Unicode(64), nullable=False, primary_key=True)
+    DGUnit = Column(Enum('kJ/mol','kcal/mol','cal/mol'), nullable=True)
+    DDGConvention = Column(Enum('Rosetta','ProTherm','Unknown','Not applicable'), nullable=True)
+    Notes = Column(Text, nullable=True)
+    DGNotes = Column(Unicode(1024), nullable=True)
+    DGUnitUsedInProTherm = Column(Enum('kcal/mol','kJ/mol'), nullable=True)
+    DDGProThermSignNotes = Column(Unicode(1024), nullable=True)
+    DDGValuesNeedToBeChecked = Column(TINYINT(1), nullable=False, default=0)
+    RIS = Column(Text, nullable=True)
+    Title = Column(Unicode(256), nullable=True)
+    Publication = Column(Unicode(256), nullable=True)
+    Volume = Column(Unicode(8), nullable=True)
+    Issue = Column(Unicode(8), nullable=True)
+    StartPage = Column(Unicode(16), nullable=True)
+    EndPage = Column(Unicode(16), nullable=True)
+    PublicationYear = Column(Integer, nullable=True)
+    PublicationDate = Column(DateTime, nullable=True)
+    DOI = Column(Unicode(64), nullable=True)
+    URL = Column(Unicode(128), nullable=True)
+
+
+class PublicationAuthor(DeclarativeBase):
+    __tablename__ = 'PublicationAuthor'
+
+    PublicationID = Column(Unicode(64), nullable=False, primary_key=True)
+    AuthorOrder = Column(Integer, nullable=False, primary_key=True)
+    FirstName = Column(Unicode(64), nullable=False)
+    MiddleNames = Column(Unicode(64), nullable=True)
+    Surname = Column(Unicode(64), nullable=True)
+
+
+class PublicationIdentifier(DeclarativeBase):
+    __tablename__ = 'PublicationIdentifier'
+
+    SourceID = Column(Unicode(64), nullable=False, primary_key=True)
+    ID = Column(Unicode(256), nullable=False, primary_key=True)
+    Type = Column(Enum('URL','DOI','ISSN','ESSN','PMID','MANUAL'), nullable=False)
+
+
+class PublicationDDGValueLocation(DeclarativeBase):
+    __tablename__ = 'PublicationDDGValueLocation'
+
+    SourceID = Column(Unicode(64), nullable=False, primary_key=True)
+    Location = Column(Unicode(256), nullable=False, primary_key=True)
+    Notes = Column(Unicode(512), nullable=True)
 
 
 ###########################
@@ -312,9 +373,9 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['AminoAcid'])
+    generate_sqlalchemy_definition(['Publication', 'PublicationAuthor', 'PublicationIdentifier', 'PublicationDDGValueLocation'])
+    #generate_sqlalchemy_definition(['AminoAcid'])
     sys.exit(0)
-    #generate_sqlalchemy_definition(['PDBFile', 'PDBChain', 'PDBMolecule', 'PDBMoleculeChain', 'PDBResidue'])
     from ppi_api import get_interface as get_ppi_interface
     ppi_api = get_ppi_interface(read_file(os.path.join('..', 'pw')).strip())
     test_schema_against_database_instance(ppi_api.DDG_db)

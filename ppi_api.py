@@ -48,7 +48,7 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
     # Uses ~/.my.cnf to get authentication information
     ### Example .my.cnf (host_config_name will equal guybrush2):
     ### [clientguybrush2]
-    ### user=kyleb
+    ### user=myname
     ### password=notmyrealpass
     ### host=guybrush.ucsf.edu
     my_cnf_path = os.path.expanduser(os.path.join('~', '.my.cnf'))

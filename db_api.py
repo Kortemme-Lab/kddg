@@ -309,45 +309,6 @@ class ddG(object):
             return None
 
 
-
-
-    @alien
-    def add_PDB_to_database(self, filepath = None, pdb_id = None, contains_membrane_protein = None, protein = None, file_source = None, UniProtAC = None, UniProtID = None, testonly = False, force = False, techniques = None, derived_from = None, notes = None, allow_missing_molecules = False):
-        '''NOTE: This API is used to create and analysis predictions or retrieve information from the database.
-                 This function adds new raw data to the database and does not seem to belong here. It should be moved into
-                 an admin API instead.
-           This function adds imports a PDB into the database, creating the associated molecule, chain and residue etc. records.'''
-
-        assert(file_source)
-        if filepath:
-            if not os.path.exists(filepath):
-                raise Exception("The file %s does not exist." % filepath)
-            filename = os.path.split(filepath)[-1]
-            rootname, extension = os.path.splitext(filename)
-            if not extension.lower() == ".pdb":
-                raise Exception("Aborting: The file does not have a .pdb extension.")
-        if pdb_id:
-            rootname = pdb_id
-
-        try:
-            dbp = ddgdbapi.PDBStructure(self.DDG_db, rootname, contains_membrane_protein = contains_membrane_protein, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques, derived_from = derived_from, notes = notes)
-            #Structure.getPDBContents(self.DDG_db)
-            results = self.DDG_db.execute_select('SELECT ID FROM PDBFile WHERE ID=%s', parameters = (rootname,))
-
-            if results:
-                #ddgdbapi.getUniProtMapping(pdb_id, storeInDatabase = True)
-                #raise Exception("There is already a structure in the database with the ID %s." % rootname)
-                if force:
-                    dbp.commit(testonly = testonly, allow_missing_molecules = allow_missing_molecules)
-                return None
-            dbp.commit(testonly = testonly)
-            return rootname
-        except Exception, e:
-            colortext.error(str(e))
-            colortext.error(traceback.format_exc())
-            raise Exception("An exception occurred committing %s to the database." % filepath)
-
-
     @alien
     def get_flattened_prediction_results(self, PredictionSet):
         '''This is defined here as an API function but should be defined as a stored procedure.'''
@@ -836,6 +797,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def get_pdb_details(self, pdb_ids, cached_pdb_details = None):
         '''Returns the details stored in the database about the PDB files associated with pdb_ids e.g. chains, resolution,
            technique used to determine the structure etc.'''
+        raise Exception('Replace this with a call to import_api.py::DataImportInterface.get_pdb_details()')
+        return self.importer.get_pdb_details(pdb_ids, cached_pdb_details = None)
         pdbs = {}
         cached_pdb_ids = []
         if cached_pdb_details:
