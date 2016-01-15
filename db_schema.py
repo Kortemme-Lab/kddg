@@ -20,10 +20,11 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import DOUBLE, TINYINT, LONGBLOB
 from sqlalchemy.types import DateTime, Enum, Integer, TIMESTAMP, Text, Unicode, String
 
+
 if __name__ == '__main__':
     sys.path.insert(0, '../../klab')
 
-from klab.db.sqlalchemy import MySQLSchemaConverter
+from klab.db.sqlalchemy_interface import MySQLSchemaConverter
 from klab.fs.fsio import read_file
 from klab import colortext
 
@@ -54,6 +55,16 @@ class AminoAcid(DeclarativeBase):
     Volume = Column(DOUBLE, nullable=True)
     Size = Column(Enum('small','large'), nullable=True)
     Tiny = Column(TINYINT(1), nullable=True, default=0)
+
+
+class FileContent(DeclarativeBase):
+    __tablename__ = 'FileContent'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    Content = Column(LONGBLOB, nullable=False)
+    MIMEType = Column(String(64), nullable=False)
+    Filesize = Column(Integer, nullable=False)
+    MD5HexDigest = Column(String(32), nullable=False)
 
 
 ######################################
@@ -129,6 +140,22 @@ class LigandSynonym(DeclarativeBase):
 
     LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False, primary_key=True)
     Synonym = Column(String(256), nullable=False, primary_key=True)
+
+
+######################################
+#                                    #
+#  Ions and associated records       #
+#                                    #
+######################################
+
+
+class Ion(DeclarativeBase):
+    __tablename__ = 'Ion'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PDBCode = Column(String(3), nullable=False)
+    Formula = Column(String(256), nullable=False)
+    Description = Column(String(256), nullable=True)
 
 
 ######################################
@@ -266,7 +293,19 @@ class PDBLigand(DeclarativeBase):
     SeqID = Column(Unicode(5), nullable=False, primary_key=True)
     PDBLigandCode = Column(Unicode(3), nullable=False)
     LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False)
-    ParamsFileContentID = Column(Integer, ForeignKey('FileContent.ID'), nullable=False)
+    ParamsFileContentID = Column(Integer, ForeignKey('FileContent.ID'), nullable=True)
+
+
+class PDBIon(DeclarativeBase):
+    __tablename__ = 'PDBIon'
+
+    PDBFileID = Column(String(10), nullable=False, primary_key=True)
+    Chain = Column(String(1), nullable=False, primary_key=True)
+    SeqID = Column(String(5), nullable=False, primary_key=True)
+    PDBIonCode = Column(String(3), nullable=False)
+    IonID = Column(Integer, nullable=False)
+    ParamsFileContentID = Column(Integer, nullable=True)
+    Element = Column(String(2), nullable=False)
 
 
 #########################################
@@ -373,7 +412,7 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['Publication', 'PublicationAuthor', 'PublicationIdentifier', 'PublicationDDGValueLocation'])
+    generate_sqlalchemy_definition(['FileContent'])
     #generate_sqlalchemy_definition(['AminoAcid'])
     sys.exit(0)
     from ppi_api import get_interface as get_ppi_interface
