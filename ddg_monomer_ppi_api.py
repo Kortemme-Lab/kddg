@@ -195,7 +195,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         prediction_ids = self.get_prediction_ids_without_scores(prediction_set_id, score_method_id = score_method_id)
 
         random.shuffle( prediction_ids )
-        print '%d prediction_ids to process' % len(prediction_ids)
+        print '%d prediction_ids are yet to be scored' % len(prediction_ids)
         if setup_cluster_run:
             job_name = '%s-%s' % (time.strftime("%y%m%d"), sanitize_filename(prediction_set_id))
             r = Reporter('fetching job details for prediction_ids', entries='job details')
@@ -219,13 +219,13 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             r.done()
             self.create_cluster_run_rescore_dir( os.path.join(tmpdir_location, 'cluster_run'), passed_job_name = job_name )
         else:
-            processed_count = 0
             r = Reporter('rescoring prediction directories with multiprocessing', entries='prediction ids')
             if max_prediction_ids_to_process:
                 r.set_total_count( max_prediction_ids_to_process )
             else:
                 r.set_total_count( len(prediction_ids) )
 
+            missing_data_count = 0
             for prediction_id in prediction_ids:
                 ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
                 if os.path.isdir( ddg_output_path ):
@@ -238,10 +238,15 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                         self.extract_data_for_case(prediction_id, root_directory = tmp_dir, force = force, score_method_id = score_method_id)
                         r.increment_report()
                         shutil.rmtree(tmp_dir)
-                if max_prediction_ids_to_process and processed_count >= max_prediction_ids_to_process:
-                    print 'Breaking early; processed %d prediction ids' % processed_count
+                    else:
+                        r.decrement_total_count()
+                        missing_data_count += 1
+                if max_prediction_ids_to_process and r.n >= max_prediction_ids_to_process:
+                    print 'Breaking early; processed %d prediction ids' % r.n
                     break
             r.done()
+            if missing_data_count > 0:
+                print 'Missing data folders/zips for %d prediction_ids' % missing_data_count
 
     def find_structs_with_both_rounds(self, ddg_output_path):
         '''Searchs directory ddg_output_path to find ddg_monomer output structures for all rounds with both wt and mut structures'''
@@ -263,7 +268,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         return structs_with_both_rounds
 
     @job_completion
-    def parse_prediction_scores(self, prediction_id, root_directory = None, ddg_output_path = None, chains_to_move = None, score_method_id = None, prediction_structure_scores_table = None, prediction_id_field = None):
+    def parse_prediction_scores(self, prediction_id, root_directory = None, ddg_output_path = None, chains_to_move = None, score_method_id = None, prediction_structure_scores_table = None, prediction_id_field = None, use_multiprocessing = True, verbose = False):
         '''Returns a list of dicts suitable for database storage e.g. PredictionStructureScore or PredictionPPIStructureScore records.'''
         root_directory = root_directory or self.prediction_data_path
         if not ddg_output_path:
@@ -285,9 +290,15 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             score_fxn = 'interface'
 
         if len(structs_with_both_rounds) > 0:
-            # print 'Opening rescoring pool for prediction', prediction_id
-            # print '%d tasks to run' % (len(structs_with_both_rounds) * 2)
-            p = multiprocessing.Pool()
+            if use_multiprocessing and verbose:
+                print '\nOpening rescoring pool for prediction', prediction_id
+            elif verbose:
+                print 'Individual rescoring each structure for prediction', prediction_id
+
+            if verbose:
+                print '%d tasks to run' % (len(structs_with_both_rounds) * 2)
+            if use_multiprocessing:
+                p = multiprocessing.Pool()
             def finish_rescore(tup):
                 round_num, struct_type, output_db3 = tup
                 if round_num != None and struct_type != None and output_db3 != None:
@@ -303,11 +314,19 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                     'round_num' : round_num,
                     'struct_type' : 'wt',
                 }
-                p.apply_async( interface_calc.rescore_ddg_monomer_pdb, (
-                    os.path.abspath(wt_pdb),
-                    self.rosetta_scripts_path,
-                    chains_to_move,
-                    ), kwargs, callback=finish_rescore )
+                if use_multiprocessing:
+                    p.apply_async( interface_calc.rescore_ddg_monomer_pdb, (
+                        os.path.abspath(wt_pdb),
+                        self.rosetta_scripts_path,
+                        chains_to_move,
+                        ), kwargs, callback=finish_rescore )
+                else:
+                    finish_rescore( interface_calc.rescore_ddg_monomer_pdb(
+                        os.path.abspath(wt_pdb),
+                        self.rosetta_scripts_path,
+                        chains_to_move,
+                        **kwargs 
+                    ) )
 
                 kwargs = {
                     'rosetta_database_path' : self.rosetta_database_path,
@@ -315,15 +334,32 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                     'round_num' : round_num,
                     'struct_type' : 'mut',
                 }
-                p.apply_async( interface_calc.rescore_ddg_monomer_pdb, (
-                    os.path.abspath(mutant_pdb),
-                    self.rosetta_scripts_path,
-                    chains_to_move,
+                if use_multiprocessing:
+                    p.apply_async( interface_calc.rescore_ddg_monomer_pdb, (
+                        os.path.abspath(mutant_pdb),
+                        self.rosetta_scripts_path,
+                        chains_to_move,
                     ), kwargs, callback=finish_rescore )
-            p.close()
-            p.join()
-            # print 'Rescoring pool finished for prediction', prediction_id
-            # print
+                else:
+                    finish_rescore( interface_calc.rescore_ddg_monomer_pdb(
+                        os.path.abspath(mutant_pdb),
+                        self.rosetta_scripts_path,
+                        chains_to_move,
+                        **kwargs 
+                    ) )
+
+            if use_multiprocessing:
+                p.close()
+                p.join()
+            if use_multiprocessing and verbose:
+                print 'Rescoring pool finished for prediction', prediction_id
+                print
+            elif verbose:
+                print 'Rescoring finished for prediction', prediction_id
+                print
+        else:
+            print '\nlen(structs_with_both_rounds) == 0 for prediction_id:', prediction_id
+            print
 
         for round_num in output_db3s:
             if 'wt' in output_db3s[round_num]:
