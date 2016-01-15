@@ -1174,7 +1174,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
-    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None, dataframe_type = "Binding affinity"):
+    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = False, root_directory = None, dataframe_type = "Binding affinity"):
         try:
             top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
         except Exception, e:
@@ -1272,7 +1272,7 @@ class BindingAffinityDDGInterface(ddG):
             score_method_id = None,
             expectn = None,
             allow_failures = False,
-            extract_data_for_case_if_missing = True,
+            extract_data_for_case_if_missing = False,
             ):
 
         #todo: rename function since we return BenchmarkRun objects
