@@ -1656,8 +1656,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 for k in score_method_scores.keys():
                     if isinstance(k, int) or isinstance(k, long):
                         num_cases += 1
-                if num_cases != expectn:
-                    raise Exception('Expected scores for {0} runs with score method {1}; found {2}.'.format(expectn, score_method_id, num_cases))
+                if num_cases < expectn:
+                    raise Exception('Expected scores for at least {0} runs with score method {1}; found {2}. Prediction id: {3}.'.format(expectn, score_method_id, num_cases, prediction_id))
 
         return scores
 
