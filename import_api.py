@@ -97,6 +97,7 @@ class DataImportInterface(object):
         passwd = passwd.strip()
         self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname)
         self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True)
+
         self.cache_dir = cache_dir
         self.echo_sql = echo_sql
 
