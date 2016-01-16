@@ -43,9 +43,9 @@ DeclarativeBase = declarative_base()
 class AminoAcid(DeclarativeBase):
     __tablename__ = 'AminoAcid'
 
-    Code = Column(Unicode(1), nullable=False, primary_key=True)
-    LongCode = Column(Unicode(3), nullable=False)
-    Name = Column(Unicode(32), nullable=False)
+    Code = Column(String(1), nullable=False, primary_key=True)
+    LongCode = Column(String(3), nullable=False)
+    Name = Column(String(32), nullable=False)
     Polarity = Column(Enum('polar','non-polar','charged'), nullable=True)
     Aromaticity = Column(Enum('aromatic','aliphatic','neither'), nullable=True)
     Hydrophobicity_pH7 = Column(Enum('hydrophobic','hydrophilic'), nullable=True)
@@ -169,23 +169,32 @@ class PDBFile(DeclarativeBase):
     __tablename__ = 'PDBFile'
 
     ID = Column(String(10), nullable=False, primary_key=True, default=u'')
-    FileSource = Column(Unicode(64), nullable=False, default=u'RCSB')
+    FileSource = Column(String(64), nullable=False, default=u'RCSB')
     Content = Column(Text, nullable=False)
     FASTA = Column(Text, nullable=False)
     Resolution = Column(DOUBLE, nullable=True)
-    Techniques = Column(Unicode(256), nullable=False)
-    BFactors = Column(Text, nullable=False)
-    Publication = Column(Unicode(64), ForeignKey('Publication.ID'), nullable=True)
+    Techniques = Column(String(256), nullable=False)
+    BFactorMean = Column(DOUBLE, nullable=True)
+    BFactorDeviation = Column(DOUBLE, nullable=True)
+    Publication = Column(String(64), ForeignKey('Publication.ID'), nullable=True)
     Transmembrane = Column(TINYINT(1), nullable=True)
-    UserID = Column(Unicode(64), nullable=True)
+    UserID = Column(String(64), nullable=True)
     Notes = Column(Text, nullable=True)
-    DerivedFrom = Column(Unicode(4), nullable=True)
+    DerivedFrom = Column(String(4), nullable=True)
 
     # Relationships
     residues = relationship('Publication', primaryjoin="PDBFile.Publication==Publication.ID")
 
     def __repr__(self):
-        return 'PDBFile: {0}. Source: {1}. Resolution {2}. {3}'.format(self.ID, self.FileSource, self.Resolution, self.Notes or '')
+        notes = ''
+        resolution = 'unknown resolution'
+        if self.Resolution:
+            resolution = str(self.Resolution) + 'A'
+        if self.Notes and self.Notes.strip():
+            notes = self.Notes.strip()
+            if notes[-1] != '.':
+                notes += '.'
+        return 'PDBFile: {0}, {1} ({2}). Source: {3}. B-Factors: {4} (mean), {5} (stddev). Transmembrane protein: {6}. {7}'.format(self.ID, resolution, self.Techniques, self.FileSource, self.BFactorMean, self.BFactorDeviation, self.Transmembrane, notes)
 
 
 class PDBChain(DeclarativeBase):
@@ -194,11 +203,11 @@ class PDBChain(DeclarativeBase):
     PDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=False, primary_key=True)
     Chain = Column(String(1), nullable=False, primary_key=True)
     MoleculeType = Column(Enum('Protein', 'DNA', 'RNA', 'Ligand', 'Protein skeleton', 'Heterogen', 'Solution', 'Unknown'), nullable=True)
-    WildtypeProteinID = Column(Unicode(18), nullable=True)
-    FullProteinID = Column(Unicode(18), nullable=True)
-    SegmentProteinID = Column(Unicode(18), nullable=True)
-    WildtypeAlignedProteinID = Column(Unicode(18), nullable=True)
-    AcquiredProteinID = Column(Unicode(18), nullable=True)
+    WildtypeProteinID = Column(String(18), nullable=True)
+    FullProteinID = Column(String(18), nullable=True)
+    SegmentProteinID = Column(String(18), nullable=True)
+    WildtypeAlignedProteinID = Column(String(18), nullable=True)
+    AcquiredProteinID = Column(String(18), nullable=True)
     Coordinates = Column(LONGBLOB, nullable=True)
 
     # Parent relationships
@@ -220,14 +229,14 @@ class PDBMolecule(DeclarativeBase):
 
     PDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=False, primary_key=True)
     MoleculeID = Column(Integer, nullable=False, primary_key=True)
-    Name = Column(Unicode(256), nullable=False)
-    Organism = Column(Unicode(256), nullable=True)
-    Fragment = Column(Unicode(256), nullable=True)
-    Synonym = Column(Unicode(256), nullable=True)
+    Name = Column(String(256), nullable=False)
+    Organism = Column(String(256), nullable=True)
+    Fragment = Column(String(256), nullable=True)
+    Synonym = Column(String(256), nullable=True)
     Engineered = Column(TINYINT(1), nullable=True)
-    EC = Column(Unicode(32), nullable=True)
+    EC = Column(String(32), nullable=True)
     Mutation = Column(TINYINT(1), nullable=True)
-    OtherDetails = Column(Unicode(256), nullable=True)
+    OtherDetails = Column(String(256), nullable=True)
 
     # Parent relationships
     pdb_file = relationship('PDBFile', primaryjoin="PDBMolecule.PDBFileID==PDBFile.ID")
@@ -244,7 +253,7 @@ class PDBMoleculeChain(DeclarativeBase):
 
     PDBFileID = Column(String(10), ForeignKey('PDBMolecule.PDBFileID'), ForeignKey('PDBChain.PDBFileID'), nullable=False, primary_key=True)
     MoleculeID = Column(Integer, ForeignKey('PDBMolecule.MoleculeID'), nullable=False, primary_key=True)
-    Chain = Column(Unicode(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
+    Chain = Column(String(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
 
     # Parent relationships
     pdb_molecule = relationship('PDBMolecule', primaryjoin="and_(PDBMoleculeChain.PDBFileID==PDBMolecule.PDBFileID, PDBMoleculeChain.MoleculeID==PDBMolecule.MoleculeID)")
@@ -259,21 +268,19 @@ class PDBResidue(DeclarativeBase):
 
     ID = Column(Integer, nullable=False, primary_key=True)
     PDBFileID = Column(String(10), ForeignKey('PDBChain.PDBFileID'), nullable=False)
-    Chain = Column(Unicode(1), ForeignKey('PDBChain.Chain'), nullable=False)
-    ResidueID = Column(Unicode(5), nullable=False)
-    ResidueAA = Column(Unicode(1), ForeignKey('AminoAcid.Code'), nullable=False)
+    Chain = Column(String(1), ForeignKey('PDBChain.Chain'), nullable=False)
+    ResidueID = Column(String(5), nullable=False)
+    ResidueAA = Column(String(1), ForeignKey('AminoAcid.Code'), nullable=False)
     ResidueType = Column(Enum('Protein', 'DNA', 'RNA'), nullable=False, default=u'Protein')
     IndexWithinChain = Column(Integer, nullable=False)
     CoordinatesExist = Column(TINYINT(1), nullable=False)
     RecognizedByRosetta = Column(TINYINT(1), nullable=True)
     BFactorMean = Column(DOUBLE, nullable=True)
     BFactorDeviation = Column(DOUBLE, nullable=True)
-    SecondaryStructurePosition = Column(Enum('Coil','Helix','Sheet','Turn','3_10-Helix'), nullable=True)
-    AccessibleSurfaceArea = Column(DOUBLE, nullable=True)
     MonomericExposure = Column(DOUBLE, nullable=True)
-    MonomericDSSP = Column(Unicode(1), nullable=True)
+    MonomericDSSP = Column(String(1), nullable=True)
     ComplexExposure = Column(DOUBLE, nullable=True)
-    ComplexDSSP = Column(Unicode(1), nullable=True)
+    ComplexDSSP = Column(String(1), nullable=True)
 
     # Parent relationships
     pdb_chain = relationship('PDBChain', primaryjoin="and_(PDBResidue.PDBFileID==PDBChain.PDBFileID, PDBResidue.Chain==PDBChain.Chain)")
@@ -289,9 +296,9 @@ class PDBLigand(DeclarativeBase):
     __tablename__ = 'PDBLigand'
 
     PDBFileID = Column(String(10), ForeignKey('PDBChain.PDBFileID'), nullable=False, primary_key=True)
-    Chain = Column(Unicode(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
-    SeqID = Column(Unicode(5), nullable=False, primary_key=True)
-    PDBLigandCode = Column(Unicode(3), nullable=False)
+    Chain = Column(String(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
+    SeqID = Column(String(5), nullable=False, primary_key=True)
+    PDBLigandCode = Column(String(3), nullable=False)
     LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False)
     ParamsFileContentID = Column(Integer, ForeignKey('FileContent.ID'), nullable=True)
 
@@ -318,31 +325,31 @@ class PDBIon(DeclarativeBase):
 class Publication(DeclarativeBase):
     __tablename__ = 'Publication'
 
-    ID = Column(Unicode(64), nullable=False, primary_key=True)
+    ID = Column(String(64), nullable=False, primary_key=True)
     DGUnit = Column(Enum('kJ/mol','kcal/mol','cal/mol'), nullable=True)
     DDGConvention = Column(Enum('Rosetta','ProTherm','Unknown','Not applicable'), nullable=True)
     Notes = Column(Text, nullable=True)
     DGNotes = Column(Unicode(1024), nullable=True)
     DGUnitUsedInProTherm = Column(Enum('kcal/mol','kJ/mol'), nullable=True)
-    DDGProThermSignNotes = Column(Unicode(1024), nullable=True)
+    DDGProThermSignNotes = Column(String(1024), nullable=True)
     DDGValuesNeedToBeChecked = Column(TINYINT(1), nullable=False, default=0)
     RIS = Column(Text, nullable=True)
     Title = Column(Unicode(256), nullable=True)
-    Publication = Column(Unicode(256), nullable=True)
-    Volume = Column(Unicode(8), nullable=True)
-    Issue = Column(Unicode(8), nullable=True)
-    StartPage = Column(Unicode(16), nullable=True)
-    EndPage = Column(Unicode(16), nullable=True)
+    Publication = Column(String(256), nullable=True)
+    Volume = Column(String(8), nullable=True)
+    Issue = Column(String(8), nullable=True)
+    StartPage = Column(String(16), nullable=True)
+    EndPage = Column(String(16), nullable=True)
     PublicationYear = Column(Integer, nullable=True)
     PublicationDate = Column(DateTime, nullable=True)
-    DOI = Column(Unicode(64), nullable=True)
-    URL = Column(Unicode(128), nullable=True)
+    DOI = Column(String(64), nullable=True)
+    URL = Column(String(128), nullable=True)
 
 
 class PublicationAuthor(DeclarativeBase):
     __tablename__ = 'PublicationAuthor'
 
-    PublicationID = Column(Unicode(64), nullable=False, primary_key=True)
+    PublicationID = Column(String(64), nullable=False, primary_key=True)
     AuthorOrder = Column(Integer, nullable=False, primary_key=True)
     FirstName = Column(Unicode(64), nullable=False)
     MiddleNames = Column(Unicode(64), nullable=True)
@@ -352,17 +359,17 @@ class PublicationAuthor(DeclarativeBase):
 class PublicationIdentifier(DeclarativeBase):
     __tablename__ = 'PublicationIdentifier'
 
-    SourceID = Column(Unicode(64), nullable=False, primary_key=True)
-    ID = Column(Unicode(256), nullable=False, primary_key=True)
+    SourceID = Column(String(64), nullable=False, primary_key=True)
+    ID = Column(String(256), nullable=False, primary_key=True)
     Type = Column(Enum('URL','DOI','ISSN','ESSN','PMID','MANUAL'), nullable=False)
 
 
 class PublicationDDGValueLocation(DeclarativeBase):
     __tablename__ = 'PublicationDDGValueLocation'
 
-    SourceID = Column(Unicode(64), nullable=False, primary_key=True)
-    Location = Column(Unicode(256), nullable=False, primary_key=True)
-    Notes = Column(Unicode(512), nullable=True)
+    SourceID = Column(String(64), nullable=False, primary_key=True)
+    Location = Column(String(256), nullable=False, primary_key=True)
+    Notes = Column(String(512), nullable=True)
 
 
 ###########################
