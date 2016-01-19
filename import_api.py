@@ -315,7 +315,6 @@ class DataImportInterface(object):
             for synonym in l.synonyms:
                 db_ligand_synonym = get_or_create_in_transaction(tsession, LigandSynonym, dict(LigandID = db_ligand.ID, Synonym = synonym.strip()))
 
-            print(db_ligand.ID)
             tsession.commit()
             print('Success.\n')
             return db_ligand.ID
@@ -424,13 +423,10 @@ class DataImportInterface(object):
 
         tsession = self.get_session(new_session = True)
         try:
-            PDBFile()
             db_record = get_single_record_from_query(tsession.query(PDBFile).filter(PDBFile.ID == pdb_id))
             existing_record = db_record != None
             if existing_record:
                 print('Retrieving {0} from database.'.format(pdb_id))
-                assert(db_record.count() == 1)
-                db_record = db_record[0]
                 pdb_object = PDB(db_record.Content)
                 assert(db_record.FileSource == 'RCSB')
             else:
@@ -471,10 +467,6 @@ class DataImportInterface(object):
             if not(existing_record) or (not db_record.Techniques):
                 db_record.Techniques = pdb_object.get_techniques()
 
-            # B-factors
-            if not(existing_record) or (not db_record.BFactors):
-                db_record.BFactors = pickle.dumps(pdb_object.ComputeBFactors())
-
             # Transmembrane
             if not(existing_record) or (db_record.Transmembrane == None):
                 pdbtmo = PDBTM(read_file('/kortemmelab/shared/mirror/PDBTM/pdbtmall.xml'))
@@ -483,10 +475,14 @@ class DataImportInterface(object):
                 for k, v in pdb_id_map.iteritems():
                     uc_pdb_id_map[k.upper()] = v
                 if pdb_id in uc_pdb_id_map:
-                    print('{0} is a transmembrane protein.'.format(pdb_id))
-                else:
-                    print('{0} is not a transmembrane protein.'.format(pdb_id))
+                    colortext.warning('{0} is a transmembrane protein.'.format(pdb_id))
                 db_record.Transmembrane = pdb_id in pdb_id_map
+
+
+            # Friday - add bfactors back
+            overall_bfactors = pdb_object.get_B_factors().get('Overall')
+            db_record.BFactorMean = overall_bfactors['mean']
+            db_record.BFactorDeviation = overall_bfactors['stddev']
 
             # Add a new PDBFile record
             if not(existing_record):
@@ -506,9 +502,9 @@ class DataImportInterface(object):
 
             previously_added.add(pdb_id)
 
-            #tsession.commit()
             print('Success.\n')
-            raise Exception('Rollback') # todo: remove
+            #raise Exception('Planned rollback') # todo: remove
+            tsession.commit()
         except:
             colortext.error('Failure.')
             tsession.rollback()
@@ -528,6 +524,7 @@ class DataImportInterface(object):
            database_pdb_id is the RCSB ID for RCSB files and a custom ID for other (designed) structures.
            If transaction_session is None (e.g. if this was called directly outside of a transaction), create a transaction
            session for the remaining inner calls. If update_sections is non-empty, just call those specific inner functions.
+           Note: If the caller creates a transaction then it is responsible for committing/rolling back the transaction.
            ligand_mapping = {}, chain_mapping = {}
         :param tsession:
         :param database_pdb_id:
@@ -549,9 +546,9 @@ class DataImportInterface(object):
         if not(update_sections) or ('Molecules' in update_sections):
             colortext.warning('*** Molecules ***')
             self._add_pdb_molecules(tsession, database_pdb_id, pdb_object)
-        #if not(update_sections) or ('Residues' in update_sections):
-        #    colortext.warning('*** Residues ***')
-        #    self._add_pdb_residues(tsession, database_pdb_id, pdb_object)
+        if not(update_sections) or ('Residues' in update_sections):
+            colortext.warning('*** Residues ***')
+            self._add_pdb_residues(tsession, database_pdb_id, pdb_object)
         if not(update_sections) or ('Ligands' in update_sections):
             colortext.warning('*** Ligands ***')
             self._add_pdb_rcsb_ligands(tsession, database_pdb_id, pdb_object, ligand_mapping)
@@ -605,6 +602,47 @@ class DataImportInterface(object):
                 db_chain.MoleculeType = pdb_object.chain_types[chain_id]
                 tsession.flush()
 
+        return
+
+        # todo: Extract and store the coordinates
+        # Extract and store the coordinates
+        for chain_id in pdb_object.atom_sequences.keys():
+            chain_dataframe = pdb_object.extract_xyz_matrix_from_chain(chain_id)
+            if isinstance(chain_dataframe, NoneType):
+                raise Exception('The coordinates dataframe could not be created for {0}, chain {1}'.format(pdb_id, chain_id))
+            ufname, cfname = None, None
+            if isinstance(ppi_api.get_pdb_chain_coordinates(pdb_id, chain_id), NoneType):
+                try:
+                    f, ufname = open_temp_file('/tmp', suffix = '.hdf5')
+                    f.close()
+                    f, cfname = open_temp_file('/tmp', suffix = '.hdf5.gz')
+                    f.close()
+                    store = pandas.HDFStore(ufname)
+                    store['dataframe'] = chain_dataframe
+                    store.close()
+                    content = read_file(ufname, binary = True)
+                    with gzip.open(cfname, 'wb') as f:
+                        f.write(content)
+                    f = open(cfname)
+                    zipped_contents = f.read()
+                    f.close()
+                    ppi_api.DDG_db.execute('UPDATE PDBChain SET Coordinates=%s WHERE PDBFileID=%s AND Chain=%s', parameters=(zipped_contents, pdb_id, chain_id))
+                    os.remove(ufname)
+                    os.remove(cfname)
+                except Exception, e:
+                    print('Failed to add coordinates for {0}, chain {1}'.format(pdb_id, chain_id))
+                    if ufname: os.remove(ufname)
+                    if cfname: os.remove(cfname)
+                    print(str(e))
+                    print(traceback.format_exc())
+            else:
+                print(pdb_id + chain_id + ' has coordinates')
+
+
+        # todo: add self.pfam_api.? call to get mapping from RCSB PDB files to the UniProt sequences. Add this to a separate function, _add_pdb_uniprot_mapping.
+        # todo: add self.pfam_api.get_pfam_accession_numbers_from_pdb_chain(database_pdb_id, c)) calls. Use this in _add_pdb_uniprot_mapping.
+        # todo: add self.scope_api.get_chain_details(database_pdb_id, c))) calls
+
 
     def _add_pdb_molecules(self, tsession, database_pdb_id, pdb_object = None, allow_missing_molecules = True):
         '''
@@ -649,12 +687,131 @@ class DataImportInterface(object):
                PDBResidue
         '''
         pdb_object = pdb_object or self.get_pdb_object(database_pdb_id, tsession = tsession)
-        raise Exception('Implement')
+        residue_bfactors = pdb_object.get_B_factors().get('PerResidue')
 
+        # Run DSSP over the entire structure
+        dssp_complex_d, dssp_monomer_d = None, None
+        try:
+            # This fails for some PDB e.g. if they only have CA atoms
+            dssp_complex_d = ComplexDSSP(pdb_object, read_only = True)
+        except MissingAtomException, e:
+            print('DSSP (complex) failed for this case: {0}.'.format(database_pdb_id))
+            for db_chain in tsession.query(PDBChain).filter(PDBChain.PDBFileID == database_pdb_id):
+                print(db_chain.Chain, db_chain.MoleculeType)
+                assert(db_chain.MoleculeType != 'Protein') # we should always pass on protein chains
 
-        #allow_missing_molecules = False
+        # Run DSSP over the individual chains
+        try:
+            # This fails for some PDB e.g. if they only have CA atoms
+            dssp_monomer_d = MonomerDSSP(pdb_object, read_only = True)
+        except MissingAtomException, e:
+            print('DSSP (monomer) failed for this case: {0}.'.format(database_pdb_id))
+            for db_chain in tsession.query(PDBChain).filter(PDBChain.PDBFileID == database_pdb_id):
+                print(db_chain.Chain, db_chain.MoleculeType)
+                assert(db_chain.MoleculeType != 'Protein') # we should always pass on protein chains
 
+        # Generate a list of residues with coordinates in the PDB file
+        parsed_residues = set()
+        for c, seq in pdb_object.atom_sequences.iteritems():
+            for s in seq:
+                res_id, r = s
+                parsed_residues.add(c + r.ResidueID)
 
+        # Sanity checks: make sure that the residue records exist for all results of DSSP
+        monomeric_records, complex_records = {}, {}
+        if dssp_monomer_d:
+            for chain_id, mapping in dssp_monomer_d:
+                if pdb_object.chain_types[chain_id] == 'Protein' or pdb_object.chain_types[chain_id] == 'Protein skeleton':
+                   for residue_id, residue_details in sorted(mapping.iteritems()):
+                        chain_residue_id = chain_id + residue_id
+                        assert(chain_residue_id in parsed_residues)
+                        monomeric_records[chain_residue_id] = residue_details
+        if dssp_complex_d:
+            for chain_id, mapping in dssp_complex_d:
+                if pdb_object.chain_types[chain_id] == 'Protein' or pdb_object.chain_types[chain_id] == 'Protein skeleton':
+                    for residue_id, residue_details in sorted(mapping.iteritems()):
+                        chain_residue_id = chain_id + residue_id
+                        assert(chain_residue_id in parsed_residues)
+                        complex_records[chain_residue_id] = residue_details
+
+        # Read existing data from the database
+        existing_residues = {}
+        for r in tsession.query(PDBResidue).filter(PDBResidue.PDBFileID == database_pdb_id):
+            chain_residue_id = r.Chain + r.ResidueID
+            assert(chain_residue_id not in existing_residues)
+            existing_residues[chain_residue_id] = r
+
+        # Add PDBResidue records
+        # dssp_monomer_d and dssp_complex_d are maps: chain -> residue_id -> DSSP record
+        for c, seq in sorted(pdb_object.atom_sequences.iteritems()):
+            count = 1
+            for s in seq:
+                res_id, r = s
+                assert(len(r.ResidueID) == 5)
+                assert(c == r.Chain)
+
+                chain_residue_id = c + r.ResidueID
+                dssp_res_complex_ss, dssp_res_complex_exposure, dssp_res_monomer_ss, dssp_res_monomer_exposure = ' ', None, ' ', None
+                monomeric_record = monomeric_records.get(chain_residue_id)
+                if monomeric_record:
+                    dssp_res_monomer_ss = monomeric_record['ss']
+                    dssp_res_monomer_exposure = monomeric_record['exposure']
+                complex_record = complex_records.get(chain_residue_id)
+                if complex_record:
+                    dssp_res_complex_ss = complex_record['ss']
+                    dssp_res_complex_exposure = complex_record['exposure']
+
+                average_bfactors = residue_bfactors.get(chain_residue_id, {})
+                existing_residue_record = existing_residues.get(chain_residue_id)
+                if not existing_residue_record:
+                    #print('NEW RESIDUE')
+                    instance = PDBResidue(**dict(
+                        PDBFileID = database_pdb_id,
+                        Chain = c,
+                        ResidueID = r.ResidueID,
+                        ResidueAA = r.ResidueAA,
+                        ResidueType = r.residue_type,
+                        IndexWithinChain = count,
+                        CoordinatesExist = True,
+                        RecognizedByRosetta = None,
+                        BFactorMean = average_bfactors.get('mean'),
+                        BFactorDeviation = average_bfactors.get('stddev'),
+                        MonomericExposure = dssp_res_monomer_exposure,
+                        MonomericDSSP = dssp_res_monomer_ss,
+                        ComplexExposure = dssp_res_complex_exposure,
+                        ComplexDSSP = dssp_res_complex_ss,
+                    ))
+                    pprint.pprint(instance.__dict__)
+                    tsession.add(instance)
+                    tsession.flush()
+                else:
+                    # Sanity check: make sure that the current data matches the database
+                    #print('EXISTING RESIDUE')
+                    #pprint.pprint(existing_residue_record.__dict__)
+                    if existing_residue_record.BFactorMean != None:
+                        assert(abs(float(existing_residue_record.BFactorMean) - average_bfactors.get('mean')) < 0.001)
+                    if existing_residue_record.BFactorDeviation != None:
+                        assert(abs(float(existing_residue_record.BFactorDeviation) - average_bfactors.get('stddev')) < 0.001)
+                    if existing_residue_record.MonomericExposure != None:
+                        assert(abs(float(existing_residue_record.MonomericExposure) - dssp_res_monomer_exposure) < 0.001)
+                    if existing_residue_record.MonomericDSSP != None:
+                        assert(r.ResidueAA == 'X' or (existing_residue_record.MonomericDSSP == dssp_res_monomer_ss))
+                    if existing_residue_record.ComplexExposure != None:
+                        assert(abs(float(existing_residue_record.ComplexExposure) - dssp_res_complex_exposure) < 0.001)
+                    if existing_residue_record.ComplexDSSP != None:
+                        assert(r.ResidueAA == 'X' or (existing_residue_record.ComplexDSSP == dssp_res_complex_ss))
+
+                    # Update data (add new data if is was previously missing)
+                    existing_residue_record.BFactorMean = average_bfactors.get('mean')
+                    existing_residue_record.BFactorDeviation = average_bfactors.get('stddev')
+                    existing_residue_record.MonomericExposure = dssp_res_monomer_exposure
+                    existing_residue_record.MonomericDSSP = dssp_res_monomer_ss
+                    existing_residue_record.ComplexExposure = dssp_res_complex_exposure
+                    existing_residue_record.ComplexDSSP = dssp_res_complex_ss
+                    tsession.flush()
+                #self.ddGdb.insertDictIfNew('PDBResidue', db_res, ['PDBFileID', 'Chain', 'ResidueID'])
+                count += 1
+        #print(count)
 
 
     def _add_pdb_rcsb_ligands(self, tsession, database_pdb_id, pdb_object = None, ligand_mapping = {}, ligand_params_files = {}):
@@ -925,6 +1082,7 @@ class DataImportInterface(object):
     def add_designed_pdb(self, designed_pdb_object, design_pdb_id, original_pdb_id, description, username, chain_mapping = {}, ligand_mapping = {}, trust_database_content = True):
         assert(5 <= len(design_pdb_id) <= 10)
 
+        raise Exception('implement this')
         colortext.message('Adding designed PDB file {0} based off {1}.'.format(design_pdb_id, original_pdb_id))
 
         colortext.pcyan('Adding the original PDB file using a separate transaction.')
@@ -956,296 +1114,11 @@ class DataImportInterface(object):
         self.get_pdb_details(design_pdb_id)
         self.get_pdb_details(original_pdb_id)
 
-
         # regardless of chain_mapping being specified, run clustal and assert that the sequence for chain c in design_pdb_id and chain_mapping.get(c, c) in original_pdb_id matches >90%
 
         # start data entry
         # open a transaction, call inner methods, then close the transaction
         # Particularly, call  add_pdb_data which then calls other functions. The point of separating all of these sub-functions into one big inner function is so we have an API to update the information for specific PDB files.
-
-
-    def _update_pdb_residues(self, check_chains = True):
-        '''This function should not usually be run but it is handy to keep around.'''
-
-        from ppi_api import get_interface as get_ppi_interface
-        ppi_api = get_ppi_interface(read_file('../pw'))
-
-        records = self.DDG_db.execute_select('SELECT DISTINCT PDBFileID FROM PDBResidue WHERE MonomericExposure IS NULL OR MonomericDSSP IS NULL OR ComplexExposure IS NULL OR ComplexDSSP IS NULL')
-        records = self.DDG_db.execute_select('SELECT DISTINCT ID AS PDBFileID FROM PDBFile')
-        pdb_ids = [r['PDBFileID'] for r in records]
-        num_pdb_ids = len(pdb_ids)
-        counter = 0
-
-        pdb_objects = {}
-
-        missing_chains = True
-        for pdb_id in pdb_ids:
-
-            counter += 1
-
-            #426/1474: 1GPW PDB chains: A,B,C,D,E,F	 DB chains: A,B,C,D,E,F,P
-            #if pdb_id != '1GTX':
-            #    continue
-            if counter < 434:
-                continue
-
-            colortext.message('{0}/{1}: {2}'.format(counter, num_pdb_ids, pdb_id))
-            pdb_object = PDB(self.DDG_db.execute_select("SELECT Content FROM PDBFile WHERE ID=%s", parameters = (pdb_id,))[0]['Content'])
-            pdb_objects[pdb_id] = pdb_object
-
-            #pprint.pprint(pdb_object.chain_types)
-
-
-
-
-            # Run DSSP
-            dssp_complex_d, dssp_monomer_d = None, None
-            try:
-                # This fails for some PDB e.g. if they only have CA atoms
-                dssp_complex_d = ComplexDSSP(pdb_object)
-            except MissingAtomException, e:
-                print('DSSP (complex) failed for this case.')
-            try:
-                # This fails for some PDB e.g. if they only have CA atoms
-                dssp_monomer_d = MonomerDSSP(pdb_object)
-            except MissingAtomException, e:
-                print('DSSP (monomer) failed for this case.')
-
-            # Make sure that the residue records exist for all results of DSSP
-            if dssp_monomer_d:
-                for chain_id in pdb_object.atom_sequences.keys():
-                    if pdb_object.chain_types[chain_id] == 'Protein':
-                        for chain_id, mapping in dssp_monomer_d:
-                            for residue_id, residue_details in sorted(mapping.iteritems()):
-                                residue_record = self.DDG_db.execute_select('SELECT ID FROM PDBResidue WHERE PDBFileID=%s AND Chain=%s AND ResidueID=%s', parameters=(pdb_id, chain_id, residue_id))
-                                assert(len(residue_record) == 1)
-
-                # Add the monomeric DSSP results
-                for chain_id in pdb_object.atom_sequences.keys():
-                    if pdb_object.chain_types[chain_id] == 'Protein':
-                        colortext.warning('\tRunning monomeric DSSP on chain %s' % chain_id)
-                        for chain_id, mapping in dssp_monomer_d:
-                            for residue_id, residue_details in sorted(mapping.iteritems()):
-                                residue_record = self.DDG_db.execute_select('SELECT ID, MonomericExposure, MonomericDSSP FROM PDBResidue WHERE PDBFileID=%s AND Chain=%s AND ResidueID=%s', parameters=(pdb_id, chain_id, residue_id))
-                                assert(len(residue_record) == 1)
-                                PDBResidueID = residue_record[0]['ID']
-                                if residue_record[0]['MonomericDSSP'] == None:
-                                    self.DDG_db.execute('UPDATE PDBResidue SET MonomericDSSP=%s WHERE ID=%s', parameters=(residue_details['ss'], PDBResidueID))
-                                else:
-                                    #print(pdb_id, chain_id, residue_id, residue_record[0]['MonomericDSSP'], residue_details['ss'])
-                                    assert(residue_record[0]['MonomericDSSP'] == residue_details['ss'])
-                                if residue_record[0]['MonomericExposure'] == None:
-                                    self.DDG_db.execute('UPDATE PDBResidue SET MonomericExposure=%s WHERE ID=%s', parameters=(residue_details['exposure'], PDBResidueID))
-                                else:
-                                    #print(pdb_id, chain_id, residue_id, residue_record[0]['MonomericExposure'], residue_details['exposure'])
-                                    #assert(residue_record[0]['MonomericExposure'] == residue_details['exposure'])
-                                    assert(abs(residue_record[0]['MonomericExposure'] - residue_details['exposure']) < 0.0001)
-
-            # Make sure that the residue records exist for all results of DSSP
-            if dssp_complex_d:
-                for chain_id in pdb_object.atom_sequences.keys():
-                    if pdb_object.chain_types[chain_id] == 'Protein':
-                        for chain_id, mapping in dssp_complex_d:
-                            for residue_id, residue_details in sorted(mapping.iteritems()):
-                                residue_record = self.DDG_db.execute_select('SELECT ID FROM PDBResidue WHERE PDBFileID=%s AND Chain=%s AND ResidueID=%s', parameters=(pdb_id, chain_id, residue_id))
-                                assert(len(residue_record) == 1)
-
-                # Add the complex DSSP results
-                for chain_id in pdb_object.atom_sequences.keys():
-                    if pdb_object.chain_types[chain_id] == 'Protein':
-                        colortext.warning('\tRunning complex DSSP on chain %s' % chain_id)
-                        for chain_id, mapping in dssp_complex_d:
-                            for residue_id, residue_details in sorted(mapping.iteritems()):
-                                residue_record = self.DDG_db.execute_select('SELECT ID, ComplexExposure, ComplexDSSP FROM PDBResidue WHERE PDBFileID=%s AND Chain=%s AND ResidueID=%s', parameters=(pdb_id, chain_id, residue_id))
-                                assert(len(residue_record) == 1)
-                                PDBResidueID = residue_record[0]['ID']
-                                if residue_record[0]['ComplexDSSP'] == None:
-                                    self.DDG_db.execute('UPDATE PDBResidue SET ComplexDSSP=%s WHERE ID=%s', parameters=(residue_details['ss'], PDBResidueID))
-                                else:
-                                    assert(residue_record[0]['ComplexDSSP'] == residue_details['ss'])
-                                if residue_record[0]['ComplexExposure'] == None:
-                                    self.DDG_db.execute('UPDATE PDBResidue SET ComplexExposure=%s WHERE ID=%s', parameters=(residue_details['exposure'], PDBResidueID))
-                                else:
-                                    #assert(residue_record[0]['ComplexExposure'] == residue_details['exposure'])
-                                    assert(abs(residue_record[0]['ComplexExposure'] - residue_details['exposure']) < 0.0001)
-
-
-
-            # Extract and store the coordinates
-            for chain_id in pdb_object.atom_sequences.keys():
-                chain_dataframe = pdb_object.extract_xyz_matrix_from_chain(chain_id)
-                if isinstance(chain_dataframe, NoneType):
-                    raise Exception('The coordinates dataframe could not be created for {0}, chain {1}'.format(pdb_id, chain_id))
-                ufname, cfname = None, None
-                if isinstance(ppi_api.get_pdb_chain_coordinates(pdb_id, chain_id), NoneType):
-                    try:
-                        f, ufname = open_temp_file('/tmp', suffix = '.hdf5')
-                        f.close()
-                        f, cfname = open_temp_file('/tmp', suffix = '.hdf5.gz')
-                        f.close()
-                        store = pandas.HDFStore(ufname)
-                        store['dataframe'] = chain_dataframe
-                        store.close()
-                        content = read_file(ufname, binary = True)
-                        with gzip.open(cfname, 'wb') as f:
-                            f.write(content)
-                        f = open(cfname)
-                        zipped_contents = f.read()
-                        f.close()
-                        ppi_api.DDG_db.execute('UPDATE PDBChain SET Coordinates=%s WHERE PDBFileID=%s AND Chain=%s', parameters=(zipped_contents, pdb_id, chain_id))
-                        os.remove(ufname)
-                        os.remove(cfname)
-                    except Exception, e:
-                        print('Failed to add coordinates for {0}, chain {1}'.format(pdb_id, chain_id))
-                        if ufname: os.remove(ufname)
-                        if cfname: os.remove(cfname)
-                        print(str(e))
-                        print(traceback.format_exc())
-                else:
-                    print(pdb_id + chain_id + ' has coordinates')
-
-            continue
-
-            if True:
-                # Add PDBResidue records
-                for c, seq in pdb_object.atom_sequences.iteritems():
-                    count = 1
-                    for s in seq:
-                        res_id, r = s
-                        assert(len(r.ResidueID) == 5)
-                        assert(c == r.Chain)
-
-                        residue_record = self.DDG_db.execute_select('SELECT * FROM PDBResidue WHERE PDBFileID=%s AND Chain=%s AND ResidueID=%s', parameters=(pdb_id, c, r.ResidueID))
-                        if len(residue_record) != 1:
-                            print('Missing {0}, chain {1}, {2}'.format(pdb_id, c, r.ResidueID))
-
-
-
-                        return
-                        continue
-                        db_res = dict(
-                            PDBFileID = pdb_id,
-                            Chain = c,
-                            ResidueID = r.ResidueID,
-                            ResidueAA = r.ResidueAA,
-                            ResidueType = r.residue_type,
-                            IndexWithinChain = count,
-                            CoordinatesExist = True,
-                            RecognizedByRosetta = None,
-                            BFactorMean = None,
-                            BFactorDeviation = None,
-                            SecondaryStructurePosition = None,
-                            AccessibleSurfaceArea = None,
-                            MonomericExposure = None,
-                            MonomericDSSP = None,
-                            ComplexExposure = None,
-                            ComplexDSSP = None,
-                        )
-                        self.ddGdb.insertDictIfNew('PDBResidue', db_res, ['PDBFileID', 'Chain', 'ResidueID'])
-                        count += 1
-
-            if False:
-                # Update PDBResidue records
-                for c, seq in pdb_object.atom_sequences.iteritems():
-                    count = 1
-                    for s in seq:
-                        res_id, r = s
-                        assert(len(r.ResidueID) == 5)
-                        assert(c == r.Chain)
-                        db_res = dict(
-                            PDBFileID = pdb_id,
-                            Chain = c,
-                            ResidueID = r.ResidueID,
-                            ResidueAA = r.ResidueAA,
-                            ResidueType = r.residue_type,
-                            IndexWithinChain = count,
-                            CoordinatesExist = True,
-                            RecognizedByRosetta = None,
-                            BFactorMean = None,
-                            BFactorDeviation = None,
-                            SecondaryStructurePosition = None,
-                            AccessibleSurfaceArea = None,
-                            MonomericExposure = None,
-                            MonomericDSSP = None,
-                            ComplexExposure = None,
-                            ComplexDSSP = None,
-                        )
-                        self.ddGdb.insertDictIfNew('PDBResidue', db_res, ['PDBFileID', 'Chain', 'ResidueID'])
-                        count += 1
-
-
-
-
-        return
-
-
-
-    def update_pdb_chains(self):
-        '''
-        '''
-
-        pdb_files = self.DDG_db.execute_select('SELECT ID, FileSource FROM PDBFile ORDER BY ID')
-        num_files = len(pdb_files)
-
-        x = 0
-        ligand_codes = set()
-        colortext.message('Updating {0} PDB files.'.format(num_files))
-        rescount = {}
-        for pdb_file in pdb_files:
-            x += 1
-            #if True and x < 67:
-            #    continue
-
-            pdb_id = pdb_file['ID']
-
-            #if pdb_id < '1DAN':
-            #    continue
-
-            #print('')
-            #print(pdb_id)
-            rescount[pdb_id] = self.DDG_db.execute_select('SELECT COUNT(ID) AS NumResidues FROM PDBResidue WHERE PDBFileID=%s AND ComplexDSSP IS NOT NULL', parameters = (pdb_id,))[0]['NumResidues']
-            continue
-            file_source = pdb_file['FileSource']
-            if len(pdb_id) == 4:
-                assert(file_source == 'RCSB')
-            else:
-                assert(file_source != 'RCSB')
-            #print('{0}/{1}'.format(x, num_files))
-            sys.stdout.write('{0}/{1}\r'.format(x, num_files)); sys.stdout.flush()
-
-            pdb_id = pdb_file['ID']
-            p = PDB(self.DDG_db.execute_select('SELECT Content FROM PDBFile WHERE ID=%s', parameters = (pdb_id,))[0]['Content'])
-
-            print(p.hetatm_formulae)
-            ligand_codes = ligand_codes.union(p.get_ligand_codes())
-            pprint.pprint(p.ligands)
-            print(ligand_codes)
-            continue
-
-            print('here')
-            break
-
-
-            #break
-            print('.')
-            #print(p.seqres_sequences)
-            #print(p.atom_sequences)
-
-        pprint.pprint(rescount)
-        print(len(rescount))
-        for k, v in rescount.iteritems():
-            if v < 50:
-                print(k, v)
-
-        print(sorted(ligand_codes))
-        #colortext.warning(self.pfam_api.get_pfam_accession_numbers_from_pdb_chain('1TVA', 'A'))
-
-
-    ##################
-    # Adding PDB files
-    ##################
-
-
 
 
 
@@ -1270,7 +1143,153 @@ def test():
 
     #importer.update_pdbs(pdb_ids = ['1a22'], update_sections = ['Chains'])
     #importer.remove_ligands()
-    importer.add_pdb_from_rcsb('1ZZ7', update_sections = set(['Chains']))
+    #from sqlalchemy.orm import load_only
+
+    #SELECT COUNT(ID) FROM `PDBResidue` WHERE `BFactorMean` IS NULL OR `BFactorDeviation` IS NULL
+
+    '''
+SELECT PDBFile.FileSource, PDBResidue.*
+FROM  PDBResidue
+INNER JOIN PDBChain ON PDBResidue.Chain = PDBChain.Chain AND PDBResidue.PDBFileID = PDBChain.PDBFileID
+INNER JOIN PDBFile ON PDBResidue.PDBFileID = PDBFile.ID
+WHERE  PDBResidue.BFactorMean IS NULL
+OR  PDBResidue.BFactorDeviation IS NULL
+AND MoleculeType = "Protein"
+'''
+
+
+    '''
+SELECT PDBFile.ID, COUNT( PDBResidue.ID ) AS MissingCount
+FROM PDBResidue
+INNER JOIN PDBChain ON PDBResidue.Chain = PDBChain.Chain
+AND PDBResidue.PDBFileID = PDBChain.PDBFileID
+INNER JOIN PDBFile ON PDBResidue.PDBFileID = PDBFile.ID
+WHERE (
+PDBResidue.BFactorMean IS NULL
+OR PDBResidue.BFactorDeviation IS NULL
+)
+AND MoleculeType =  "Protein"
+AND FileSource =  "RCSB"
+GROUP BY PDBFile.ID
+ORDER BY  `MissingCount` DESC
+'''
+
+
+    PDBs_to_check = ["1DAN",
+"1BXI",
+"1DN2",
+"1A7A",
+"1AM7",
+"1ATN",
+"1AUT",
+"1B8J",
+"1BAH",
+"1EG1",
+"1EVQ",
+"1FEP",
+"1FMK",
+"1GQ2",
+"1H8V",
+"1IR3",
+"1J0X",
+"1JAE",
+"1K23",
+"1K9Q",
+"1KA6",
+"1KDX",
+"1LFO",
+"1MBG",
+"1OA2",
+"1OA3",
+"1OKI",
+"1OLR",
+"1ONC",
+"1OVA",
+"1RHD",
+"1SMD",
+"1STF",
+"1XY1",
+"1YAL",
+"1YCC",
+"1YEA",
+"2HPR",
+"2MLT",
+"487D",
+"1CVW",
+"1CLV",
+"1CRZ",
+"1F34",
+"1FKM",
+"1FQ1",
+"1FQI",
+"1G16",
+"1HE9",
+"1IB1",
+"1JB1",
+"1JMO",
+"1JXQ",
+"1PIG",
+"1QJB",
+"1QUP",
+"1R8M",
+"1S1Q",
+"1TMQ",
+"1TXU",
+"1UBN",
+"1XQR",
+"1Y64",
+"1YJ1",
+"1YWH",
+"1Z1A",
+"1Z6R",
+"1ZM4",
+"2AYO",
+"2BBK",
+"2BTF",
+"2CFH",
+"2CN0",
+"2FCN",
+"2FTL",
+"2FXU",
+"2G77",
+"2MTA",
+"2OOA",
+"3BP3",
+"4PEP",
+"9PTI",
+"2W9N",]
+    worst_cases = [
+        ('1GQ2','224'),
+        ('1Z6R','36'),
+        ('1A7A','30'),
+        ('1YWH','24'),
+        ('1K23','20'),
+        ('1XQR','18'),
+        ('1AM7','12'),
+        ('1G16','12'),
+        ('1FEP','11'),
+        ('1DAN','10'),
+        ('1S1Q','10'),
+    ]
+
+    tsession = importer.get_session()
+    hit_failing_pdb = False
+    for r in importer.DDG_db.execute_select('SELECT ID, FileSource FROM PDBFile'):
+    #for r in session.query(PDBFile).options(load_only("ID")).order_by(PDBFile.ID):
+        #if r['ID'].upper() == '1GQ2':
+        #if not r['ID'] in worst_cases:
+        if not r['FileSource'] == 'PUBS':
+            continue
+        if True or r['ID'].upper() == '3H7P':
+
+            hit_failing_pdb = True
+        if hit_failing_pdb:
+            colortext.warning(r['ID'])
+            importer.add_pdb_data(tsession, r['ID'], update_sections = set(['Residues']), ligand_mapping = {}, chain_mapping = {})
+
+            #importer.add_pdb_from_rcsb(r['ID'], update_sections = set(['Residues']))
+    tsession.commit()
+
     return
     importer.update_pdbs(update_sections = ['Chains'])
     return
