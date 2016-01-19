@@ -826,7 +826,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @informational_pdb
-    def get_prediction_set_pdb_chain_details(self, PredictionSet, cached_pdb_details = None):
+    def get_prediction_set_pdb_chain_details(self, PredictionSet, cached_pdb_details = None, restrict_to_pdbs = set()):
         '''Used by the analysis API. This could be combined with get_pdb_details.'''
 
         pdb_ids = [r['PDBFileID'] for r in self.DDG_db.execute_select('SELECT DISTINCT PDBFileID FROM {0} INNER JOIN {1} ON {1}ID={1}.ID WHERE PredictionSet=%s ORDER BY PDBFileID'.format(self._get_prediction_table(), self._get_user_dataset_experiment_table()), parameters=(PredictionSet,))]
@@ -835,6 +835,9 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             try:
                 pdb_ids = [r['PDBFileID'] for r in self.DDG_db.execute_select('SELECT DISTINCT PDBFileID FROM {0} INNER JOIN {1} ON {1}ID={1}.ID WHERE PredictionSet=%s ORDER BY PDBFileID'.format(self._get_prediction_table(), 'Experiment'), parameters=(PredictionSet,))]
             except: pass
+
+        if restrict_to_pdbs:
+            pdb_ids = sorted(set(pdb_ids).intersection(restrict_to_pdbs))
 
         pdbs = {}
         cached_pdb_ids = []
@@ -1786,7 +1789,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                     if not allow_failures:
                         raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
                     failed_cases.add(prediction_id)
-                if debug and len(analysis_data) > 10:
+                if debug and len(analysis_data) >= 20:
                     break
 
                 # best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
@@ -1800,6 +1803,10 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 dataframe_type = dataframe_type,
                 contains_experimental_data = experimental_data_exists,
             )
+
+        restrict_to_pdbs = set()
+        if debug:
+            restrict_to_pdbs = set([prediction_set_case_details[k]['Structure']['PDBFileID'] for k in analysis_data])
 
         prediction_set_details = self.get_prediction_set_details(prediction_set_id)
         prediction_set_series_name = prediction_set_series_name or prediction_set_details['SeriesName'] or prediction_set_details['ID']
@@ -1834,7 +1841,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             )
 
         if not(use_existing_benchmark_data and hdf_store_blob):
-            hdf_store_blob = benchmark_run.create_dataframe(pdb_data = self.get_prediction_set_pdb_chain_details(prediction_set_id))
+            hdf_store_blob = benchmark_run.create_dataframe(pdb_data = self.get_prediction_set_pdb_chain_details(prediction_set_id, restrict_to_pdbs = restrict_to_pdbs))
             d = dict(
                 PredictionSet                           = prediction_set_id,
                 DataFrameType                           = dataframe_type,

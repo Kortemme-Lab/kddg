@@ -1272,23 +1272,26 @@ ORDER BY  `MissingCount` DESC
         ('1S1Q','10'),
     ]
 
-    tsession = importer.get_session()
+    #tsession = importer.get_session()
     hit_failing_pdb = False
     for r in importer.DDG_db.execute_select('SELECT ID, FileSource FROM PDBFile'):
     #for r in session.query(PDBFile).options(load_only("ID")).order_by(PDBFile.ID):
         #if r['ID'].upper() == '1GQ2':
         #if not r['ID'] in worst_cases:
-        if not r['FileSource'] == 'PUBS':
+        if not r['FileSource'] == 'RCSB':
             continue
-        if True or r['ID'].upper() == '3H7P':
+        #print(r['ID'].upper())
+        if r['ID'].upper() == '1GQ2':
+            print(1)
 
             hit_failing_pdb = True
         if hit_failing_pdb:
             colortext.warning(r['ID'])
-            importer.add_pdb_data(tsession, r['ID'], update_sections = set(['Residues']), ligand_mapping = {}, chain_mapping = {})
+            #importer.add_pdb_data(tsession, r['ID'], update_sections = set(['Residues']), ligand_mapping = {}, chain_mapping = {})
 
-            #importer.add_pdb_from_rcsb(r['ID'], update_sections = set(['Residues']))
-    tsession.commit()
+            importer.add_pdb_from_rcsb(r['ID'], update_sections = set(['Residues']))
+            break
+    #tsession.commit()
 
     return
     importer.update_pdbs(update_sections = ['Chains'])
