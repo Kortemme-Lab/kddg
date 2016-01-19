@@ -1804,9 +1804,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 contains_experimental_data = experimental_data_exists,
             )
 
-        restrict_to_pdbs = set()
-        if debug:
-            restrict_to_pdbs = set([prediction_set_case_details[k]['Structure']['PDBFileID'] for k in analysis_data])
+        # Only pull PDB data for cases where we have data
+        restrict_to_pdbs = set([prediction_set_case_details[k]['Structure']['PDBFileID'] for k in analysis_data])
 
         prediction_set_details = self.get_prediction_set_details(prediction_set_id)
         prediction_set_series_name = prediction_set_series_name or prediction_set_details['SeriesName'] or prediction_set_details['ID']
