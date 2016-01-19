@@ -22,12 +22,19 @@ import tempfile
 import cPickle as pickle
 import copy
 import zipfile
+import datetime
 
 # Constants for cluster runs
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
 output_db3 = 'output.db3'
 setup_run_with_multiprocessing = True
 tmpdir_location = '/dbscratch/%s/tmp' % getpass.getuser()
+
+def total_seconds(td):
+    '''
+    Included in python 2.7 but here for backwards-compatibility for old Python versions
+    '''
+    return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) / 10**6
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a DDGMonomerInterface object. It hides the private methods
@@ -43,19 +50,28 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         for i, score_type in enumerate(self.all_score_types):
             self.all_score_types_index[score_type] = i
         self.master_scores_list = []
+        self.ddg_output_path_cache = {} # Stores paths to ddG job output directories, or unzipped job output directories
+        self.unzipped_ddg_output_paths = [] # Stores paths to unzipped ddG job output directories (that need to be cleared at the end of this object's life, or before)
 
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
         '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
         '''
         if score_method_id:
             q = "SELECT DISTINCT PredictionPPIID FROM PredictionPPIStructureScore INNER JOIN PredictionPPI ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID WHERE PredictionPPI.PredictionSet='%s' AND PredictionPPIStructureScore.ScoreMethodID=%d" % (prediction_set_id, score_method_id)
-            # q = "SELECT DISTINCT %s FROM %s INNER JOIN %s ON %s.ID=%s.%s WHERE %s.PredictionSet='%s' AND %s.ScoreMethodID=%d" % (prediction_set_id, score_method_id)
         else:
             q = "SELECT DISTINCT PredictionPPIID FROM PredictionPPIStructureScore INNER JOIN PredictionPPI ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID WHERE PredictionPPI.PredictionSet='%s'" % (prediction_set_id)
-            # q = "SELECT DISTINCT %s FROM %s INNER JOIN %s ON %s.ID=PredictionPPIStructureScore.%s WHERE %s.PredictionSet='%s'" % (_get_prediction_structure_scores_table, prediction_set_id)
         return_set = set()
         for r in self.DDG_db.execute_select(q):
             return_set.add( r['PredictionPPIID'] )
+        return return_set
+
+    def get_unfinished_prediction_ids(self, prediction_set_id):
+        '''Returns a set of all prediction_ids that have Status != "done"
+        '''
+        q = "SELECT ID FROM PredictionPPI WHERE PredictionSet='%s' AND Status!='done'" % (prediction_set_id)
+        return_set = set()
+        for r in self.DDG_db.execute_select(q):
+            return_set.add( r['ID'] )
         return return_set
 
     def get_prediction_ids_without_scores(self, prediction_set_id, score_method_id = None):
@@ -176,6 +192,106 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 'mut'
             ])
 
+    def update_prediction_id_status(self, prediction_set_id, root_directory, verbose = True):
+        # Looks for output file in root directory and reads for job status
+        unfinished_prediction_ids = self.get_unfinished_prediction_ids(prediction_set_id)
+        if len(unfinished_prediction_ids) == 0:
+            return
+        if verbose:
+            r = Reporter('parsing output files (if they exist) for queued predictions')
+            r.set_total_count( len(unfinished_prediction_ids) )
+
+        # Constants
+        output_file_substring = 'run-2.py.o'
+        date_format_string = '%Y-%m-%d %H:%M:%S'
+        starting_time_string = 'Starting time:'
+        ending_time_string = 'Ending time:'
+        for prediction_id in unfinished_prediction_ids:
+            ddg_output_dir = self.find_ddg_output_directory(prediction_id, root_directory)
+            if ddg_output_dir:
+                output_files = [os.path.join(ddg_output_dir, f) for f in os.listdir(ddg_output_dir) if output_file_substring in f]
+                if len(output_files) == 0:
+                    if verbose:
+                        print '\nDirectory %s missing output file\n' % ddg_output_dir
+                        r.decrement_total_count()
+                elif len(output_files) > 1:
+                    raise Exception('ERROR: found more than one output file (defined as having string %s in name) in directory %s' % (output_file_substring, ddg_output_dir))
+                else:
+                    # Parse output file
+                    starting_time = None
+                    ending_time = None
+                    return_code = None
+                    virtual_memory_usage = None
+                    elapsed_time = None
+                    status = 'active'
+                    with open(output_files[0], 'r') as f:
+                        for line in f:
+                            if line.startswith(starting_time_string):
+                                starting_time = line[len(starting_time_string):].strip()
+                            elif line.startswith(ending_time_string):
+                                ending_time = line[len(ending_time_string):].strip()
+                            elif 'return code' in line:
+                                return_code = int(line.strip().split()[-1].strip())
+                            elif 'virtual memory usage' in line:
+                                line = line.strip()
+                                assert( line.endswith('G') )
+                                line = line[:-1]
+                                virtual_memory_usage = float(line.strip().split()[-1].strip())
+                    if starting_time and ending_time:
+                        starting_time_dt = datetime.datetime.strptime(starting_time, date_format_string)
+                        ending_time_dt = datetime.datetime.strptime(ending_time, date_format_string)
+                        elapsed_time = total_seconds(ending_time_dt - starting_time_dt) / 60.0 # 60 seconds in a minute
+
+                    if return_code != None:
+                        if return_code == 0:
+                            status = 'done'
+                        else:
+                            status = 'failed'
+
+                    self.DDG_db.execute("UPDATE PredictionPPI SET StartDate=%s, EndDate=%s, Status=%s, maxvmem=%s, DDGTime=%s, ERRORS=%s WHERE ID=%s", parameters=(starting_time, ending_time, status, virtual_memory_usage, elapsed_time, str(return_code), prediction_id,))
+
+                    if verbose:
+                        r.increment_report()
+            elif verbose:
+                r.decrement_total_count()
+
+        if verbose:
+            r.done()
+
+    def find_ddg_output_directory(self, prediction_id, root_directory):
+        # Returns the ddG output directory path in root directory if it exists
+        # If not, checks to see if zipped output directory exists in root directory, and if so,
+        #    returns path to unzipped temporary directory
+        if prediction_id in self.ddg_output_path_cache:
+            return self.ddg_output_path_cache[prediction_id]
+
+        ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
+        if not os.path.isdir( ddg_output_path ):
+            ddg_output_zip = os.path.join(root_directory, '%d.zip' % prediction_id)
+            if os.path.isfile(ddg_output_zip):
+                tmp_dir = unzip_to_tmp_dir(prediction_id, ddg_output_zip)
+                self.unzipped_ddg_output_paths.append( tmp_dir )
+                ddg_output_path = os.path.join(tmp_dir, '%d-ddg' % prediction_id)
+
+        if not os.path.isdir( ddg_output_path):
+            return None
+        else:
+            self.ddg_output_path_cache[prediction_id] = ddg_output_path
+            return ddg_output_path
+
+    def cleanup_tmp_ddg_output_directories(self):
+        # Removes any temporary unzipped ddG monomer output directories
+        if len(self.unzipped_ddg_output_paths) == 0:
+            return
+
+        r = Reporter('Removing temporary directories')
+        r.set_total_count( len(self.unzipped_ddg_output_paths) )
+        for tmp_dir in self.unzipped_ddg_output_paths:
+            shutil.rmtree(tmp_dir)
+            r.increment_report()
+        self.unzipped_ddg_output_paths = []
+        r.done()
+
     @job_completion
     def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None, max_prediction_ids_to_process=None, setup_cluster_run = False):
         '''Extracts the data for the prediction set run and stores it into the database.
@@ -192,6 +308,13 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
            If force is True then existing records should be overridden.
         '''
         root_directory = root_directory or self.prediction_data_path
+
+        ### Find all prediction_ids that need to have updated states
+        self.update_prediction_id_status(prediction_set_id, root_directory)
+        
+        ### Find all prediction_ids with partial score data and remove this data
+
+        ### Find all prediction_ids with missing scores and setup rescoring or rescore on the fly
         prediction_ids = self.get_prediction_ids_without_scores(prediction_set_id, score_method_id = score_method_id)
 
         random.shuffle( prediction_ids )
@@ -201,20 +324,12 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             r = Reporter('fetching job details for prediction_ids', entries='job details')
             r.set_total_count(len(prediction_ids))
             for prediction_id in prediction_ids:
-                ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
-                tmp_dir = None
-                if not os.path.isdir( ddg_output_path ):
-                    ddg_output_zip = os.path.join(root_directory, '%d.zip' % prediction_id)
-                    if os.path.isfile(ddg_output_zip):
-                        tmp_dir = unzip_to_tmp_dir(prediction_id, ddg_output_zip)
-                        ddg_output_path = os.path.join(tmp_dir, '%d-ddg' % prediction_id)
+                ddg_output_path = self.find_ddg_output_directory(prediction_id, root_directory)
                 job_details = self.get_job_details(prediction_id)
                 substitution_parameters = json.loads(job_details['JSONParameters'])
                 chains_to_move = substitution_parameters['%%chainstomove%%']
-                if os.path.isdir(ddg_output_path):
+                if ddg_output_path:
                     self.add_rescore_cluster_run(ddg_output_path, chains_to_move, score_method_id, prediction_id)
-                if tmp_dir:
-                    shutil.rmtree(tmp_dir)
                 r.increment_report()
             r.done()
             self.create_cluster_run_rescore_dir( os.path.join(tmpdir_location, 'cluster_run'), passed_job_name = job_name )
@@ -227,26 +342,21 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
 
             missing_data_count = 0
             for prediction_id in prediction_ids:
-                ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
-                if os.path.isdir( ddg_output_path ):
+                ddg_output_path = self.find_ddg_output_directory(prediction_id, root_directory)
+                if ddg_output_path:
                     self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force, score_method_id = score_method_id)
                     r.increment_report()
                 else:
-                    ddg_output_zip = os.path.join(root_directory, '%d.zip' % prediction_id)
-                    if os.path.isfile(ddg_output_zip):
-                        tmp_dir = unzip_to_tmp_dir(prediction_id, ddg_output_zip)
-                        self.extract_data_for_case(prediction_id, root_directory = tmp_dir, force = force, score_method_id = score_method_id)
-                        r.increment_report()
-                        shutil.rmtree(tmp_dir)
-                    else:
-                        r.decrement_total_count()
-                        missing_data_count += 1
+                    r.decrement_total_count()
+                    missing_data_count += 1
                 if max_prediction_ids_to_process and r.n >= max_prediction_ids_to_process:
                     print 'Breaking early; processed %d prediction ids' % r.n
                     break
             r.done()
             if missing_data_count > 0:
                 print 'Missing data folders/zips for %d prediction_ids' % missing_data_count
+
+        self.cleanup_tmp_ddg_output_directories() # Remove temporary directories (if created)
 
     def find_structs_with_both_rounds(self, ddg_output_path):
         '''Searchs directory ddg_output_path to find ddg_monomer output structures for all rounds with both wt and mut structures'''
