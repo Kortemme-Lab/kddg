@@ -1732,7 +1732,9 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             score_method_id = None,
             expectn = None,
             allow_failures = False,
-            extract_data_for_case_if_missing = True):
+            extract_data_for_case_if_missing = True,
+            debug = False
+            ):
         '''This 'private' function does most of the work for get_analysis_dataframe.'''
 
         ddg_analysis_type = 'DDG_Top%d' % take_lowest
@@ -1784,6 +1786,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                     if not allow_failures:
                         raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
                     failed_cases.add(prediction_id)
+                if debug and len(analysis_data) > 10:
+                    break
 
                 # best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
 

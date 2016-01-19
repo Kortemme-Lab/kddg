@@ -1273,6 +1273,7 @@ class BindingAffinityDDGInterface(ddG):
             expectn = None,
             allow_failures = False,
             extract_data_for_case_if_missing = False,
+            debug = False,
             ):
 
         #todo: rename function since we return BenchmarkRun objects
@@ -1304,6 +1305,7 @@ class BindingAffinityDDGInterface(ddG):
             report_analysis = True,
             silent = False,
             root_directory = None, # where to find the prediction data on disk
+            debug = False,
             ):
         '''Runs the analyses for the specified PredictionSets and cross-analyzes the sets against each other if appropriate.
 
@@ -1366,6 +1368,7 @@ class BindingAffinityDDGInterface(ddG):
                 score_method_id = score_method_id,
                 expectn = expectn,
                 allow_failures = False,
+                debug = debug
                 )
 
             # The keys of scalar_adjustments are the stored analysis sets
