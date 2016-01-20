@@ -1383,7 +1383,9 @@ class BindingAffinityDDGInterface(ddG):
             for analysis_set_id in analysis_sets_to_run:
                 colortext.message(analysis_set_id)
 
-                benchmark_run.calculate_metrics(analysis_set = analysis_set_id, analysis_directory = '/tmp/analysis')
+                self.output_score_method_information(score_method_id, analysis_set_id, output_directory)
+
+                benchmark_run.calculate_metrics(analysis_set = analysis_set_id, analysis_directory = output_directory)
                 benchmark_run.plot(analysis_set = analysis_set_id, analysis_directory = output_directory)
 
                 break

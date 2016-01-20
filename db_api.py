@@ -627,20 +627,43 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             publications[r['ID']] = self.get_publication(r['ID'])
         return publications
 
-
+    def cache_all_score_method_details(self):
+        '''Helper function for get_score_method_details'''
+        score_methods = {}
+        for r in self.DDG_db_utf.execute_select('SELECT * FROM ScoreMethod'):
+            score_methods[r['ID']] = r
+        self.cached_score_method_details = score_methods
+    
     @informational_misc
-    def get_score_method_details(self):
-        '''Returns all defined ScoreMethod records.'''
-        if self.cached_score_method_details:
-            return self.cached_score_method_details
+    def get_score_method_details(self, score_method_id = None, allow_recaching = True):
+        '''Returns all score method details, unless a score method id is passed, then only those details are returned'''
+        if not self.cached_score_method_details:
+            self.cache_all_score_method_details()
+
+        if score_method_id:
+            # Returns ScoreMethod record for specific score_method_id
+            if score_method_id in self.cached_score_method_details:
+                return self.cached_score_method_details[score_method_id]
+            elif allow_recaching:
+                # Recache and try one more time
+                self.get_score_method_details(score_method_id = score_method_id, allow_recaching = False)
+            else:
+                # We have already tried again once, so fail
+                raise Exception("score_method_id %s isn't in score methods table" % str(score_method_id))
         else:
-            score_methods = {}
-            for r in self.DDG_db_utf.execute_select('SELECT * FROM ScoreMethod'):
-                score_methods[r['ID']] = r
-            self.cached_score_method_details = score_methods
-            return score_methods
+            # Returns all defined ScoreMethod records
+            return self.cached_score_method_details
 
-
+    def output_score_method_information(self, score_method_id, analysis_set_id, output_directory):
+        '''Outputs details about score method to a txt file in the specified output directory'''
+        score_method_details = sorted([(k, v) for k, v in self.get_score_method_details(score_method_id = score_method_id).iteritems()])
+        with open(os.path.join(output_directory, 'score_method.txt'), 'w') as f:
+            f.write('Analysis set ID: %s\n' % str(analysis_set_id))
+            f.write('Score method ID: %s\n' % str(score_method_id))
+            f.write('\nScore method details\n')
+            for key, value in score_method_details:
+                f.write('%s: %s\n' % (str(key), str(value)))
+        
     @informational_misc
     def get_score_method_id(self, method_name, method_type = None, method_parameters = None, method_authors = None, fuzzy = True):
         '''Returns the ID for the ScoreMethod with the specified parameters.
