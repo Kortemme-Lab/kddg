@@ -8,6 +8,15 @@ Created by Shane O'Connor 2015.
 Copyright (c) 2015 Shane O'Connor. All rights reserved.
 """
 
+# todo: add_pdb_from_rcsb: FileContent (see ticket 1489)
+# todo: get_pdb_details (see below)
+# todo: PDB Chains (_add_pdb_chains)
+#       add self.pfam_api.? call to get mapping from RCSB PDB files to the UniProt sequences. Add this to a separate function, _add_pdb_uniprot_mapping.
+#       add self.pfam_api.get_pfam_accession_numbers_from_pdb_chain(database_pdb_id, c)) calls. Use this in _add_pdb_uniprot_mapping.
+#       add self.scope_api.get_chain_details(database_pdb_id, c))) calls
+#       add coordinates
+# todo: _add_pdb_uniprot_mapping. implement UniProt mapping. The old approach was flawed. Use the new approach (similar to how I used PPComplex as an abstraction layer)
+
 import sys
 import pprint
 from io import BytesIO
@@ -21,6 +30,7 @@ import shutil
 import sqlite3
 import cPickle as pickle
 from types import NoneType
+import time
 
 import numpy
 import pandas
@@ -31,6 +41,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy import create_engine, and_
 from sqlalchemy import inspect as sqlalchemy_inspect
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+from MySQLdb import OperationalError as MySQLOperationalError
 
 if __name__ == '__main__':
     sys.path.insert(0, '../../klab')
@@ -238,12 +250,14 @@ class DataImportInterface(object):
                     tsession.query(ltbl).filter(ltbl.LigandID == ligand_id).delete()
                 tsession.query(DBLigand).filter(DBLigand.ID == ligand_id).delete()
                 tsession.commit()
+                tsession.close()
                 print('Success.\n')
             except Exception, e:
                 colortext.error('Failure.')
                 print(str(e))
                 print(traceback.format_exc() + '\n')
                 tsession.rollback()
+                tsession.close()
             print('')
 
 
@@ -254,16 +268,30 @@ class DataImportInterface(object):
     #################################
 
 
-    def update_pdbs(self, pdb_ids = [], update_sections = {}):
-        '''Updates all or selected data for all or selected PDB files in the database.'''
+    def update_pdbs(self, pdb_ids = [], update_sections = set(), start_at = None, restrict_to_file_source = None):
+        '''Updates all or selected data for all or selected PDB files in the database, enumerating in alphabetical order.
+           If start_at is specified, the update begins at the specified PDB identifier.
+        '''
         if not pdb_ids:
-            pdb_ids = [r['ID'] for r in self.DDG_db.execute_select('SELECT ID FROM PDBFile')]
-        for pdb_id in pdb_ids:
-            colortext.message('Updating data for {0}.'.format(pdb_id))
-            tsession = self.get_session(new_session = True)
-            self.add_pdb_data(tsession, pdb_id, update_sections = update_sections)
-            tsession.commit()
+            pdb_ids = [r for r in self.DDG_db.execute_select('SELECT ID, FileSource FROM PDBFile ORDER BY ID')]
 
+        counter = 0
+        num_pdb_ids = len(pdb_ids)
+        hit_starting_pdb = False
+        for r in pdb_ids:
+            counter += 1
+            pdb_id = r['ID']
+            if (not restrict_to_file_source) or (r['FileSource'] == restrict_to_file_source):
+                if (not start_at) or (r['ID'].upper() == start_at):
+                    hit_starting_pdb = True
+                if hit_starting_pdb:
+                    colortext.message('Updating data for {0} ({1}/{2}).'.format(pdb_id, counter, num_pdb_ids))
+                    tsession = self.get_session(new_session = True)
+                    self.add_pdb_data(tsession, pdb_id, update_sections = update_sections)
+                    tsession.commit()
+                    tsession.close()
+        if not hit_starting_pdb:
+            raise Exception('We never hit the starting PDB "{0}".'.format(start_at))
 
     #################################
     #                               #
@@ -315,12 +343,15 @@ class DataImportInterface(object):
             for synonym in l.synonyms:
                 db_ligand_synonym = get_or_create_in_transaction(tsession, LigandSynonym, dict(LigandID = db_ligand.ID, Synonym = synonym.strip()))
 
+            db_ligand_id = db_ligand.ID
             tsession.commit()
+            tsession.close()
             print('Success.\n')
-            return db_ligand.ID
+            return db_ligand_id
         except:
             colortext.error('Failure.')
             tsession.rollback()
+            tsession.close()
             raise
 
 
@@ -503,11 +534,12 @@ class DataImportInterface(object):
             previously_added.add(pdb_id)
 
             print('Success.\n')
-            #raise Exception('Planned rollback') # todo: remove
             tsession.commit()
+            tsession.close()
         except:
             colortext.error('Failure.')
             tsession.rollback()
+            tsession.close()
             raise
 
 
@@ -519,7 +551,7 @@ class DataImportInterface(object):
         return PDB(db_record.Content)
 
 
-    def add_pdb_data(self, tsession, database_pdb_id, update_sections = {}, ligand_mapping = {}, chain_mapping = {}):
+    def add_pdb_data(self, tsession, database_pdb_id, update_sections = set(), ligand_mapping = {}, chain_mapping = {}):
         '''
            database_pdb_id is the RCSB ID for RCSB files and a custom ID for other (designed) structures.
            If transaction_session is None (e.g. if this was called directly outside of a transaction), create a transaction
@@ -583,13 +615,11 @@ class DataImportInterface(object):
             #colortext.error('Missing chains.')
             new_chain_ids = sorted(set(chain_ids).difference(db_chains_ids))
             for c in new_chain_ids:
-                instance = PDBChain(**dict(
+                db_chain = get_or_create_in_transaction(tsession, PDBChain, dict(
                     PDBFileID = database_pdb_id,
                     Chain = c,
                     MoleculeType = pdb_object.chain_types[c]
-                ))
-                tsession.add(instance)
-                tsession.flush()
+                ), missing_columns = ['WildtypeProteinID', 'FullProteinID', 'SegmentProteinID', 'WildtypeAlignedProteinID', 'AcquiredProteinID', 'Coordinates'])
             db_chains = {}
             for r in tsession.query(PDBChain).filter(PDBChain.PDBFileID == database_pdb_id).order_by(PDBChain.Chain):
                 db_chains[r.Chain] = r
@@ -639,11 +669,6 @@ class DataImportInterface(object):
                 print(pdb_id + chain_id + ' has coordinates')
 
 
-        # todo: add self.pfam_api.? call to get mapping from RCSB PDB files to the UniProt sequences. Add this to a separate function, _add_pdb_uniprot_mapping.
-        # todo: add self.pfam_api.get_pfam_accession_numbers_from_pdb_chain(database_pdb_id, c)) calls. Use this in _add_pdb_uniprot_mapping.
-        # todo: add self.scope_api.get_chain_details(database_pdb_id, c))) calls
-
-
     def _add_pdb_molecules(self, tsession, database_pdb_id, pdb_object = None, allow_missing_molecules = True):
         '''
            Add PDBMolecule and PDBMoleculeChain records
@@ -664,18 +689,15 @@ class DataImportInterface(object):
             for k in ['PDBFileID', 'MoleculeID', 'Name', 'Organism', 'Fragment', 'Synonym', 'Engineered', 'EC', 'Mutation', 'OtherDetails']:
                 md[k] = molecule[k]
 
-            instance = PDBMolecule(**md)
-            tsession.add(instance)
-            tsession.flush()
+            #db_molecule = get_or_create_in_transaction(tsession, PDBMolecule, md, updatable_columns = ['Synonym', 'OtherDetails']) # this was used to fix a problem where the db entries had truncated values. I have since resized the field and updated the records.
+            db_molecule = get_or_create_in_transaction(tsession, PDBMolecule, md)
             for c in chains:
                 try:
-                    instance = PDBMoleculeChain(**dict(
+                    db_molecule_chain = get_or_create_in_transaction(tsession, PDBMoleculeChain, dict(
                         PDBFileID = database_pdb_id,
                         MoleculeID = md['MoleculeID'],
                         Chain = c
                     ))
-                    tsession.add(instance)
-                    tsession.flush()
                 except:
                     if allow_missing_molecules: pass
                     else: raise
@@ -764,8 +786,7 @@ class DataImportInterface(object):
                 average_bfactors = residue_bfactors.get(chain_residue_id, {})
                 existing_residue_record = existing_residues.get(chain_residue_id)
                 if not existing_residue_record:
-                    #print('NEW RESIDUE')
-                    instance = PDBResidue(**dict(
+                    db_residue = get_or_create_in_transaction(tsession, PDBResidue, dict(
                         PDBFileID = database_pdb_id,
                         Chain = c,
                         ResidueID = r.ResidueID,
@@ -781,9 +802,6 @@ class DataImportInterface(object):
                         ComplexExposure = dssp_res_complex_exposure,
                         ComplexDSSP = dssp_res_complex_ss,
                     ))
-                    pprint.pprint(instance.__dict__)
-                    tsession.add(instance)
-                    tsession.flush()
                 else:
                     # Sanity check: make sure that the current data matches the database
                     #print('EXISTING RESIDUE')
@@ -867,7 +885,7 @@ class DataImportInterface(object):
             for het_seq_id, lig in sorted(chain_ligands.iteritems()):
                 try:
                     assert(lig.PDBCode in db_ligand_ids)
-                    instance = PDBLigand(**dict(
+                    db_ion = get_or_create_in_transaction(tsession, PDBLigand, dict(
                         PDBFileID = database_pdb_id,
                         Chain = chain_id,
                         SeqID = het_seq_id,
@@ -875,9 +893,6 @@ class DataImportInterface(object):
                         LigandID = db_ligand_ids[lig.PDBCode],
                         ParamsFileContentID = None,
                     ))
-                    pprint.pprint(instance.__dict__)
-                    tsession.add(instance)
-                    tsession.flush()
                 except Exception, e:
                     colortext.error(str(e))
                     colortext.error(traceback.format_exc())
@@ -917,28 +932,32 @@ class DataImportInterface(object):
                     subsequent_instance = copy.deepcopy(pdb_ion_object.get_db_records(database_pdb_id)['Ion'])
                     for k, v in ions[pdb_ion_object.PDBCode].iteritems():
                         assert(v == subsequent_instance[k])
-
+        colortext.warning(pprint.pformat(ions))
         # Make sure that the ions in the PDB file have the same formula, description, etc. as currently in the database
         existing_ion_codes = set()
         for pdb_code, d in ions.iteritems():
+            colortext.pcyan(pdb_code)
             existing_db_record = tsession.query(DBIon).filter(DBIon.PDBCode == pdb_code)
+            colortext.pcyan(d)
             if existing_db_record.count() > 0:
                 assert(existing_db_record.count() == 1)
                 existing_db_record = existing_db_record.one()
-                for k, v in ions[pdb_ion_object.PDBCode].iteritems():
-                    if v != None: # This can be the case in non-RCSB files e.g. for the ion formulae
-                        assert(v == existing_db_record.__dict__.get(k))
+                colortext.pcyan(existing_db_record.__dict__)
+                pprint.pprint(ions[pdb_ion_object.PDBCode])
+                if ions[pdb_ion_object.PDBCode]['PDBCode'] == existing_db_record.PDBCode:
+                    assert(ions[pdb_ion_object.PDBCode]['Description'] == existing_db_record.Description) # This can differ e.g. CL in 127L is 3(CL 1-) since there are 3 ions but in PDB files with 2 ions, this can be 2(CL 1-). We can assert this if we do extra parsing.
+                    assert(ions[pdb_ion_object.PDBCode]['Formula'] == existing_db_record.Formula) # This can differ e.g. CL in 127L is 3(CL 1-) since there are 3 ions but in PDB files with 2 ions, this can be 2(CL 1-). We can assert this if we do extra parsing.
                 existing_ion_codes.add(pdb_code)
             elif db_record.FileSource != 'RCSB':
                 raise Exception('We cannot add ion "{0}" from this file as there is no Ion record in the database. This ion should have been added by an underlying RCSB file.'.format(pdb_code))
 
         # Create the main Ion records, only creating records for ions in RCSB files.
         if db_record.FileSource == 'RCSB':
-            for pdb_code, db_record in ions.iteritems():
+            for pdb_code, ion_record in ions.iteritems():
                 if pdb_code not in existing_ion_codes:
                     # Do not add existing records
                     colortext.message('Adding ion {0}'.format(pdb_code))
-                    pprint.pprint(db_record)
+                    pprint.pprint(ion_record)
                     db_ion = get_or_create_in_transaction(tsession, DBIon, ion_record, missing_columns = ['ID'])
 
         # Get the mapping from PDB code to Ion objects
@@ -953,14 +972,11 @@ class DataImportInterface(object):
             for seq_id, pdb_ion_object in cions.iteritems():
 
                 assert(pdb_ion_object.get_db_records(None)['Ion']['PDBCode'] == db_ions[pdb_ion_object.PDBCode].PDBCode)
-                assert(pdb_ion_object.get_db_records(None)['Ion']['Formula'] == db_ions[pdb_ion_object.PDBCode].Formula)
+                #assert(pdb_ion_object.get_db_records(None)['Ion']['Formula'] == db_ions[pdb_ion_object.PDBCode].Formula) # not always true e.g. see CL comment above. We can assert this if we do extra parsing.
                 assert(pdb_ion_object.get_db_records(None)['Ion']['Description'] == db_ions[pdb_ion_object.PDBCode].Description)
                 pdb_ion_record = pdb_ion_object.get_db_records(database_pdb_id, ion_id = db_ions[pdb_ion_object.PDBCode].ID)['PDBIon']
                 try:
-                    instance = PDBIon(**pdb_ion_record)
-                    pprint.pprint(instance.__dict__)
-                    tsession.add(instance)
-                    tsession.flush()
+                    db_ion = get_or_create_in_transaction(tsession, PDBIon, pdb_ion_record)
                 except Exception, e:
                     colortext.error(str(e))
                     colortext.error(traceback.format_exc())
@@ -1052,41 +1068,40 @@ class DataImportInterface(object):
                         colortext.warning("REFN: Check that the PublicationIdentifier data ('{0}, {1}') matches the PDB REFN data ({2}).".format(location.ID, location.Type, j["REFN"]))
             elif j.get('REFN'):
                 assert(j["REFN"]["type"] in PUBTYPES)
-                instance = PublicationIdentifier(**dict(
+                db_pub_id = get_or_create_in_transaction(tsession, PublicationIdentifier, dict(
                     SourceID    = PublicationID,
                     ID          = j["REFN"]["ID"],
                     Type        = j["REFN"]["type"],
                 ))
-                tsession.add(instance)
-                tsession.flush()
         if j["DOI"]:
             if doi_locations:
                 location = doi_locations[0]
                 if j["DOI"] != location.ID:
                     colortext.warning("DOI: Check that the PublicationIdentifier data  ('{0}, {1}') matches the PDB DOI data ({2}).".format(location.ID, location.Type, j["DOI"]))
             else:
-                instance = PublicationIdentifier(**dict(
+                db_pub_id = get_or_create_in_transaction(tsession, PublicationIdentifier, dict(
                     SourceID    = PublicationID,
                     ID          = j["DOI"],
                     Type        = "DOI",
                 ))
-                tsession.add(instance)
-                tsession.flush()
 
 
-    def add_designed_pdb_file(self, designed_pdb_filepath, design_pdb_id, original_pdb_id, description, username, chain_mapping = {}, ligand_mapping = {}):
+    def add_designed_pdb_file(self, designed_pdb_filepath, design_pdb_id, original_pdb_id, description, username, chain_mapping = {}, ligand_mapping = {}, previously_added = set()):
         '''Wrapper for add_designed_pdb.'''
-        return self.add_designed_pdb(self, PDB.from_filepath(designed_pdb_filepath), design_pdb_id, original_pdb_id, description, username, chain_mapping = chain_mapping, ligand_mapping = ligand_mapping)
+        return self.add_designed_pdb(self, PDB.from_filepath(designed_pdb_filepath), design_pdb_id, original_pdb_id, description, username, chain_mapping = chain_mapping, ligand_mapping = ligand_mapping, previously_added = previously_added)
 
 
-    def add_designed_pdb(self, designed_pdb_object, design_pdb_id, original_pdb_id, description, username, chain_mapping = {}, ligand_mapping = {}, trust_database_content = True):
+    def add_designed_pdb(self, designed_pdb_object, design_pdb_id, original_pdb_id, description, username, chain_mapping = {}, ligand_mapping = {}, previously_added = set()):
         assert(5 <= len(design_pdb_id) <= 10)
 
-        raise Exception('implement this')
+        # I used to have a trust_database_content boolean parameter but am not sure whether or not we should use it
         colortext.message('Adding designed PDB file {0} based off {1}.'.format(design_pdb_id, original_pdb_id))
 
         colortext.pcyan('Adding the original PDB file using a separate transaction.')
-        self.add_pdb_from_rcsb(original_pdb_id, trust_database_content = trust_database_content)
+        self.add_pdb_from_rcsb(original_pdb_id, previously_added = previously_added)
+
+        raise Exception('implement this')
+
         #dbp = PDBFileImporter(self.DDG_db, rootname, contains_membrane_protein = contains_membrane_protein, protein = protein, file_source = file_source, filepath = filepath, UniProtAC = UniProtAC, UniProtID = UniProtID, testonly = testonly, techniques = techniques, derived_from = derived_from, notes = notes)
 
         #---
@@ -1122,210 +1137,21 @@ class DataImportInterface(object):
 
 
 
+
+
 def test():
 
     echo_sql = False
     importer = DataImportInterface.get_interface_with_config_file(cache_dir = '/kortemmelab/data/oconchus/ddgcache', echo_sql = echo_sql)
     session = importer.session
 
-
-    if False:
-        ligand_codes = ['0Z6', '0G6', '0EF', '0QE', '13P', '15P', '1AC', '1PE', '1PG', '2AB', '2GP', '3AA', '3GP', '3PG', '544', '5IU', '9CR', 'A80', 'ABA', 'AC9', 'ACA', 'ACE', 'ACH', 'ACT', 'ACY', 'ADC', 'ADP', 'ADU', 'AE3', 'AF3', 'AGF', 'AGL', 'AGP', 'AI2', 'ALA', 'ALC', 'ALF', 'AMB', 'AMP', 'ANL', 'ANP', 'ANS', 'AOA', 'AP5', 'APB', 'AR7', 'ARA', 'ARB', 'ASP', 'ATP', 'AXP', 'B3I', 'B3P', 'B98', 'BCT', 'BEN', 'BEO', 'BGC', 'BHD', 'BID', 'BLA', 'BM6', 'BMA', 'BME', 'BNG', 'BNZ', 'BOG', 'BR', 'BRL', 'BTW', 'C1O', 'C2O', 'C8E', 'CA', 'CAC', 'CAM', 'CCS', 'CD', 'CEM', 'CF0', 'CFM', 'CGU', 'CIT', 'CL', 'CLF', 'CME', 'CMP', 'CO', 'CO3', 'CO9', 'COT', 'CSO', 'CSS', 'CSW', 'CSX', 'CTP', 'CU', 'CU1', 'CUA', 'CYN', 'CYS', 'DAF', 'DDE', 'DDF', 'DGA', 'DGN', 'DIO', 'DKA', 'DLY', 'DMS', 'DPG', 'DSN', 'DVA', 'DVR', 'E64', 'E6C', 'EBP', 'EDO', 'EMO', 'EPE', 'EQP', 'EQU', 'ETX', 'F09', 'F25', 'FAD', 'FCY', 'FE', 'FES', 'FFO', 'FK5', 'FKP', 'FLA', 'FLC', 'FME', 'FMN', 'FMT', 'FOK', 'FOS', 'FUC', 'FUL', 'G6D', 'GAI', 'GAL', 'GCP', 'GDP', 'GL0', 'GLA', 'GLC', 'GLU', 'GLY', 'GLZ', 'GNH', 'GNP', 'GOL', 'GSH', 'GSP', 'GTP', 'GTS', 'GTT', 'GVE', 'HAS', 'HCA', 'HEA', 'HEC', 'HED', 'HEM', 'HG', 'HIC', 'HMC', 'HPR', 'HYP', 'IAS', 'IBR', 'IET', 'IGP', 'IMD', 'IOD', 'IPA', 'IPH', 'IUM', 'K', 'LAR', 'LAT', 'LBT', 'LDA', 'LNO', 'LPX', 'LYZ', 'M3L', 'MAK', 'MAL', 'MAN', 'MES', 'MG', 'MHO', 'MLA', 'MN', 'MN3', 'MNA', 'MNQ', 'MOH', 'MPC', 'MPD', 'MPT', 'MRD', 'MSE', 'MTX', 'MYR', 'NA', 'NAD', 'NAG', 'NAI', 'NAP', 'NDG', 'NDP', 'NES', 'NH2', 'NH4', 'NHE', 'NI', 'NO3', 'NPS', 'O', 'OCT', 'OLA', 'OXL', 'OXP', 'P34', 'P5P', 'P6G', 'PBM', 'PCA', 'PG4', 'PGA', 'PGE', 'PHQ', 'PLG', 'PLM', 'PLP', 'PMP', 'PMS', 'PO4', 'PON', 'PRO', 'PTR', 'RAP', 'RB', 'RDA', 'REA', 'RET', 'RIP', 'RS2', 'RTL', 'SCH', 'SE4', 'SEP', 'SF4', 'SIA', 'SIN', 'SM', 'SMC', 'SN1', 'SO2', 'SO3', 'SO4', 'SOC', 'SPA', 'SR', 'STI', 'STU', 'SVA', 'TAC', 'TAD', 'TAR', 'TBA', 'TEM', 'THP', 'THU', 'TLA', 'TMP', 'TPO', 'TRN', 'TRP', 'TRQ', 'TRS', 'TXP', 'TYS', 'UNL', 'UNX', 'URA', 'V7O', 'VAL', 'XYP', 'Y1', 'YBT', 'ZAP', 'ZN', 'ZNH']
-        num_ligands = len(ligand_codes)
-        c = 0
-        for l in ligand_codes:
-            c += 1
-            #if c < 280:
-            #    continue
-            print('{0}/{1}'.format(c, num_ligands))
-            importer.add_ligand_by_pdb_code(l)
-
-
-    #importer.update_pdbs(pdb_ids = ['1a22'], update_sections = ['Chains'])
-    #importer.remove_ligands()
-    #from sqlalchemy.orm import load_only
-
-    #SELECT COUNT(ID) FROM `PDBResidue` WHERE `BFactorMean` IS NULL OR `BFactorDeviation` IS NULL
-
-    '''
-SELECT PDBFile.FileSource, PDBResidue.*
-FROM  PDBResidue
-INNER JOIN PDBChain ON PDBResidue.Chain = PDBChain.Chain AND PDBResidue.PDBFileID = PDBChain.PDBFileID
-INNER JOIN PDBFile ON PDBResidue.PDBFileID = PDBFile.ID
-WHERE  PDBResidue.BFactorMean IS NULL
-OR  PDBResidue.BFactorDeviation IS NULL
-AND MoleculeType = "Protein"
-'''
-
-
-    '''
-SELECT PDBFile.ID, COUNT( PDBResidue.ID ) AS MissingCount
-FROM PDBResidue
-INNER JOIN PDBChain ON PDBResidue.Chain = PDBChain.Chain
-AND PDBResidue.PDBFileID = PDBChain.PDBFileID
-INNER JOIN PDBFile ON PDBResidue.PDBFileID = PDBFile.ID
-WHERE (
-PDBResidue.BFactorMean IS NULL
-OR PDBResidue.BFactorDeviation IS NULL
-)
-AND MoleculeType =  "Protein"
-AND FileSource =  "RCSB"
-GROUP BY PDBFile.ID
-ORDER BY  `MissingCount` DESC
-'''
-
-
-    PDBs_to_check = ["1DAN",
-"1BXI",
-"1DN2",
-"1A7A",
-"1AM7",
-"1ATN",
-"1AUT",
-"1B8J",
-"1BAH",
-"1EG1",
-"1EVQ",
-"1FEP",
-"1FMK",
-"1GQ2",
-"1H8V",
-"1IR3",
-"1J0X",
-"1JAE",
-"1K23",
-"1K9Q",
-"1KA6",
-"1KDX",
-"1LFO",
-"1MBG",
-"1OA2",
-"1OA3",
-"1OKI",
-"1OLR",
-"1ONC",
-"1OVA",
-"1RHD",
-"1SMD",
-"1STF",
-"1XY1",
-"1YAL",
-"1YCC",
-"1YEA",
-"2HPR",
-"2MLT",
-"487D",
-"1CVW",
-"1CLV",
-"1CRZ",
-"1F34",
-"1FKM",
-"1FQ1",
-"1FQI",
-"1G16",
-"1HE9",
-"1IB1",
-"1JB1",
-"1JMO",
-"1JXQ",
-"1PIG",
-"1QJB",
-"1QUP",
-"1R8M",
-"1S1Q",
-"1TMQ",
-"1TXU",
-"1UBN",
-"1XQR",
-"1Y64",
-"1YJ1",
-"1YWH",
-"1Z1A",
-"1Z6R",
-"1ZM4",
-"2AYO",
-"2BBK",
-"2BTF",
-"2CFH",
-"2CN0",
-"2FCN",
-"2FTL",
-"2FXU",
-"2G77",
-"2MTA",
-"2OOA",
-"3BP3",
-"4PEP",
-"9PTI",
-"2W9N",]
-    worst_cases = [
-        ('1GQ2','224'),
-        ('1Z6R','36'),
-        ('1A7A','30'),
-        ('1YWH','24'),
-        ('1K23','20'),
-        ('1XQR','18'),
-        ('1AM7','12'),
-        ('1G16','12'),
-        ('1FEP','11'),
-        ('1DAN','10'),
-        ('1S1Q','10'),
-    ]
-
-    #tsession = importer.get_session()
-    hit_failing_pdb = False
-    for r in importer.DDG_db.execute_select('SELECT ID, FileSource FROM PDBFile'):
-    #for r in session.query(PDBFile).options(load_only("ID")).order_by(PDBFile.ID):
-        #if r['ID'].upper() == '1GQ2':
-        #if not r['ID'] in worst_cases:
-        if not r['FileSource'] == 'RCSB':
-            continue
-        #print(r['ID'].upper())
-        if r['ID'].upper() == '1GQ2':
-            print(1)
-
-            hit_failing_pdb = True
-        if hit_failing_pdb:
-            colortext.warning(r['ID'])
-            #importer.add_pdb_data(tsession, r['ID'], update_sections = set(['Residues']), ligand_mapping = {}, chain_mapping = {})
-
-            importer.add_pdb_from_rcsb(r['ID'], update_sections = set(['Residues']))
-            break
-    #tsession.commit()
-
-    return
-    importer.update_pdbs(update_sections = ['Chains'])
-    return
-
-
-    importer._update_pdb_residues()
-    return
-
-    pdbfile = session.query(PDBFile).filter(PDBFile.ID == '1A2K')[0]
-
-    for m in session.query(PDBMoleculeChain).filter(PDBMoleculeChain.PDBFileID == '1A2K'):
-        print('')
-        print(m)
-        print(m.pdb_molecule)
-        print(m.pdb_chain)
-
-    print('')
-
-    for m in session.query(PDBMolecule).filter(PDBMolecule.PDBFileID == '1A2K'):
-        print(m)
-        for mc in m.chains:
-            for r in mc.pdb_chain.residues:
-                print(r)
-
-    print('')
+    #importer.update_pdbs(update_sections = set(['Chains', 'Molecules']), start_at = '1W99', restrict_to_file_source = 'RCSB')
+    #importer.update_pdbs(update_sections = set(['Publication']), start_at = None, restrict_to_file_source = 'RCSB')
+    importer.update_pdbs(update_sections = set(['Residues', 'Publication']), start_at = None, restrict_to_file_source = 'RCSB')
 
 test()
-
-#from ppi_api import get_interface as get_ppi_interface
-#ppi_api = get_ppi_interface(read_file('../pw'))
 
 test_cases = '2FX5' #  at the time of writing, these PDB IDs had no JRNL lines
 test_cases = '1GTX', '1UOX', '1WSY', '1YYJ', '2IMM', '2MBP' # at the time of writing, these PDB IDs had no UniProt entries
 
-sys.exit(0)
 
