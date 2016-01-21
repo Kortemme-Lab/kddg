@@ -1274,7 +1274,9 @@ class BindingAffinityDDGInterface(ddG):
             allow_failures = False,
             extract_data_for_case_if_missing = False,
             debug = False,
-            ):
+            restrict_to = set(),
+            remove_cases = set(),
+        ):
 
         #todo: rename function since we return BenchmarkRun objects
 
@@ -1306,6 +1308,8 @@ class BindingAffinityDDGInterface(ddG):
             silent = False,
             root_directory = None, # where to find the prediction data on disk
             debug = False,
+            restrict_to = set(),
+            remove_cases = set(),
             ):
         '''Runs the analyses for the specified PredictionSets and cross-analyzes the sets against each other if appropriate.
 
@@ -1339,7 +1343,6 @@ class BindingAffinityDDGInterface(ddG):
            report_analysis  : Whether or not to print analysis to stdout.
            silent = False   : Whether or not anything should be printed to stdout (True is useful for webserver interaction).
         '''
-
         assert(take_lowest > 0 and (int(take_lowest) == take_lowest))
         assert(0 <= burial_cutoff <= 2.0)
         assert(stability_classication_experimental_cutoff > 0)
@@ -1347,7 +1350,6 @@ class BindingAffinityDDGInterface(ddG):
         assert(expectn > 0 and (int(expectn) == expectn))
 
         for prediction_set_id in prediction_set_ids:
-            print(prediction_set_id)
             benchmark_run = self.get_analysis_dataframe(prediction_set_id,
                 experimental_data_exists = experimental_data_exists,
                 prediction_set_series_name = prediction_set_series_names.get(prediction_set_id),
@@ -1368,8 +1370,10 @@ class BindingAffinityDDGInterface(ddG):
                 score_method_id = score_method_id,
                 expectn = expectn,
                 allow_failures = False,
-                debug = debug
-                )
+                debug = debug,
+                restrict_to = restrict_to,
+                remove_cases = remove_cases,
+            )
 
             # The keys of scalar_adjustments are the stored analysis sets
             analysis_sets_to_run = benchmark_run.scalar_adjustments.keys()
