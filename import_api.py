@@ -25,18 +25,21 @@ Example usage:
     importer.update_pdbs(update_sections = set(['Residues', 'Publication']), start_at = None, restrict_to_file_source = 'RCSB')
 
 
+@todo list:
+  - add_pdb_from_rcsb: FileContent (see ticket 1489)
+  - get_pdb_details (see below)
+  - PDB Chains (_add_pdb_chains)
+    add self.pfam_api.? call to get mapping from RCSB PDB files to the UniProt sequences. Add this to a separate function, _add_pdb_uniprot_mapping.
+    add self.pfam_api.get_pfam_accession_numbers_from_pdb_chain(database_pdb_id, c)) calls. Use this in _add_pdb_uniprot_mapping.
+    add self.scope_api.get_chain_details(database_pdb_id, c))) calls
+    add coordinates
+  - _add_pdb_uniprot_mapping. implement UniProt mapping. The old approach was flawed. Use the new approach (similar to how I used PPComplex as an abstraction layer)
+
+
 Created by Shane O'Connor 2015.
 Copyright (c) 2015 Shane O'Connor. All rights reserved.
 """
 
-# todo: add_pdb_from_rcsb: FileContent (see ticket 1489)
-# todo: get_pdb_details (see below)
-# todo: PDB Chains (_add_pdb_chains)
-#       add self.pfam_api.? call to get mapping from RCSB PDB files to the UniProt sequences. Add this to a separate function, _add_pdb_uniprot_mapping.
-#       add self.pfam_api.get_pfam_accession_numbers_from_pdb_chain(database_pdb_id, c)) calls. Use this in _add_pdb_uniprot_mapping.
-#       add self.scope_api.get_chain_details(database_pdb_id, c))) calls
-#       add coordinates
-# todo: _add_pdb_uniprot_mapping. implement UniProt mapping. The old approach was flawed. Use the new approach (similar to how I used PPComplex as an abstraction layer)
 
 import sys
 import pprint
