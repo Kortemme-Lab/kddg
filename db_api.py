@@ -1736,7 +1736,9 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             expectn = None,
             allow_failures = False,
             extract_data_for_case_if_missing = True,
-            debug = False
+            debug = False,
+            restrict_to = set(),
+            remove_cases = set(),
             ):
         '''This 'private' function does most of the work for get_analysis_dataframe.'''
 
@@ -1837,6 +1839,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 use_existing_benchmark_data = False,
                 recreate_graphs = False,
                 misc_dataframe_attributes = top_level_dataframe_attributes,
+                restrict_to = restrict_to,
+                remove_cases = remove_cases,
             )
 
         if not(use_existing_benchmark_data and hdf_store_blob):
@@ -1902,7 +1906,9 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             generate_plots = True,
             report_analysis = True,
             silent = False,
-            root_directory = None
+            root_directory = None,
+            restrict_to = set(),
+            remove_cases = set(),
             ):
         '''Runs the analyses for the specified PredictionSets and cross-analyzes the sets against each other if appropriate.
 
