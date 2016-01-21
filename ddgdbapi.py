@@ -12,8 +12,8 @@ from string import join, letters
 import math
 import getpass
 import itertools
-if __name__ == "__main__":
-    sys.path.insert(0, "../../")
+#if __name__ == "__main__":
+#    sys.path.insert(0, "../../")
 from klab.db.mysql import DatabaseInterface
 from klab.fs.fsio import read_file, write_file
 from klab.bio import rcsb

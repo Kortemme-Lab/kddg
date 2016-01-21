@@ -21,8 +21,8 @@ from sqlalchemy.dialects.mysql import DOUBLE, TINYINT, LONGBLOB
 from sqlalchemy.types import DateTime, Enum, Integer, TIMESTAMP, Text, Unicode, String
 
 
-if __name__ == '__main__':
-    sys.path.insert(0, '../../klab')
+#if __name__ == '__main__':
+#    sys.path.insert(0, '../../klab')
 
 from klab.db.sqlalchemy_interface import MySQLSchemaConverter
 from klab.fs.fsio import read_file

@@ -5,7 +5,7 @@ import sys
 import os
 import re
 import string
-sys.path.insert(0, "..")
+#sys.path.insert(0, "..")
 if __name__ == "__main__":
 	sys.path.insert(0, "../common")
 from string import join
