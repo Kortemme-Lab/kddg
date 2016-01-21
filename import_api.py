@@ -4,6 +4,27 @@
 import_api.py
 High-level functions for importing data into the DDG database.
 
+
+Example usage:
+    # Create an import API instance
+    importer = DataImportInterface.get_interface_with_config_file(cache_dir = '/kortemmelab/data/oconchus/ddgcache', echo_sql = echo_sql)
+
+    # Access the SQLAlchemy session directly
+    session = importer.session
+
+    # Access the MySQLdb interface layer directly
+    DDG_db = importer.DDG_db # or importerDDG_db_utf
+
+    # Access an RCSB PDB file to the database
+    importer.add_pdb_from_rcsb('1A2K')
+
+    # Access ligand details to the database (note: this will be called by add_pdb_from_rcsb)
+    importer.add_ligand_by_pdb_code('GTP')
+
+    # Update certain properties of RCSB files in the database
+    importer.update_pdbs(update_sections = set(['Residues', 'Publication']), start_at = None, restrict_to_file_source = 'RCSB')
+
+
 Created by Shane O'Connor 2015.
 Copyright (c) 2015 Shane O'Connor. All rights reserved.
 """
@@ -43,9 +64,6 @@ from sqlalchemy import create_engine, and_
 from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from MySQLdb import OperationalError as MySQLOperationalError
-
-if __name__ == '__main__':
-    sys.path.insert(0, '../../klab')
 
 from klab import colortext
 from klab.bio.pdb import PDB
@@ -1141,15 +1159,20 @@ class DataImportInterface(object):
 
 def test():
 
-    echo_sql = False
+    # Create an import API instance
     importer = DataImportInterface.get_interface_with_config_file(cache_dir = '/kortemmelab/data/oconchus/ddgcache', echo_sql = echo_sql)
+
+    # Access the SQLAlchemy session directly
     session = importer.session
 
-    #importer.update_pdbs(update_sections = set(['Chains', 'Molecules']), start_at = '1W99', restrict_to_file_source = 'RCSB')
-    #importer.update_pdbs(update_sections = set(['Publication']), start_at = None, restrict_to_file_source = 'RCSB')
+    # Access the MySQLdb interface layer directly
+    DDG_db = importer.DDG_db # or importerDDG_db_utf
+
+    # Update certain properties of RCSB files in the database
     importer.update_pdbs(update_sections = set(['Residues', 'Publication']), start_at = None, restrict_to_file_source = 'RCSB')
 
-test()
+
+#test()
 
 test_cases = '2FX5' #  at the time of writing, these PDB IDs had no JRNL lines
 test_cases = '1GTX', '1UOX', '1WSY', '1YYJ', '2IMM', '2MBP' # at the time of writing, these PDB IDs had no UniProt entries
