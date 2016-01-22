@@ -654,15 +654,21 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             # Returns all defined ScoreMethod records
             return self.cached_score_method_details
 
-    def output_score_method_information(self, score_method_id, analysis_set_id, output_directory):
+    def output_score_method_information(self, score_method_id, output_directory, analysis_set_id = None, take_lowest = None, expectn = None):
         '''Outputs details about score method to a txt file in the specified output directory'''
         score_method_details = sorted([(k, v) for k, v in self.get_score_method_details(score_method_id = score_method_id).iteritems()])
         with open(os.path.join(output_directory, 'score_method.txt'), 'w') as f:
-            f.write('Analysis set ID: %s\n' % str(analysis_set_id))
             f.write('Score method ID: %s\n' % str(score_method_id))
-            f.write('\nScore method details\n')
-            for key, value in score_method_details:
-                f.write('%s: %s\n' % (str(key), str(value)))
+            if analysis_set_id:
+                f.write('Analysis set ID: %s\n' % str(analysis_set_id))
+            if take_lowest:
+                f.write('Take lowest (TopX): %s scores\n' % str(take_lowest))
+            if expectn:
+                f.write('Expected number of output structures): %s\n' % str(expectn))
+            if len(score_method_details) > 0:
+                f.write('\nScore method details\n')
+                for key, value in score_method_details:
+                    f.write('%s: %s\n' % (str(key), str(value)))
         
     @informational_misc
     def get_score_method_id(self, method_name, method_type = None, method_parameters = None, method_authors = None, fuzzy = True):
