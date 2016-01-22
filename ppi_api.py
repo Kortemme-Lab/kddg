@@ -1383,8 +1383,14 @@ class BindingAffinityDDGInterface(ddG):
             for analysis_set_id in analysis_sets_to_run:
                 colortext.message(analysis_set_id)
 
-                self.output_score_method_information(score_method_id, analysis_set_id, output_directory)
+                self.output_score_method_information(
+                    score_method_id, output_directory,
+                    analysis_set_id = analysis_set_id,
+                    take_lowest = take_lowest,
+                    expectn = expectn,
+                )
 
+                benchmark_run.write_dataframe_to_csv(os.path.join(output_directory, 'data.csv'))
                 benchmark_run.calculate_metrics(analysis_set = analysis_set_id, analysis_directory = output_directory)
                 benchmark_run.plot(analysis_set = analysis_set_id, analysis_directory = output_directory)
 

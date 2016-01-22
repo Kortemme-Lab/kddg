@@ -104,7 +104,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             last_task_count = first_task_count
             for ddg_output_path in rescore_args_keys[first_task_count:]:
                 last_task_count += 1
-                for prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type in self.rescore_args[ddg_output_path]:
+                for prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, extra_flags in self.rescore_args[ddg_output_path]:
                     num_jobs += 1
                     if prediction_id > max_prediction_id:
                         max_prediction_id = prediction_id
@@ -142,11 +142,11 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 worker = MultiWorker(process_cluster_rescore_helper, n_cpu=min(multiprocessing.cpu_count(), 16), reporter=r)
 
             for ddg_output_path in rescore_args_keys[first_task_count:last_task_count]:
-                for prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type in self.rescore_args[ddg_output_path]:
+                for prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, extra_flags in self.rescore_args[ddg_output_path]:
                     if setup_run_with_multiprocessing:
-                        worker.addJob( (ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path, max_prediction_id ) )
+                        worker.addJob( (ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path, max_prediction_id, extra_flags ) )
                     else:
-                        task_name, arg_dict = process_cluster_rescore_helper( ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path, max_prediction_id )
+                        task_name, arg_dict = process_cluster_rescore_helper( ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path, max_prediction_id, extra_flags )
                         job_dict[task_name] = arg_dict
                         r.increment_report()
 
@@ -165,10 +165,16 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         score_method_details = self.get_score_method_details()[score_method_id]
         method_name = score_method_details['MethodName']
         author = score_method_details['Authors']
+
         if method_name.startswith('Rescore-') and author == 'Kyle Barlow':
             score_fxn = method_name[8:].lower()
+            if score_fxn.startswith('beta'):
+                extra_flags = ['-' + score_fxn]
+            else:
+                extra_flags = []
         else:
             score_fxn = 'interface'
+            extra_flags = []
 
         if ddg_output_path not in self.rescore_args:
             self.rescore_args[ddg_output_path] = []
@@ -181,7 +187,8 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 chains_to_move,
                 score_fxn,
                 round_num,
-                'wt'
+                'wt',
+                extra_flags,
             ])
             self.rescore_args[ddg_output_path].append([
                 prediction_id,
@@ -189,7 +196,8 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 chains_to_move,
                 score_fxn,
                 round_num,
-                'mut'
+                'mut',
+                extra_flags,
             ])
 
     def update_prediction_id_status(self, prediction_set_id, root_directory, verbose = True):
@@ -394,10 +402,16 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             job_details = self.get_job_details(prediction_id)
             substitution_parameters = json.loads(job_details['JSONParameters'])
             chains_to_move = substitution_parameters['%%chainstomove%%']
+
         if method_name.startswith('Rescore-') and author == 'Kyle Barlow':
             score_fxn = method_name[8:].lower()
+            if score_fxn.startswith('beta'):
+                extra_flags = ['-' + score_fxn]
+            else:
+                extra_flags = []
         else:
             score_fxn = 'interface'
+            extra_flags = []
 
         if len(structs_with_both_rounds) > 0:
             if use_multiprocessing and verbose:
@@ -423,6 +437,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                     'score_fxn' : score_fxn,
                     'round_num' : round_num,
                     'struct_type' : 'wt',
+                    'extra_flags' : extra_flags,
                 }
                 if use_multiprocessing:
                     p.apply_async( interface_calc.rescore_ddg_monomer_pdb, (
@@ -443,6 +458,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                     'score_fxn' : score_fxn,
                     'round_num' : round_num,
                     'struct_type' : 'mut',
+                    'extra_flags' : extra_flags,
                 }
                 if use_multiprocessing:
                     p.apply_async( interface_calc.rescore_ddg_monomer_pdb, (
@@ -626,7 +642,7 @@ def split_task_name_path(task_name_path):
         data = task_name_path.split('/')
     return (long(data[-3]), int(data[-2]), data[-1])
 
-def process_cluster_rescore_helper(ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path, max_prediction_id):
+def process_cluster_rescore_helper(ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path, max_prediction_id, extra_flags):
     task_name = make_task_name_path(max_prediction_id, prediction_id, round_num, struct_type)
     prediction_id_data_dir = os.path.join(job_data_dir, task_name)
     pdb_name = os.path.basename(pdb_path)
@@ -656,6 +672,7 @@ def process_cluster_rescore_helper(ddg_output_path, prediction_id, pdb_path, cha
         '-parser:script_vars' : ['chainstomove=%s' % chains_to_move,  'currentscorefxn=%s' % score_fxn],
         '-s' : rel_pdb_path,
         '-parser:protocol' : rel_protocol_path,
+        'FLAGLIST' : extra_flags,
     }
     return (task_name, arg_dict)
 
