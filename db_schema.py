@@ -372,6 +372,24 @@ class PublicationDDGValueLocation(DeclarativeBase):
     Notes = Column(String(512), nullable=True)
 
 
+#########################################
+#                                       #
+#  Users                                #
+#                                       #
+#########################################
+
+
+class User(DeclarativeBase):
+    __tablename__ = 'User'
+
+    ID = Column(String(64), nullable=False, primary_key=True)
+    FirstName = Column(Unicode(64), nullable=False)
+    MiddleName = Column(Unicode(64), nullable=True)
+    Surname = Column(Unicode(64), nullable=True)
+    Email = Column(String(80), nullable=True)
+
+
+
 ###########################
 #                         #
 #  Bookkeeping functions  #
@@ -419,7 +437,7 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['FileContent'])
+    generate_sqlalchemy_definition(['User'])
     #generate_sqlalchemy_definition(['AminoAcid'])
     sys.exit(0)
     from ppi_api import get_interface as get_ppi_interface
