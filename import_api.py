@@ -417,6 +417,30 @@ class DataImportInterface(object):
         return pdbs
 
 
+    def get_rcsb_record(self, pdbfile_db_record, tsession = None):
+        '''pdbfile_db_record should be a db_schema.py::PDBFile object.
+           Winds up the 'derived from' tree to find the RCSB file that this file originated from.
+           Throws an exception if there are no such files.
+           This is useful for a number of reasons:
+             - Looking up the resolution of the original structure, the determination technique, and its b-factors
+               We do not copy this information into derived structures as it is generally meaningless (e.g. for PDB_REDO
+               structures or structures minimized or repacked with some force-field).
+             - Determining the name of the molecules in the derived PDB file.
+           etc.
+        '''
+        if not tsession:
+            tsession = self.get_session()
+        try:
+            c = 0
+            while (pdbfile_db_record.DerivedFrom) and (pdbfile_db_record.FileSource != 'RCSB') and (c < 40): # the last expression should be unnecessary but just in case...
+                pdbfile_db_record = tsession.query(PDBFile).filter(PDBFile.ID == pdbfile_db_record.DerivedFrom).one()
+                c += 1
+            assert(pdbfile_db_record.FileSource == 'RCSB')
+            return pdbfile_db_record
+        except Exception, e:
+            raise Exception('Failed to retrieve an RCSB record corresponding to "{0}".'.format(pdbfile_db_record.ID))
+
+
     #################################
     #                               #
     #  PDB file entry - public API  #
@@ -612,12 +636,6 @@ class DataImportInterface(object):
         :return:
         '''
 
-        #Monday
-        #1. Update the PDB function to allow renaming of chains i.e. allow it to take a non-RCSB PDB file, a mapping from new chain letters to RCSB letters, and
-        #   #use the header information e.g. molecule etc. renamed for the artificial structure
-        #   raise Exception('I should only call add_pdb_data for some of the data sections e.g. the molecules and much of the chain data should come from the original PDB file')
-
-
         if not tsession:
             tsession = self.get_session(new_session = True)
 
@@ -650,9 +668,6 @@ class DataImportInterface(object):
                PDBChain
         '''
 
-        assert(not(chain_mapping)) # todo handle this case
-
-        from db_schema import PDBFile, PDBChain
         pdb_object = pdb_object or self.get_pdb_object(database_pdb_id, tsession = tsession)
 
         db_chains = {}
@@ -661,6 +676,9 @@ class DataImportInterface(object):
 
         db_chains_ids = sorted(db_chains.keys())
         chain_ids = sorted(set(pdb_object.seqres_sequences.keys() + pdb_object.atom_sequences.keys() + pdb_object.chain_types.keys()))
+
+        # Sanity checks for derived structures
+        self._check_derived_record_against_rcsb_record(tsession, database_pdb_id, pdb_object, chain_mapping)
 
         if chain_ids != db_chains_ids:
             #colortext.warning('PDB chains: {0}\t DB chains: {1}'.format(','.join(chain_ids), ','.join(db_chains_ids)))
@@ -673,7 +691,7 @@ class DataImportInterface(object):
                     MoleculeType = pdb_object.chain_types[c]
                 ), missing_columns = ['WildtypeProteinID', 'FullProteinID', 'SegmentProteinID', 'WildtypeAlignedProteinID', 'AcquiredProteinID', 'Coordinates'])
             db_chains = {}
-            for r in tsession.query(PDBChain).filter(PDBChain.PDBFileID == database_pdb_id).order_by(PDBChain.Chain):
+            for r in tsession.query(PDBChain).filter(PDBChain.PDBFileID == database_pdb_id):
                 db_chains[r.Chain] = r
             db_chains_ids = sorted(db_chains.keys())
             assert(chain_ids == db_chains_ids)
@@ -721,7 +739,7 @@ class DataImportInterface(object):
                 print(pdb_id + chain_id + ' has coordinates')
 
 
-    def _add_pdb_molecules(self, tsession, database_pdb_id, pdb_object = None, allow_missing_molecules = True, chain_mapping = {}):
+    def _add_pdb_molecules(self, tsession, database_pdb_id, pdb_object = None, allow_missing_molecules = False, chain_mapping = {}):
         '''
            Add PDBMolecule and PDBMoleculeChain records
            Touched tables:
@@ -729,32 +747,82 @@ class DataImportInterface(object):
                PDBMoleculeChain
         '''
 
-        assert(not(chain_mapping)) # todo handle this case
-
-        # todo: do we ever use allow_missing_molecules? Let's inspect that case when it presents itself
-        assert(allow_missing_molecules == False)
+        assert(allow_missing_molecules == False) # todo: do we ever use allow_missing_molecules? We can inspect that case when it presents itself
 
         pdb_object = pdb_object or self.get_pdb_object(database_pdb_id, tsession = tsession)
-        try:
-            molecules = pdb_object.get_molecules_and_source()
-        except MissingRecordsException:
-            molecules = []
-        for molecule in molecules:
-            chains = molecule['Chains']
-            molecule['PDBFileID'] = database_pdb_id
-            molecule['Organism'] = molecule['OrganismScientificName'] or molecule['OrganismCommonName']
-            md = {}
-            for k in ['PDBFileID', 'MoleculeID', 'Name', 'Organism', 'Fragment', 'Synonym', 'Engineered', 'EC', 'Mutation', 'OtherDetails']:
-                md[k] = molecule[k]
 
-            #db_molecule = get_or_create_in_transaction(tsession, PDBMolecule, md, updatable_columns = ['Synonym', 'OtherDetails']) # this was used to fix a problem where the db entries had truncated values. I have since resized the field and updated the records.
-            db_molecule = get_or_create_in_transaction(tsession, PDBMolecule, md)
-            for c in chains:
+        # Sanity checks for derived structures
+        self._check_derived_record_against_rcsb_record(tsession, database_pdb_id, pdb_object, chain_mapping)
+
+        if not(chain_mapping):
+            try:
+                molecules = pdb_object.get_molecules_and_source()
+            except MissingRecordsException:
+                molecules = []
+            for molecule in molecules:
+                chains = molecule['Chains']
+                molecule['PDBFileID'] = database_pdb_id
+                molecule['Organism'] = molecule['OrganismScientificName'] or molecule['OrganismCommonName']
+                md = {}
+                for k in ['PDBFileID', 'MoleculeID', 'Name', 'Organism', 'Fragment', 'Synonym', 'Engineered', 'EC', 'Mutation', 'OtherDetails']:
+                    md[k] = molecule[k]
+
+                # Add the PDBMolecule record
+                db_molecule = get_or_create_in_transaction(tsession, PDBMolecule, md)
+
+                # Add the PDBMoleculeChain records
+                for c in chains:
+                    try:
+                        db_molecule_chain = get_or_create_in_transaction(tsession, PDBMoleculeChain, dict(
+                            PDBFileID = database_pdb_id,
+                            MoleculeID = md['MoleculeID'],
+                            Chain = c
+                        ))
+                    except:
+                        if allow_missing_molecules: pass
+                        else: raise
+        else:
+            # Copy the molecule information from the original RCSB structure
+            # First, get the DB records for the derived structure and the original RCSB structure
+            db_record = tsession.query(PDBFile).filter(PDBFile.ID == database_pdb_id).one()
+            assert(db_record.FileSource != 'RCSB')
+            rcsb_record = self.get_rcsb_record(db_record, tsession = tsession)
+
+            # Get the list of RCSB chains
+            rcsb_chains = chain_mapping.values()
+
+            # Get the list of PDB molecules associated with chains that are in the derived PDB (accounting for chain renaming)
+            rcsb_molecule_chains = {} # a dict mapping RCSB chain IDs to the associated PDBMoleculeChain record
+            rcsb_molecule_ids = set()
+            for r in tsession.query(PDBMoleculeChain).filter(PDBMoleculeChain.PDBFileID == rcsb_record.ID):
+                if r.Chain in rcsb_chains:
+                    rcsb_molecule_chains[r.Chain] = r
+                    rcsb_molecule_ids.add(r.MoleculeID)
+
+            # Add the PDBMolecule records
+            for r in tsession.query(PDBMolecule).filter(PDBMolecule.PDBFileID == rcsb_record.ID):
+                if r.MoleculeID in rcsb_molecule_ids:
+                    db_molecule = get_or_create_in_transaction(tsession, PDBMolecule, dict(
+                        PDBFileID = database_pdb_id,
+                        MoleculeID = r.MoleculeID,
+                        Name = r.Name,
+                        Organism = r.Organism,
+                        Fragment = r.Fragment,
+                        Synonym = r.Synonym,
+                        Engineered = r.Engineered,
+                        EC = r.EC,
+                        Mutation = r.Mutation,
+                        OtherDetails = r.OtherDetails,
+                    ))
+
+            # Add the PDBMoleculeChain records
+            for derived_chain_id, rcsb_chain_id in sorted(chain_mapping.iteritems()):
+                associated_molecule_id = rcsb_molecule_chains[rcsb_chain_id].MoleculeID
                 try:
                     db_molecule_chain = get_or_create_in_transaction(tsession, PDBMoleculeChain, dict(
                         PDBFileID = database_pdb_id,
-                        MoleculeID = md['MoleculeID'],
-                        Chain = c
+                        MoleculeID = associated_molecule_id,
+                        Chain = derived_chain_id
                     ))
                 except:
                     if allow_missing_molecules: pass
@@ -766,6 +834,10 @@ class DataImportInterface(object):
            Touched tables:
                PDBResidue
         '''
+
+        raise Exception('jhere')
+
+
         pdb_object = pdb_object or self.get_pdb_object(database_pdb_id, tsession = tsession)
         residue_bfactors = pdb_object.get_B_factors().get('PerResidue')
 
@@ -1293,6 +1365,28 @@ class DataImportInterface(object):
             tsession.close()
             raise
 
+
+    def _check_derived_record_against_rcsb_record(self, tsession, database_pdb_id, pdb_object, chain_mapping):
+        '''Sanity checks for derived structures compared to their RCSB ancestor.'''
+        rcsb_chains = None
+        rcsb_record = None
+        chain_ids = sorted(set(pdb_object.seqres_sequences.keys() + pdb_object.atom_sequences.keys() + pdb_object.chain_types.keys()))
+        if chain_mapping:
+            db_record = tsession.query(PDBFile).filter(PDBFile.ID == database_pdb_id).one()
+            assert(db_record.FileSource != 'RCSB')
+
+            rcsb_chains = {}
+            rcsb_record = self.get_rcsb_record(db_record, tsession = tsession)
+            for r in tsession.query(PDBChain).filter(PDBChain.PDBFileID == rcsb_record.ID):
+                rcsb_chains[r.Chain] = r
+
+            for chain_id in chain_ids:
+                if chain_id in chain_mapping:
+                    assert(pdb_object.chain_types[chain_id] == rcsb_chains[chain_mapping[chain_id]].MoleculeType)
+                else:
+                    # We cannot assert(chain_ids == sorted(chain_mapping.keys())) as this can fail e.g. if a user splits
+                    # chain C (protein + ligand) into chain A (protein) and chain X (ligand). Instead, we use this weaker assertion.
+                    assert(pdb_object.chain_types[chain_id] != 'Protein')
 
 
 def _test():
