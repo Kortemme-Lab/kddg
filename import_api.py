@@ -831,12 +831,11 @@ class DataImportInterface(object):
 
     def _add_pdb_residues(self, tsession, database_pdb_id, pdb_object = None):
         '''
+           The code here is the same for both RCSB and non-RCSB structures.
+
            Touched tables:
                PDBResidue
         '''
-
-        raise Exception('jhere')
-
 
         pdb_object = pdb_object or self.get_pdb_object(database_pdb_id, tsession = tsession)
         residue_bfactors = pdb_object.get_B_factors().get('PerResidue')
@@ -931,7 +930,7 @@ class DataImportInterface(object):
                         MonomericDSSP = dssp_res_monomer_ss,
                         ComplexExposure = dssp_res_complex_exposure,
                         ComplexDSSP = dssp_res_complex_ss,
-                    ))
+                    ), missing_columns = ['ID'])
                 else:
                     # Sanity check: make sure that the current data matches the database
                     #print('EXISTING RESIDUE')
@@ -971,6 +970,7 @@ class DataImportInterface(object):
                Other Ligand tables by proxy (via add_ligand_by_pdb_code)
         '''
 
+        raise Exception('implement this for ligand_mapping and ligand_params_files')
         assert(not(ligand_params_files)) # write this functionality when needed. First, add a new file using FileContent. Next, associate this file with the PDBLigand record.
 
         pdb_object = pdb_object or self.get_pdb_object(database_pdb_id, tsession = tsession)
@@ -1245,6 +1245,7 @@ class DataImportInterface(object):
         # Sanity checks and sanitization
         ################################
 
+        # todo: add ion_mapping (see below)
 
         # Type checks
         assert(isinstance(designed_pdb_object, PDB))
@@ -1309,6 +1310,14 @@ class DataImportInterface(object):
         colortext.pcyan('Adding the original PDB file using a separate transaction.')
         self.add_pdb_from_rcsb(original_pdb_id, previously_added = previously_added, trust_database_content = True)
         rcsb_db_record_object = get_single_record_from_query(self.get_session().query(PDBFile).filter(PDBFile.ID == original_pdb_id))
+
+        # Check to make sure that the set of ions is a subset of those in the original PDB
+        # todo: Ideally, we should pass an ion mapping like for the ligand mapping. However, this may be annoying for users
+        #       to have to specify. Instead, we could check to make sure that the mapping ion_code -> atom_type matches in
+        #       both structures which would be a more specific check than the assertion below. This would disallow renaming
+        #       of ions but this seems a reasonable trade-off.
+        rcsb_pdb_object = self.get_pdb_object(original_pdb_id)
+        assert(len(set(designed_pdb_object.get_ion_codes()).difference(set(rcsb_pdb_object.get_ion_codes()))) == 0)
 
         tsession = self.get_session(new_session = True)
         try:
