@@ -595,11 +595,15 @@ class DataImportInterface(object):
 
     def add_pdb_data(self, tsession, database_pdb_id, update_sections = set(), ligand_mapping = {}, chain_mapping = {}, ligand_params_files = {}):
         '''
-           database_pdb_id is the RCSB ID for RCSB files and a custom ID for other (designed) structures.
+            The point of separating the data entry into these sub-functions and calling them from this function is so we
+            have an API to update the information for specific PDB files.
+
+            database_pdb_id is the RCSB ID for RCSB files and a custom ID for other (designed) structures.
            If transaction_session is None (e.g. if this was called directly outside of a transaction), create a transaction
            session for the remaining inner calls. If update_sections is non-empty, just call those specific inner functions.
            Note: If the caller creates a transaction then it is responsible for committing/rolling back the transaction.
            ligand_mapping = {}, chain_mapping = {}
+
         :param tsession:
         :param database_pdb_id:
         :param update_sections:
@@ -607,6 +611,12 @@ class DataImportInterface(object):
         :param chain_mapping: A mapping from chain IDs (e.g. "A") to the chain in the original RCSB file. This is only necessary for non-RCSB files as these files may have modified chain IDs (e.g. changing the ligand chain to "X").
         :return:
         '''
+
+        #Monday
+        #1. Update the PDB function to allow renaming of chains i.e. allow it to take a non-RCSB PDB file, a mapping from new chain letters to RCSB letters, and
+        #   #use the header information e.g. molecule etc. renamed for the artificial structure
+        #   raise Exception('I should only call add_pdb_data for some of the data sections e.g. the molecules and much of the chain data should come from the original PDB file')
+
 
         if not tsession:
             tsession = self.get_session(new_session = True)
@@ -632,9 +642,6 @@ class DataImportInterface(object):
         #if not(update_sections) or ('UniProt' in update_sections):
         #    colortext.warning('*** UniProt ***')
         #    self._add_pdb_uniprot_mapping(tsession, database_pdb_id, pdb_object)
-        if not(update_sections) or ('Publication' in update_sections):
-            colortext.warning('*** Publication ***')
-            self._add_pdb_publication(tsession, database_pdb_id, pdb_object)
 
 
     def _add_pdb_chains(self, tsession, database_pdb_id, pdb_object = None, chain_mapping = {}):
@@ -642,6 +649,9 @@ class DataImportInterface(object):
            Touched tables:
                PDBChain
         '''
+
+        assert(not(chain_mapping)) # todo handle this case
+
         from db_schema import PDBFile, PDBChain
         pdb_object = pdb_object or self.get_pdb_object(database_pdb_id, tsession = tsession)
 
@@ -711,13 +721,15 @@ class DataImportInterface(object):
                 print(pdb_id + chain_id + ' has coordinates')
 
 
-    def _add_pdb_molecules(self, tsession, database_pdb_id, pdb_object = None, allow_missing_molecules = True):
+    def _add_pdb_molecules(self, tsession, database_pdb_id, pdb_object = None, allow_missing_molecules = True, chain_mapping = {}):
         '''
            Add PDBMolecule and PDBMoleculeChain records
            Touched tables:
                PDBMolecule
                PDBMoleculeChain
         '''
+
+        assert(not(chain_mapping)) # todo handle this case
 
         # todo: do we ever use allow_missing_molecules? Let's inspect that case when it presents itself
         assert(allow_missing_molecules == False)
@@ -1209,20 +1221,10 @@ class DataImportInterface(object):
                 full_residue_id = chain_id + ligand_residue_id
                 assert((len(full_residue_id) == 6) and (full_residue_id not in ligand_residue_ids))
                 ligand_residue_ids.add(full_residue_id)
-        print(ligand_residue_ids)
-        print(ligand_mapping.mapping)
-        assert(ligand_mapping.is_injective())
-        assert(ligand_mapping.is_complete(ligand_residue_ids))
-
-        # Remove this block
-        p = designed_pdb_object
-        pdb_ligand_codes = p.get_ligand_codes()
-        if True or pdb_ligand_codes and not ligand_mapping:
-            d = {}
-            for pdb_ligand_code in pdb_ligand_codes: d[pdb_ligand_codes] = pdb_ligand_codes
-            sample_mapping = pprint.pformat(d)
-            raise Exception('The PDB file contains ligands {0} but no mapping is given from the ligand codes to RCSB ligand codes. We require this mapping as it is not unusual for ligand codes to be renamed e.g. to " X ". An example mapping would be:\nligand_mapping = {1}'.format(pdb_ligand_codes, sample_mapping))
-
+        if not ligand_mapping.is_injective():
+            raise colortext.Exception('Error: The ligand mapping\n{0}\nis not injective i.e. each ligand residue in the designed PDB file must be mapped to a unique RCSB ligand residue in the RCSB PDB file.'.format(str(ligand_mapping)))
+        if not ligand_mapping.is_complete(ligand_residue_ids):
+            raise colortext.Exception('Error: The ligand mapping\n{0}\nis not complete i.e. there are ligands in the designed PDB file which are not mapped to ligands in the RCSB PDB file.'.format(str(ligand_mapping)))
 
 
         ################################
@@ -1279,30 +1281,6 @@ class DataImportInterface(object):
             # add all other data
             self.add_pdb_data(tsession, design_pdb_id, update_sections = set(), ligand_mapping = ligand_mapping, chain_mapping = chain_mapping, ligand_params_files = ligand_params_files)
 
-            previously_added.add(pdb_id)
-
-            raise Exception('Planned failure')
-            print('Success.\n')
-            tsession.commit()
-            tsession.close()
-
-
-            # add all other data
-            # Particularly, call  add_pdb_data which then calls other functions. The point of separating all of these sub-functions into one big inner function is so we have an API to update the information for specific PDB files.
-
-
-            #1. Update the PDB function to allow renaming of chains i.e. allow it to take a non-RCSB PDB file, a mapping from new chain letters to RCSB letters, and
-            #use the header information e.g. molecule etc. renamed for the artificial structure
-            raise Exception('I should only call add_pdb_data for some of the data sections e.g. the molecules and much of the chain data should come from the original PDB file')
-            self.get_pdb_details(design_pdb_id)
-            self.get_pdb_details(original_pdb_id)
-
-
-
-
-
-
-            #--------
             previously_added.add(design_pdb_id)
 
             raise Exception('Planned failure.') #@todo
