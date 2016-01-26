@@ -1304,6 +1304,7 @@ class BindingAffinityDDGInterface(ddG):
             stability_classication_predicted_cutoff = 1.0,
             output_directory = None,
             generate_plots = True,
+            generate_matplotlib_plots = False,
             report_analysis = True,
             silent = False,
             root_directory = None, # where to find the prediction data on disk
@@ -1396,7 +1397,7 @@ class BindingAffinityDDGInterface(ddG):
 
                 benchmark_run.write_dataframe_to_csv(os.path.join(output_directory, 'data.csv'))
                 benchmark_run.calculate_metrics(analysis_set = analysis_set_id, analysis_directory = output_directory)
-                benchmark_run.plot(analysis_set = analysis_set_id, analysis_directory = output_directory)
+                benchmark_run.plot(analysis_set = analysis_set_id, analysis_directory = output_directory, matplotlib_plots = generate_matplotlib_plots)
 
                 break
                 # recreate_graphs
