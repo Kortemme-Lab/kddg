@@ -63,7 +63,7 @@ from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
 import score
 import ddgdbapi
 from db_schema import test_schema_against_database_instance
-from ddg.ddglib.import_api import DataImportInterface
+from import_api import DataImportInterface
 
 
 class FatalException(Exception): pass
