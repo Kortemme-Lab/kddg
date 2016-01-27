@@ -59,6 +59,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         self.unzipped_ddg_output_paths = [] # Stores paths to unzipped ddG job output directories (that need to be cleared at the end of this object's life, or before)
         self.PredictionTable = dbmodel.PredictionPPI
 
+
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
         '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
         '''
@@ -218,6 +219,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         date_format_string = '%Y-%m-%d %H:%M:%S'
         starting_time_string = 'Starting time:'
         ending_time_string = 'Ending time:'
+        tsession = self.importer.session
         for prediction_id in unfinished_prediction_ids:
             ddg_output_dir = self.find_ddg_output_directory(prediction_id, root_directory)
             if ddg_output_dir:
@@ -260,7 +262,15 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                         else:
                             status = 'failed'
 
-                    self.DDG_db.execute("UPDATE PredictionPPI SET StartDate=%s, EndDate=%s, Status=%s, maxvmem=%s, DDGTime=%s, ERRORS=%s WHERE ID=%s", parameters=(starting_time, ending_time, status, virtual_memory_usage, elapsed_time, str(return_code), prediction_id,))
+                    prediction_record = tsession.query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
+                    prediction_record.StartDate = starting_time
+                    prediction_record.EndDate = ending_time
+                    prediction_record.Status = status
+                    prediction_record.maxvmem = virtual_memory_usage
+                    prediction_record.DDGTime = elapsed_time
+                    prediction_record.ERRORS = str(return_code)
+                    prediction_record.flush()
+                    prediction_record.commit()
 
                     if verbose:
                         r.increment_report()
