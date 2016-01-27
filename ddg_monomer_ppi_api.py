@@ -24,10 +24,10 @@ from klab.fs.zip_util import zip_file_with_gzip, unzip_file
 from klab.fs.io import sanitize_filename
 from klab.cluster_template.write_run_file import process as write_run_file
 
-from ddg.ddglib.ppi_api import BindingAffinityDDGInterface, get_interface
-from ddg.ddglib.api_layers import *
-from ddg.ddglib.db_api import ddG
-from ddg.ddglib import db_schema as dbmodel
+from ppi_api import BindingAffinityDDGInterface, get_interface
+from api_layers import *
+from db_api import ddG
+import db_schema as dbmodel
 
 # Constants for cluster runs
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
@@ -75,7 +75,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
     def get_unfinished_prediction_ids(self, prediction_set_id):
         '''Returns a set of all prediction_ids that have Status != "done"
         '''
-        return [r.ID for r in self.importer.session.query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status == 'done'))]
+        return [r.ID for r in self.importer.session.query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status != 'done'))]
 
 
     def get_prediction_ids_without_scores(self, prediction_set_id, score_method_id = None):

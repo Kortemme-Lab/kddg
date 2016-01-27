@@ -88,7 +88,6 @@ from db_schema import Ion as DBIon
 from db_schema import User as DBUser
 from db_schema import Publication, PublicationAuthor, PublicationIdentifier
 from api_layers import *
-from db_api import ddG, PartialDataException, SanityCheckException
 import ddgdbapi
 
 
