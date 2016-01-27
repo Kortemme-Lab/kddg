@@ -19,7 +19,7 @@ from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import DOUBLE, TINYINT, LONGBLOB
 from sqlalchemy.types import DateTime, Enum, Integer, TIMESTAMP, Text, Unicode, String
-
+from sqlalchemy.orm import deferred
 
 #if __name__ == '__main__':
 #    sys.path.insert(0, '../../klab')
@@ -61,7 +61,7 @@ class FileContent(DeclarativeBase):
     __tablename__ = 'FileContent'
 
     ID = Column(Integer, nullable=False, primary_key=True)
-    Content = Column(LONGBLOB, nullable=False)
+    Content = deferred(Column(LONGBLOB, nullable=False))
     MIMEType = Column(String(64), nullable=False)
     Filesize = Column(Integer, nullable=False)
     MD5HexDigest = Column(String(32), nullable=False)
@@ -88,8 +88,8 @@ class Ligand(DeclarativeBase):
     AssaysToDetermineConcentrationInCells = Column(String(256), nullable=True)
     ProductionInCells = Column(Enum('Yes','No'), nullable=True)
     ProductionInCellsNotes = Column(String(64), nullable=True)
-    Diagram = Column(LONGBLOB, nullable=True)
-    SimilarCompoundsDiagram = Column(LONGBLOB, nullable=True)
+    Diagram = deferred(Column(LONGBLOB, nullable=True))
+    SimilarCompoundsDiagram = deferred(Column(LONGBLOB, nullable=True))
     InChI = Column(Text, nullable=False)
     InChIKey = Column(String(27), nullable=False)
 
@@ -170,8 +170,8 @@ class PDBFile(DeclarativeBase):
 
     ID = Column(String(10), nullable=False, primary_key=True, default=u'')
     FileSource = Column(String(64), nullable=False, default=u'RCSB')
-    Content = Column(Text, nullable=False)
-    FASTA = Column(Text, nullable=False)
+    Content = deferred(Column(Text, nullable=False))
+    FASTA = deferred(Column(Text, nullable=False))
     Resolution = Column(DOUBLE, nullable=True)
     Techniques = Column(String(256), nullable=False)
     BFactorMean = Column(DOUBLE, nullable=True)
@@ -208,7 +208,7 @@ class PDBChain(DeclarativeBase):
     SegmentProteinID = Column(String(18), nullable=True)
     WildtypeAlignedProteinID = Column(String(18), nullable=True)
     AcquiredProteinID = Column(String(18), nullable=True)
-    Coordinates = Column(LONGBLOB, nullable=True)
+    Coordinates = deferred(Column(LONGBLOB, nullable=True))
 
     # Parent relationships
     pdb_file = relationship('PDBFile', primaryjoin="PDBChain.PDBFileID==PDBFile.ID")
@@ -340,7 +340,7 @@ class Publication(DeclarativeBase):
     DGUnitUsedInProTherm = Column(Enum('kcal/mol','kJ/mol'), nullable=True)
     DDGProThermSignNotes = Column(String(1024), nullable=True)
     DDGValuesNeedToBeChecked = Column(TINYINT(1), nullable=False, default=0)
-    RIS = Column(Text, nullable=True)
+    RIS = deferred(Column(Text, nullable=True))
     Title = Column(Unicode(256), nullable=True)
     Publication = Column(String(256), nullable=True)
     Volume = Column(String(8), nullable=True)
@@ -396,6 +396,325 @@ class User(DeclarativeBase):
     Email = Column(String(80), nullable=True)
 
 
+#############################################
+#                                           #
+#  Protein-protein complex classifications  #
+#                                           #
+#############################################
+
+
+class PPDBMFunctionalClass(DeclarativeBase):
+    __tablename__ = 'PPDBMFunctionalClass'
+
+    ID = Column(String(2), nullable=False, primary_key=True)
+    Description = Column(Unicode(128), nullable=False)
+
+
+class PPIFunctionalClass(DeclarativeBase):
+    __tablename__ = 'PPIFunctionalClass'
+
+    ID = Column(String(2), nullable=False, primary_key=True)
+    Description = Column(Unicode(128), nullable=False)
+
+
+#########################################
+#                                       #
+#  Protein-protein complex definitions  #
+#                                       #
+#########################################
+
+
+class PPComplex(DeclarativeBase):
+    __tablename__ = 'PPComplex'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    LName = Column(Unicode(256), nullable=False)
+    LShortName = Column(Unicode(127), nullable=False)
+    LHTMLName = Column(String(127), nullable=False)
+    RName = Column(Unicode(255), nullable=False)
+    RShortName = Column(Unicode(127), nullable=False)
+    RHTMLName = Column(String(127), nullable=False)
+    FunctionalClassID = Column(String(2), ForeignKey('PPIFunctionalClass.ID'), nullable=True)
+    PPDBMFunctionalClassID = Column(String(2), ForeignKey('PPDBMFunctionalClass.ID'), nullable=True)
+    PPDBMDifficulty = Column(Enum('Difficult','Medium','Rigid-body'), nullable=True)
+    IsWildType = Column(TINYINT(1), nullable=False)
+    WildTypeComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=True)
+    Notes = Column(Unicode(1024), nullable=True)
+    Warnings = Column(Unicode(1024), nullable=True)
+
+
+class PPIPDBSet(DeclarativeBase):
+    __tablename__ = 'PPIPDBSet'
+
+    PPComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=False, primary_key=True)
+    SetNumber = Column(Integer, nullable=False, primary_key=True)
+    IsComplex = Column(TINYINT(1), nullable=False)
+    Notes = Column(String(1024), nullable=True)
+
+
+class PPIPDBPartnerChain(DeclarativeBase):
+    __tablename__ = 'PPIPDBPartnerChain'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PPComplexID = Column(Integer, ForeignKey('PPIPDBSet.PPComplexID'), nullable=False)
+    SetNumber = Column(Integer, ForeignKey('PPIPDBSet.SetNumber'), nullable=False)
+    Side = Column(Enum('L','R'), nullable=False)
+    ChainIndex = Column(Integer, nullable=False)
+    PDBFileID = Column(String(10), ForeignKey('PDBChain.PDBFileID'), nullable=False)
+    Chain = Column(String(1), ForeignKey('PDBChain.Chain'), nullable=False)
+    NMRModel = Column(Integer, nullable=True)
+
+
+class PPIConformationalChange(DeclarativeBase):
+    __tablename__ = 'PPIConformationalChange'
+
+    PPComplexID = Column(Integer, ForeignKey('PPIPDBSet.PPComplexID'), nullable=False, primary_key=True)
+    ComplexSetNumber = Column(Integer, ForeignKey('PPIPDBSet.SetNumber'), nullable=False, primary_key=True)
+    UnboundSetNumber = Column(Integer, ForeignKey('PPIPDBSet.SetNumber'), nullable=False, primary_key=True)
+    DASA = Column(DOUBLE, nullable=True)
+    I_RMSD = Column(DOUBLE, nullable=True)
+
+
+##############################################
+#                                            #
+#  Protein-protein complex dataset mappings  #
+#                                            #
+##############################################
+
+
+class PPIDataSetCrossmap(DeclarativeBase):
+    __tablename__ = 'PPIDataSetCrossmap'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    FromDataSetID = Column(String(128), ForeignKey('PPIDataSetDDG.DataSetID'), nullable=False)
+    FromSection = Column(String(64), ForeignKey('PPIDataSetDDG.Section'), nullable=False)
+    FromRecordNumber = Column(Integer, ForeignKey('PPIDataSetDDG.RecordNumber'), nullable=False)
+    ToDataSetID = Column(String(128), ForeignKey('PPIDataSetDDG.DataSetID'), nullable=False)
+    ToSection = Column(String(64), ForeignKey('PPIDataSetDDG.Section'), nullable=False)
+    ToRecordNumber = Column(Integer, ForeignKey('PPIDataSetDDG.RecordNumber'), nullable=False)
+
+
+class PPIDatabaseComplex(DeclarativeBase):
+    __tablename__ = 'PPIDatabaseComplex'
+
+    DatabaseName = Column(Enum('Kortemme & Baker','Kastritis et al.','Protein Protein Docking Benchmark v4.0','SKEMPI','ZEMu','CC/PBSA','Ben Stranges'), nullable=False, primary_key=True)
+    DatabaseKey = Column(String(32), nullable=False, primary_key=True)
+    PPComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=False)
+
+
+#########################################
+#                                       #
+#  Protein-protein complex mutageneses  #
+#                                       #
+#########################################
+
+
+class PPMutagenesis(DeclarativeBase):
+    __tablename__ = 'PPMutagenesis'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PPComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=False)
+    SKEMPI_KEY = Column(String(256), nullable=True)
+
+
+class PPMutagenesisMutation(DeclarativeBase):
+    __tablename__ = 'PPMutagenesisMutation'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesis.ID'), nullable=False)
+    RecordKey = Column(String(255), nullable=False)
+    ProteinID = Column(String(18), nullable=True)
+    ResidueIndex = Column(Integer, nullable=True)
+    WildTypeAA = Column(String(1), ForeignKey('AminoAcid.Code'), nullable=False)
+    MutantAA = Column(String(1), ForeignKey('AminoAcid.Code'), nullable=False)
+
+
+class PPMutagenesisPDBMutation(DeclarativeBase):
+    __tablename__ = 'PPMutagenesisPDBMutation'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesisMutation.PPMutagenesisID'), ForeignKey('PPMutagenesis.ID'), nullable=False)
+    PPMutagenesisMutationID = Column(Integer, ForeignKey('PPMutagenesisMutation.ID'), nullable=False)
+    PPComplexID = Column(Integer, ForeignKey('PPIPDBPartnerChain.PPComplexID'), ForeignKey('PPMutagenesis.PPComplexID'), nullable=False)
+    SetNumber = Column(Integer, ForeignKey('PPIPDBPartnerChain.SetNumber'), nullable=False)
+    PDBFileID = Column(String(10), ForeignKey('PDBResidue.PDBFileID'), ForeignKey('PPIPDBPartnerChain.PDBFileID'), nullable=False)
+    Chain = Column(String(1), ForeignKey('PDBResidue.Chain'), ForeignKey('PPIPDBPartnerChain.Chain'), nullable=False)
+    WildTypeAA = Column(String(1), ForeignKey('AminoAcid.Code'), ForeignKey('PDBResidue.ResidueAA'), ForeignKey('PPMutagenesisMutation.WildTypeAA'), nullable=False)
+    ResidueID = Column(String(5), ForeignKey('PDBResidue.ResidueID'), nullable=False)
+    MutantAA = Column(String(1), ForeignKey('AminoAcid.Code'), ForeignKey('PPMutagenesisMutation.MutantAA'), nullable=False)
+
+    # Parent relationships
+    pdb_residue = relationship('PDBResidue', primaryjoin="and_(PDBResidue.PDBFileID==PPMutagenesisPDBMutation.PDBFileID, PDBResidue.Chain==PPMutagenesisPDBMutation.Chain, PDBResidue.ResidueID==PPMutagenesisPDBMutation.ResidueID, PDBResidue.ResidueAA==PPMutagenesisPDBMutation.WildTypeAA)")
+    wt_aa = relationship('AminoAcid', primaryjoin="and_(AminoAcid.Code==PPMutagenesisPDBMutation.WildTypeAA)")
+    mut_aa = relationship('AminoAcid', primaryjoin="and_(AminoAcid.Code==PPMutagenesisPDBMutation.WildTypeAA)")
+    pp_mutagenesis_mutation = relationship('PPMutagenesisMutation', primaryjoin="and_(PPMutagenesisMutation.ID==PPMutagenesisPDBMutation.PPMutagenesisMutationID, PPMutagenesisMutation.PPMutagenesisID==PPMutagenesisPDBMutation.PPMutagenesisID, PPMutagenesisMutation.WildTypeAA==PPMutagenesisPDBMutation.WildTypeAA, PPMutagenesisMutation.MutantAA==PPMutagenesisPDBMutation.MutantAA)")
+    ppi_pdb_partner_chain = relationship('PPIPDBPartnerChain', primaryjoin="and_(PPIPDBPartnerChain.PPComplexID==PPMutagenesisPDBMutation.PPComplexID, PPIPDBPartnerChain.SetNumber==PPMutagenesisPDBMutation.SetNumber, PPIPDBPartnerChain.PDBFileID==PPMutagenesisPDBMutation.PDBFileID, PPIPDBPartnerChain.Chain==PPMutagenesisPDBMutation.Chain)")
+    pdb_residue = relationship('PPMutagenesis', primaryjoin="and_(PPMutagenesis.ID==PPMutagenesisPDBMutation.PPMutagenesisID, PPMutagenesis.PPComplexID==PPMutagenesisPDBMutation.PPComplexID)")
+
+
+#######################################################
+#                                                     #
+#  Protein-protein complex experimental measurements  #
+#                                                     #
+#######################################################
+
+'''PPIDDG
+PPIDataSetDDG
+PPIDataSetDDGSource
+PPIExperimentalMeasurements'''
+
+#######################################################
+#                                                     #
+#  User datasets                                      #
+#                                                     #
+#######################################################
+
+
+class UserPPDataSetExperiment(DeclarativeBase):
+    __tablename__ = 'UserPPDataSetExperiment'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    UserDataSetID = Column(Integer, ForeignKey('UserDataSet.ID'), nullable=False)
+    PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesis.ID'), nullable=False)
+    PDBFileID = Column(String(10), ForeignKey('PPIPDBPartnerChain.PDBFileID'), nullable=False)
+    PPComplexID = Column(Integer, ForeignKey('PPIPDBPartnerChain.PPComplexID'), ForeignKey('PPIPDBSet.PPComplexID'), nullable=False)
+    SetNumber = Column(Integer, ForeignKey('PPIPDBPartnerChain.SetNumber'), ForeignKey('PPIPDBSet.SetNumber'), nullable=False)
+    IsComplex = Column(TINYINT(1), ForeignKey('PPIPDBSet.IsComplex'), nullable=False)
+
+    # Parent relationships
+    ppi_pdb_partner_chain = relationship('PPIPDBPartnerChain', primaryjoin="and_(PPIPDBPartnerChain.PDBFileID==UserPPDataSetExperiment.PDBFileID, PPIPDBPartnerChain.PPComplexID==UserPPDataSetExperiment.PPComplexID, PPIPDBPartnerChain.SetNumber==UserPPDataSetExperiment.SetNumber)")
+    ppi_pdb_set = relationship('PPIPDBSet', primaryjoin="and_(PPIPDBSet.PPComplexID==UserPPDataSetExperiment.PPComplexID, PPIPDBSet.SetNumber==UserPPDataSetExperiment.SetNumber, PPIPDBSet.IsComplex==UserPPDataSetExperiment.IsComplex)")
+
+
+#######################################################
+#                                                     #
+#  Protocol tables                                    #
+#                                                     #
+#######################################################
+
+
+class Protocol(DeclarativeBase):
+    __tablename__ = 'Protocol'
+
+    ID = Column(String(256), nullable=False, primary_key=True)
+    Description = Column(Text, nullable=False)
+    ClassName = Column(String(256), nullable=True)
+    Publication = Column(String(64), ForeignKey('Publication.ID'), nullable=True)
+
+#todo: missing related tables
+
+
+#######################################################
+#                                                     #
+#  Scoring method tables                              #
+#                                                     #
+#######################################################
+
+
+class ScoreMethod(DeclarativeBase):
+    __tablename__ = 'ScoreMethod'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    MethodName = Column(Unicode(64), nullable=False)
+    MethodType = Column(Unicode(64), nullable=False)
+    Parameters = Column(Unicode(64), nullable=True)
+    Authors = Column(Unicode(255), nullable=False)
+    Notes = Column(Unicode(512), nullable=True)
+
+
+#######################################################
+#                                                     #
+#  Predictions tables                                 #
+#                                                     #
+#######################################################
+
+
+class PredictionSet(DeclarativeBase):
+    __tablename__ = 'PredictionSet'
+
+    ID = Column(String(48), nullable=False, primary_key=True)
+    Status = Column(Enum('halted','active'), nullable=False)
+    Priority = Column(Integer, nullable=False, default=5)
+    ProteinStability = Column(TINYINT(4), nullable=False, default=1)
+    BindingAffinity = Column(TINYINT(4), nullable=False, default=0)
+    BatchSize = Column(Integer, nullable=False, default=40)
+    SeriesName = Column(String(128), nullable=True)
+    SeriesColor = Column(String(6), nullable=False, default=u'ff0000')
+    SeriesAlpha = Column(DOUBLE, nullable=False, default=1)
+    Description = Column(String(256), nullable=False)
+    CanBeDeleted = Column(TINYINT(1), nullable=False, default=0)
+    EntryDate = Column(TIMESTAMP, nullable=False)
+
+
+class PredictionPPI(DeclarativeBase):
+    __tablename__ = 'PredictionPPI'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PredictionSet = Column(String(48), ForeignKey('PredictionSet.ID'), nullable=False)
+    PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesis.ID'), nullable=False)
+    UserPPDataSetExperimentID = Column(Integer, ForeignKey('UserPPDataSetExperiment.ID'), nullable=False)
+    ProtocolID = Column(String(256), ForeignKey('Protocol.ID'), nullable=True)
+    JSONParameters = deferred(Column(Text, nullable=True))
+    EntryDate = Column(TIMESTAMP, nullable=False)
+    StartDate = Column(DateTime, nullable=True)
+    EndDate = Column(DateTime, nullable=True)
+    Status = Column(Enum('queued','active','done','failed','postponed'), nullable=True)
+    Errors = deferred(Column(Text, nullable=True))
+    AdminCommand = Column(String(20), nullable=True)
+    Cost = Column(DOUBLE, nullable=False, default=0)
+    maxvmem = Column(DOUBLE, nullable=True)
+    DDGTime = Column(DOUBLE, nullable=True)
+    ExtraParameters = deferred(Column(Text, nullable=True))
+    KeptHETATMLines = Column(TINYINT(1), nullable=True)
+    NumberOfMeasurements = Column(Integer, nullable=False, default=1)
+    DevelopmentProtocolID = Column(Integer, nullable=True)
+
+
+class PredictionPPIFile(DeclarativeBase):
+    __tablename__ = 'PredictionPPIFile'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PredictionPPIID = Column(Integer, ForeignKey('PredictionPPI.ID'), nullable=False)
+    FileContentID = Column(Integer, ForeignKey('FileContent.ID'), nullable=False)
+    Filename = Column(String(255), nullable=False)
+    Filetype = Column(Enum('Image','MOL','Mutfile','Other','Params','PDB','PDF','Resfile','Text','RosettaPDBMapping'), nullable=False)
+    FileRole = Column(String(64), nullable=False)
+    Stage = Column(Enum('Input','Output','Analysis'), nullable=True)
+
+
+class PredictionPPIStructureScore(DeclarativeBase):
+    __tablename__ = 'PredictionPPIStructureScore'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PredictionPPIID = Column(Integer, ForeignKey('PredictionPPI.ID'), nullable=False)
+    ScoreMethodID = Column(Integer, ForeignKey('ScoreMethod.ID'), nullable=False)
+    ScoreType = Column(Enum('DDG','WildTypeLPartner','WildTypeRPartner','WildTypeComplex','MutantLPartner','MutantRPartner','MutantComplex'), nullable=False)
+    StructureID = Column(Integer, nullable=True)
+    DDG = Column(DOUBLE, nullable=True)
+    total = Column(DOUBLE, nullable=True)
+    dslf_fa13 = Column(DOUBLE, nullable=True)
+    dslf_ca_dih = Column(DOUBLE, nullable=True)
+    dslf_cs_ang = Column(DOUBLE, nullable=True)
+    dslf_ss_dih = Column(DOUBLE, nullable=True)
+    dslf_ss_dst = Column(DOUBLE, nullable=True)
+    fa_pair = Column(DOUBLE, nullable=True)
+    fa_atr = Column(DOUBLE, nullable=True)
+    fa_dun = Column(DOUBLE, nullable=True)
+    fa_elec = Column(DOUBLE, nullable=True)
+    fa_intra_rep = Column(DOUBLE, nullable=True)
+    fa_rep = Column(DOUBLE, nullable=True)
+    fa_sol = Column(DOUBLE, nullable=True)
+    hbond_bb_sc = Column(DOUBLE, nullable=True)
+    hbond_lr_bb = Column(DOUBLE, nullable=True)
+    hbond_sc = Column(DOUBLE, nullable=True)
+    hbond_sr_bb = Column(DOUBLE, nullable=True)
+    omega = Column(DOUBLE, nullable=True)
+    p_aa_pp = Column(DOUBLE, nullable=True)
+    pro_close = Column(DOUBLE, nullable=True)
+    rama = Column(DOUBLE, nullable=True)
+    ref = Column(DOUBLE, nullable=True)
+    yhh_planarity = Column(DOUBLE, nullable=True)
+
 
 ###########################
 #                         #
@@ -444,7 +763,8 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['PDBLigandFile'])
+    generate_sqlalchemy_definition(['UserPPDataSetExperiment', 'Protocol', 'ScoreMethod'])
+
     #generate_sqlalchemy_definition(['AminoAcid'])
     sys.exit(0)
     from ppi_api import get_interface as get_ppi_interface
