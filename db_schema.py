@@ -300,7 +300,14 @@ class PDBLigand(DeclarativeBase):
     SeqID = Column(String(5), nullable=False, primary_key=True)
     PDBLigandCode = Column(String(3), nullable=False)
     LigandID = Column(Integer, ForeignKey('Ligand.ID'), nullable=False)
-    ParamsFileContentID = Column(Integer, ForeignKey('FileContent.ID'), nullable=True)
+
+
+class PDBLigandFile(DeclarativeBase):
+    __tablename__ = 'PDBLigandFile'
+
+    PDBFileID = Column(String(10), ForeignKey('PDBLigand.PDBFileID'), nullable=False, primary_key=True)
+    PDBLigandCode = Column(String(3), ForeignKey('PDBLigand.PDBLigandCode'), nullable=False, primary_key=True)
+    ParamsFileContentID = Column(Integer, ForeignKey('FileContent.ID'), nullable=False)
 
 
 class PDBIon(DeclarativeBase):
@@ -437,7 +444,7 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['User'])
+    generate_sqlalchemy_definition(['PDBLigandFile'])
     #generate_sqlalchemy_definition(['AminoAcid'])
     sys.exit(0)
     from ppi_api import get_interface as get_ppi_interface
