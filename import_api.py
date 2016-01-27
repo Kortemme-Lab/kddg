@@ -57,9 +57,15 @@ import sqlite3
 import cPickle as pickle
 from types import NoneType
 import time
-
 import numpy
 import pandas
+
+try:
+    import magic
+except ImportError:
+    print('FAILED TO IMPORT magic PACKAGE.')
+    pass
+
 
 from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy.orm import relationship, backref
@@ -80,15 +86,16 @@ from klab.bio.ligand import Ligand, PDBLigand, LigandMap
 from klab.bio.pdbtm import PDBTM
 from klab.db.sqlalchemy_interface import get_single_record_from_query, get_or_create_in_transaction
 from klab.bio import rcsb
+from klab.general.strutil import remove_trailing_line_whitespace
+from klab.hash.md5 import get_hexdigest
 
 from db_schema import test_schema_against_database_instance
-from db_schema import PDBFile, PDBChain, PDBMolecule, PDBMoleculeChain, PDBResidue, LigandDescriptor, LigandIdentifier, LigandSynonym, LigandPrice, LigandReference, PDBLigand, PDBIon, FileContent
+from db_schema import PDBFile, PDBChain, PDBMolecule, PDBMoleculeChain, PDBResidue, LigandDescriptor, LigandIdentifier, LigandSynonym, LigandPrice, LigandReference, PDBLigand, PDBLigandFile, PDBIon, FileContent
 from db_schema import Ligand as DBLigand
 from db_schema import Ion as DBIon
 from db_schema import User as DBUser
 from db_schema import Publication, PublicationAuthor, PublicationIdentifier
 from api_layers import *
-from db_api import ddG, PartialDataException, SanityCheckException
 import ddgdbapi
 
 
@@ -140,7 +147,10 @@ class DataImportInterface(object):
         test_schema_against_database_instance(self.DDG_db)
 
         if self.cache_dir:
+            print('cache_dir', cache_dir)
             self.initialize_cache_directory()
+        else:
+            colortext.warning('Warning: No cache directory has been specified in your configuration file e.g.\n  cache_dir = /kortemmelab/data/username/ddgcache\nThis may result in files being retrieved from the RCSB servers multiple times.')
 
         # Set up SQLAlchemy connections
         self.connect_string = connect_string
@@ -189,6 +199,8 @@ class DataImportInterface(object):
                             user = val
                         elif key == 'password':
                             password = val
+                        elif key == 'cache_dir':
+                            cache_dir = val
                         elif key == 'host':
                             host = val
                         elif key == connection_string_key:
@@ -381,6 +393,71 @@ class DataImportInterface(object):
             raise
 
 
+    ###########################################################################################
+    ## File management layer
+    ##
+    ## This part of the API is responsible for file content abstraction
+    ###########################################################################################
+
+
+    def get_file_id(self, content, tsession = None, hexdigest = None):
+        '''Searches the database to see whether the FileContent already exists. The search uses the digest and filesize as
+           heuristics to speed up the search. If a file has the same hex digest and file size then we do a straight comparison
+           of the contents.
+           If the FileContent exists, the value of the ID field is returned else None is returned.
+           '''
+        tsession = tsession or self.get_session()
+        existing_filecontent_id = None
+        hexdigest = hexdigest or get_hexdigest(content)
+        filesize = len(content)
+        for r in tsession.query(FileContent).filter(and_(FileContent.MD5HexDigest == hexdigest, FileContent.Filesize == filesize)):
+            if r.Content == content:
+                assert(existing_filecontent_id == None) # content uniqueness check
+                existing_filecontent_id = r.ID
+        return existing_filecontent_id
+
+
+    def _add_file_content(self, file_content, tsession = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
+        '''Takes file file_content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
+           a new record if necessary, and returns the associated FileContent.ID value.'''
+
+        tsession = tsession or self.get_session()
+        if rm_trailing_line_whitespace:
+            file_content = remove_trailing_line_whitespace(file_content)
+
+        # Check to see whether the file has been uploaded before
+        hexdigest = get_hexdigest(file_content)
+        existing_filecontent_id = self.get_file_id(file_content, tsession = tsession, hexdigest = hexdigest)
+
+        # Create the FileContent record if the file is a new file
+        if existing_filecontent_id == None:
+            mime_type = None
+            if forced_mime_type:
+                mime_type = forced_mime_type
+            else:
+                temporary_file = write_temp_file('/tmp', file_content, ftype = 'wb')
+                m=magic.open(magic.MAGIC_MIME_TYPE) # see mime.__dict__ for more values e.g. MAGIC_MIME, MAGIC_MIME_ENCODING, MAGIC_NONE
+                m.load()
+                mime_type = m.file(temporary_file)
+                os.remove(temporary_file)
+
+            file_content_record = get_or_create_in_transaction(tsession, FileContent, dict(
+                Content = file_content,
+                MIMEType = mime_type,
+                Filesize = len(file_content),
+                MD5HexDigest = hexdigest
+            ), missing_columns = ['ID'])
+            existing_filecontent_id = file_content_record.ID
+            #if db_cursor:
+            #    sql, params, record_exists = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
+            #    db_cursor.execute(sql, params)
+            #else:
+            #    self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
+            #existing_filecontent_id = self.get_file_id(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
+            #assert(existing_filecontent_id != None)
+        return existing_filecontent_id
+
+
     #################################
     #                               #
     #  PDB data retrieval API       #
@@ -463,7 +540,8 @@ class DataImportInterface(object):
         try:
             os.makedirs(pdb_dir)
         except: pass
-        assert(os.path.exists(pdb_dir))
+        if not os.path.exists(pdb_dir):
+            raise colortext.Exception('The cache directory "{0}" could not be created.'.format(self.cache_dir))
 
 
     def _retrieve_pdb_contents(self, pdb_id, fresh = False):
@@ -970,9 +1048,6 @@ class DataImportInterface(object):
                Other Ligand tables by proxy (via add_ligand_by_pdb_code)
         '''
 
-        raise Exception('implement this for ligand_mapping and ligand_params_files')
-        assert(not(ligand_params_files)) # write this functionality when needed. First, add a new file using FileContent. Next, associate this file with the PDBLigand record.
-
         pdb_object = pdb_object or self.get_pdb_object(database_pdb_id, tsession = tsession)
         db_record = get_single_record_from_query(tsession.query(PDBFile).filter(PDBFile.ID == database_pdb_id))
 
@@ -985,15 +1060,18 @@ class DataImportInterface(object):
             for ligand_code in pdb_object.get_ligand_codes():
                 db_ligand_ids[ligand_code] = self.add_ligand_by_pdb_code(ligand_code)
         else:
-            raise Exception('implement this - try S9G10_best')
             # This structure is not from the RCSB and may use non-standard ligand codes.
             # We therefore require a mapping from all ligand codes in the PDB to RCSB ligand codes.
-
             ligand_codes = pdb_object.get_ligand_codes()
+            if ligand_codes:
+                assert(ligand_mapping)
 
-            # Check all codes have a mapping
+            # Check all codes have a mapping and that the codomain values already exist in the database (the underlying
+            # RCSB file and its ligands should already have been added)
             for ligand_code in ligand_codes:
-                assert(ligand_code in ligand_mapping)
+                assert(ligand_mapping.map_code(ligand_code))
+                db_ligand_record = tsession.query(DBLigand).filter(DBLigand.PDBCode == ligand_mapping.map_code(ligand_code)).one()
+                db_ligand_ids[ligand_code] = db_ligand_record.ID
 
             # Check whether any codes exist in the mapping which have corresponding Ion records in the database.
             # Since non-RCSB files may be missing headers and we cannot assume an heterogen is an ion purely due to
@@ -1004,10 +1082,6 @@ class DataImportInterface(object):
                 if existing_db_record.count() > 0:
                     raise Exception('Handle this case and add a PDBIon record below instead.')
 
-            # Add the ligands using the RCSB code
-            for ligand_code in ligand_codes:
-                db_ligand_ids[ligand_code] = self.add_ligand_by_pdb_code(ligand_mapping[ligand_code])
-
         # Record all instances of ligands in the PDB file (add PDBLigand records).
         # PDBLigandCode is the code used by the PDB file regardless of whether the structure came from the RCSB i.e. it
         # may not be the standard code. The standard code can be found by looking up the associated Ligand record.
@@ -1015,7 +1089,7 @@ class DataImportInterface(object):
             for het_seq_id, lig in sorted(chain_ligands.iteritems()):
                 try:
                     assert(lig.PDBCode in db_ligand_ids)
-                    db_ion = get_or_create_in_transaction(tsession, PDBLigand, dict(
+                    pdb_ligand = get_or_create_in_transaction(tsession, PDBLigand, dict(
                         PDBFileID = database_pdb_id,
                         Chain = chain_id,
                         SeqID = het_seq_id,
@@ -1037,7 +1111,21 @@ class DataImportInterface(object):
         if bad_keys:
             raise colortext.Exception('The ligand codes "{0}" were specified but were not found in the PDB file.'.format('", "'.join(bad_keys)))
         if ligand_params_files:
-            raise Exception('Continue here...')
+
+            # Read all params files
+            for ligand_code, params_filepath in ligand_params_files.iteritems():
+                ligand_params_files[ligand_code] = read_file(params_filepath)
+
+            for ligand_code, params_file_content in ligand_params_files.iteritems():
+                # First, add a new file using FileContent.
+                file_content_id = self._add_file_content(params_file_content, tsession = tsession, rm_trailing_line_whitespace = True, forced_mime_type = 'text/plain')
+
+                # Next, associate this file with the PDBLigand record.
+                pdb_ligand_file = get_or_create_in_transaction(tsession, PDBLigandFile, dict(
+                    PDBFileID = database_pdb_id,
+                    PDBLigandCode = lig.PDBCode,
+                    ParamsFileContentID = file_content_id,
+                ))
 
 
     def _add_pdb_rcsb_ions(self, tsession, database_pdb_id, pdb_object = None):
@@ -1073,23 +1161,26 @@ class DataImportInterface(object):
                     subsequent_instance = copy.deepcopy(pdb_ion_object.get_db_records(database_pdb_id)['Ion'])
                     for k, v in ions[pdb_ion_object.PDBCode].iteritems():
                         assert(v == subsequent_instance[k])
+
         colortext.warning(pprint.pformat(ions))
         # Make sure that the ions in the PDB file have the same formula, description, etc. as currently in the database
         existing_ion_codes = set()
         for pdb_code, d in ions.iteritems():
             colortext.pcyan(pdb_code)
-            existing_db_record = tsession.query(DBIon).filter(DBIon.PDBCode == pdb_code)
-            colortext.pcyan(d)
-            if existing_db_record.count() > 0:
-                assert(existing_db_record.count() == 1)
-                existing_db_record = existing_db_record.one()
-                colortext.pcyan(existing_db_record.__dict__)
-                pprint.pprint(ions[pdb_ion_object.PDBCode])
-                if ions[pdb_ion_object.PDBCode]['PDBCode'] == existing_db_record.PDBCode:
-                    assert(ions[pdb_ion_object.PDBCode]['Description'] == existing_db_record.Description) # This can differ e.g. CL in 127L is 3(CL 1-) since there are 3 ions but in PDB files with 2 ions, this can be 2(CL 1-). We can assert this if we do extra parsing.
-                    assert(ions[pdb_ion_object.PDBCode]['Formula'] == existing_db_record.Formula) # This can differ e.g. CL in 127L is 3(CL 1-) since there are 3 ions but in PDB files with 2 ions, this can be 2(CL 1-). We can assert this if we do extra parsing.
-                existing_ion_codes.add(pdb_code)
-            elif db_record.FileSource != 'RCSB':
+            if db_record.FileSource == 'RCSB':
+                existing_db_record = tsession.query(DBIon).filter(DBIon.PDBCode == pdb_code)
+                colortext.pcyan(d)
+                if existing_db_record.count() > 0:
+                    assert(existing_db_record.count() == 1)
+                    existing_db_record = existing_db_record.one()
+                    colortext.pcyan(existing_db_record.__dict__)
+                    pprint.pprint(ions[pdb_ion_object.PDBCode])
+                    if ions[pdb_ion_object.PDBCode]['PDBCode'] == existing_db_record.PDBCode:
+                        assert(ions[pdb_ion_object.PDBCode]['Description'] == existing_db_record.Description) # This can differ e.g. CL in 127L is 3(CL 1-) since there are 3 ions but in PDB files with 2 ions, this can be 2(CL 1-). We can assert this if we do extra parsing.
+                        assert(ions[pdb_ion_object.PDBCode]['Formula'] == existing_db_record.Formula) # This can differ e.g. CL in 127L is 3(CL 1-) since there are 3 ions but in PDB files with 2 ions, this can be 2(CL 1-). We can assert this if we do extra parsing.
+                    existing_ion_codes.add(pdb_code)
+            else:
+                #WED START HERE
                 raise Exception('We cannot add ion "{0}" from this file as there is no Ion record in the database. This ion should have been added by an underlying RCSB file.'.format(pdb_code))
 
         # Create the main Ion records, only creating records for ions in RCSB files.
@@ -1122,6 +1213,8 @@ class DataImportInterface(object):
                     colortext.error(str(e))
                     colortext.error(traceback.format_exc())
                     raise Exception('An exception occurred committing ion "{0}" from {1} to the database.'.format(pdb_ion_object.get_db_records(None)['Ion']['PDBCode'], database_pdb_id))
+
+        raise Exception('test')
 
 
     def _add_pdb_uniprot_mapping(self, tsession, database_pdb_id, pdb_object = None):
