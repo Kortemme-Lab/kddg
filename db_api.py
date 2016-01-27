@@ -44,10 +44,6 @@ try:
 except ImportError:
     plt=None
 
-import score
-import ddgdbapi
-from db_schema import test_schema_against_database_instance
-
 from klab.bio.pdb import PDB
 from klab.bio.basics import residue_type_3to1_map as aa1, dssp_elision
 from klab.bio.basics import Mutation
@@ -63,6 +59,11 @@ from klab.stats.misc import get_xy_dataset_statistics
 from klab.general.strutil import remove_trailing_line_whitespace
 from klab.hash.md5 import get_hexdigest
 from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
+
+import score
+import ddgdbapi
+from db_schema import test_schema_against_database_instance
+from ddg.ddglib.import_api import DataImportInterface
 
 
 class FatalException(Exception): pass
@@ -121,6 +122,13 @@ class ddG(object):
 
         # Caching dictionaries
         self.cached_score_method_details = None
+
+        # Create an instance of the import API
+        try:
+            self.importer = DataImportInterface.get_interface_with_config_file()
+        except Exception, e:
+            colortext.warning('The data import interface could not be set up. Some features in the API rely on this interface. Please check your configuration file.')
+
 
 
     def __del__(self):
@@ -744,6 +752,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
            of the contents.
            If the FileContent exists, the value of the ID field is returned else None is returned.
            '''
+        # @todo: this should be replaced with a call to importer.get_file_id
         existing_filecontent_id = None
         hexdigest = hexdigest or get_hexdigest(content)
         filesize = len(content)
@@ -2171,6 +2180,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def _add_file_content(self, content, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
         '''Takes file content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
            a new record if necessary, and returns the associated FileContent.ID value.'''
+
+        # @todo: this should be replaced with a call to importer._add_file_content
 
         if rm_trailing_line_whitespace:
             content = remove_trailing_line_whitespace(content)

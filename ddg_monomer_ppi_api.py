@@ -1,6 +1,3 @@
-from ppi_api import BindingAffinityDDGInterface
-from api_layers import *
-from db_api import ddG
 import os
 import json
 import sqlite3
@@ -9,13 +6,6 @@ import sys
 import shutil
 import multiprocessing
 import random
-from ddglib.ppi_api import get_interface
-import klab.cluster_template.parse_settings as parse_settings
-from klab.Reporter import Reporter
-from klab.MultiWorker import MultiWorker
-from klab.fs.zip_util import zip_file_with_gzip, unzip_file
-from klab.fs.io import sanitize_filename
-from klab.cluster_template.write_run_file import process as write_run_file
 import time
 import getpass
 import tempfile
@@ -23,6 +13,21 @@ import cPickle as pickle
 import copy
 import zipfile
 import datetime
+
+from sqlalchemy import and_
+# from sqlalchemy.orm import load_only #todo: upgrade our environments to allow this feature
+
+import klab.cluster_template.parse_settings as parse_settings
+from klab.Reporter import Reporter
+from klab.MultiWorker import MultiWorker
+from klab.fs.zip_util import zip_file_with_gzip, unzip_file
+from klab.fs.io import sanitize_filename
+from klab.cluster_template.write_run_file import process as write_run_file
+
+from ddg.ddglib.ppi_api import BindingAffinityDDGInterface, get_interface
+from ddg.ddglib.api_layers import *
+from ddg.ddglib.db_api import ddG
+from ddg.ddglib import db_schema as dbmodel
 
 # Constants for cluster runs
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
@@ -52,6 +57,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         self.master_scores_list = []
         self.ddg_output_path_cache = {} # Stores paths to ddG job output directories, or unzipped job output directories
         self.unzipped_ddg_output_paths = [] # Stores paths to unzipped ddG job output directories (that need to be cleared at the end of this object's life, or before)
+        self.PredictionTable = dbmodel.PredictionPPI
 
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
         '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
@@ -65,14 +71,12 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             return_set.add( r['PredictionPPIID'] )
         return return_set
 
+
     def get_unfinished_prediction_ids(self, prediction_set_id):
         '''Returns a set of all prediction_ids that have Status != "done"
         '''
-        q = "SELECT ID FROM PredictionPPI WHERE PredictionSet='%s' AND Status!='done'" % (prediction_set_id)
-        return_set = set()
-        for r in self.DDG_db.execute_select(q):
-            return_set.add( r['ID'] )
-        return return_set
+        return [r.ID for r in self.importer.session.query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status == 'done'))]
+
 
     def get_prediction_ids_without_scores(self, prediction_set_id, score_method_id = None):
         all_prediction_ids = [x for x in self.get_prediction_ids(prediction_set_id)]
