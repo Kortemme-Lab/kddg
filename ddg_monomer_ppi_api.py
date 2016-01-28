@@ -15,7 +15,6 @@ import zipfile
 import datetime
 
 from sqlalchemy import and_
-# from sqlalchemy.orm import load_only #todo: upgrade our environments to allow this feature
 
 import klab.cluster_template.parse_settings as parse_settings
 from klab.Reporter import Reporter
@@ -57,7 +56,6 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         self.master_scores_list = []
         self.ddg_output_path_cache = {} # Stores paths to ddG job output directories, or unzipped job output directories
         self.unzipped_ddg_output_paths = [] # Stores paths to unzipped ddG job output directories (that need to be cleared at the end of this object's life, or before)
-        self.PredictionTable = dbmodel.PredictionPPI
 
 
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
@@ -76,7 +74,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
     def get_unfinished_prediction_ids(self, prediction_set_id):
         '''Returns a set of all prediction_ids that have Status != "done"
         '''
-        return [r.ID for r in self.importer.session.query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status != 'done'))]
+        return [r.ID for r in self.get_session().query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status != 'done'))]
 
 
     def get_prediction_ids_without_scores(self, prediction_set_id, score_method_id = None):
@@ -262,15 +260,16 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                         else:
                             status = 'failed'
 
-                    prediction_record = tsession.query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
-                    prediction_record.StartDate = starting_time
-                    prediction_record.EndDate = ending_time
-                    prediction_record.Status = status
-                    prediction_record.maxvmem = virtual_memory_usage
-                    prediction_record.DDGTime = elapsed_time
-                    prediction_record.ERRORS = str(return_code)
-                    prediction_record.flush()
+                    prediction_record = tsession.query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one().update({
+                        prediction_record.StartDate : starting_time,
+                        prediction_record.EndDate : ending_time,
+                        prediction_record.Status : status,
+                        prediction_record.maxvmem : virtual_memory_usage,
+                        prediction_record.DDGTime : elapsed_time,
+                        prediction_record.ERRORS : str(return_code)
+                    })
                     prediction_record.commit()
+
 
                     if verbose:
                         r.increment_report()
