@@ -25,9 +25,8 @@ import sqlite3
 import cPickle as pickle
 
 import numpy
+from sqlalchemy import and_
 
-from api_layers import *
-from db_api import ddG, PartialDataException, SanityCheckException
 from klab import colortext
 from klab.bio.pdb import PDB
 from klab.bio.basics import ChainMutation
@@ -36,6 +35,9 @@ from klab.rosetta.input_files import Mutfile, Resfile
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 from klab.bio.alignment import ScaffoldModelChainMapper
 
+import db_schema as dbmodel
+from api_layers import *
+from db_api import ddG, PartialDataException, SanityCheckException
 
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
@@ -1432,6 +1434,8 @@ class BindingAffinityDDGInterface(ddG):
 
     # Concrete functions
 
+
+    def _get_sqa_prediction_table(self): return dbmodel.PredictionPPI
 
     prediction_table = 'PredictionPPI'
     def _get_prediction_table(self): return self.prediction_table
