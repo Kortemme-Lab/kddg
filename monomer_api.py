@@ -23,21 +23,23 @@ import copy
 import pprint
 
 import numpy
+from sqlalchemy import and_
 
-from api_layers import *
-from db_api import ddG, PartialDataException
 from klab import colortext
 from klab.bio.alignment import ScaffoldModelChainMapper
 
 from klab.benchmarking.analysis.ddg_monomeric_stability_analysis import DBBenchmarkRun as MonomericStabilityBenchmarkRun
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 
+import db_schema as dbmodel
+from api_layers import *
+from db_api import ddG, PartialDataException
+
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a MonomericStabilityDDGInterface interface object. It hides the
     private methods from the user so that a more traditional object-oriented API is created.'''
     return GenericUserInterface.generate(MonomericStabilityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
-
 
 
 class MonomericStabilityDDGInterface(ddG):
@@ -1205,6 +1207,8 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
 
     # Concrete functions
 
+
+    def _get_sqa_prediction_table(self): return dbmodel.Prediction
 
     def _get_prediction_table(self): return 'Prediction'
     def _get_prediction_structure_scores_table(self): return 'PredictionStructureScore'
