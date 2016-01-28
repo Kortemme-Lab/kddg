@@ -44,6 +44,9 @@ try:
 except ImportError:
     plt=None
 
+from sqlalchemy import and_, func
+from sqlalchemy.orm import load_only
+
 from klab.bio.pdb import PDB
 from klab.bio.basics import residue_type_3to1_map as aa1, dssp_elision
 from klab.bio.basics import Mutation
@@ -59,16 +62,21 @@ from klab.stats.misc import get_xy_dataset_statistics
 from klab.general.strutil import remove_trailing_line_whitespace
 from klab.hash.md5 import get_hexdigest
 from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
+from klab.db.sqlalchemy_interface import row_to_dict
 
 import score
 import ddgdbapi
-from db_schema import test_schema_against_database_instance
 from import_api import DataImportInterface
+import db_schema as dbmodel
 
 
 class FatalException(Exception): pass
 class PartialDataException(Exception): pass
 class SanityCheckException(Exception): pass
+
+
+
+
 
 class MutationSet(object):
     '''This class is a leftover from Lin's work and should probably be folded into an API function along with the functions that call this.
@@ -111,9 +119,10 @@ class ddG(object):
         self.prediction_data_path = None
         self.rosetta_scripts_path = rosetta_scripts_path
         self.rosetta_database_path = rosetta_database_path
+        self.PredictionTable = self._get_sqa_prediction_table()
 
         # Before continuing, make sure that the SQLAlchemy definitions match the table definitions
-        test_schema_against_database_instance(self.DDG_db)
+        dbmodel.test_schema_against_database_instance(self.DDG_db)
 
         # This counter is used to check the number of times get_job is called and raise an exception if this exceeds a certain amount
         # If the API is misused then get_job may be called infinitely on one job - this is meant to protect against that
@@ -950,27 +959,31 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     @informational_job
     def get_prediction_set_details(self, prediction_set_id):
         '''Returns the PredictionSet record from the database.'''
-        results = self.DDG_db.execute_select('SELECT * FROM PredictionSet WHERE ID=%s', parameters=(prediction_set_id,))
-        if len(results) == 1:
-            results[0]['Job status summary'] = self._get_prediction_set_status_counts(prediction_set_id)
-            return results[0]
+
+        tsession = self.get_session()
+        prediction_set = tsession.query(dbmodel.PredictionSet).filter(dbmodel.PredictionSet.ID == prediction_set_id)
+        if prediction_set.count() == 1:
+            d = row_to_dict(prediction_set.one())
+            d['Job status summary'] = self._get_prediction_set_status_counts(prediction_set_id)
+            return d
         return None
 
 
     def _get_prediction_set_status_counts(self, prediction_set_id):
         '''Returns a summary of the prediction job statuses for the prediction set.'''
-        d = {}
-        for r in self.DDG_db.execute_select('SELECT Status, COUNT(Status) AS Count FROM {0} WHERE PredictionSet=%s GROUP BY Status'.format(self._get_prediction_table()), parameters=(prediction_set_id,)):
-            d[r['Status']] = r['Count']
-        return d
+        return dict((x, y) for x, y in self.get_session().query(self.PredictionTable.Status, func.count(self.PredictionTable.Status)).filter(self.PredictionTable.PredictionSet == prediction_set_id).group_by(self.PredictionTable.Status))
+
+
+    def get_session(self, new_session = False, autoflush = True, autocommit = False):
+        return self.importer.get_session(new_session = new_session, autoflush = autoflush, autocommit = autocommit)
 
 
     @informational_job
     def get_prediction_ids(self, prediction_set_id):
         '''Returns the list of Prediction IDs associated with the PredictionSet.'''
         self._assert_prediction_set_is_correct_type(prediction_set_id)
-        qry = 'SELECT ID FROM %s WHERE PredictionSet=%%s ORDER BY ID' % self._get_prediction_table()
-        return [r['ID'] for r in self.DDG_db.execute_select(qry, parameters=(prediction_set_id,))]
+        return [r.ID for r in self.get_session().query(self.PredictionTable).filter(self.PredictionTable.PredictionSet == prediction_set_id)]
+
 
     @informational_job
     def get_defined_user_datasets(self):
@@ -2121,6 +2134,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     ###########################################################################################
 
 
+    def _get_sqa_prediction_table(self): return None
+
     def _get_prediction_table(self): return None
     def _get_prediction_structure_scores_table(self): return None
     def _get_prediction_id_field(self): return self._get_prediction_table() + 'ID'
@@ -2245,9 +2260,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
     def _set_prediction_set_status(self, PredictionSetID, status):
         '''Sets the Status of a PredictionSet.'''
+        tsession = self.get_session()
         assert(status == 'halted' or status == 'active')
         assert(self.get_prediction_set_details(PredictionSetID))
-        self.DDG_db.execute('UPDATE PredictionSet SET Status=%s WHERE ID=%s', parameters=(status, PredictionSetID))
+        prediction_set = tsession.query(dbmodel.PredictionSet).filter(dbmodel.PredictionSet.ID == PredictionSetID).one().update({
+            dbmodel.PredictionSet.Status : status,
+        })
+        tsession.commit()
 
 
     # Prediction setup interface
