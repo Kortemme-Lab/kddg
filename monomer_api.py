@@ -1209,6 +1209,7 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
 
 
     def _get_sqa_prediction_table(self): return dbmodel.Prediction
+    def _get_sqa_prediction_structure_scores_table(self): return dbmodel.PredictionStructureScore
 
     def _get_prediction_table(self): return 'Prediction'
     def _get_prediction_structure_scores_table(self): return 'PredictionStructureScore'

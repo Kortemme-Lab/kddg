@@ -15,6 +15,7 @@ import zipfile
 import datetime
 
 from sqlalchemy import and_
+from sqlalchemy.orm import load_only, Load
 
 import klab.cluster_template.parse_settings as parse_settings
 from klab.Reporter import Reporter
@@ -61,14 +62,29 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
         '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
         '''
-        if score_method_id:
-            q = "SELECT DISTINCT PredictionPPIID FROM PredictionPPIStructureScore INNER JOIN PredictionPPI ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID WHERE PredictionPPI.PredictionSet='%s' AND PredictionPPIStructureScore.ScoreMethodID=%d" % (prediction_set_id, score_method_id)
+        score_table = self._get_sqa_prediction_structure_scores_table()
+        prediction_table = self.PredictionTable
+
+        # todo: fix this call. it currently runs very slowly
+        #prediction_ids = self.get_session().query(score_table, prediction_table).\
+        #        filter(and_(prediction_table.ID == score_table.PredictionPPIID, prediction_table.PredictionSet == prediction_set_id)).\
+        #        options(Load(prediction_table).load_only("ID"))
+        #
+        #if score_method_id != None:
+        #    prediction_ids = prediction_ids.filter(score_table.ScoreMethodID == score_method_id)
+
+        if score_method_id != None:
+            return set([r['ID'] for r in self.DDG_db.execute_select('''
+                SELECT DISTINCT PredictionPPI.ID FROM PredictionPPIStructureScore
+                INNER JOIN PredictionPPI
+                ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID
+                WHERE PredictionPPI.PredictionSet=%s AND PredictionPPIStructureScore.ScoreMethodID=%s''', parameters=(prediction_set_id, score_method_id))])
         else:
-            q = "SELECT DISTINCT PredictionPPIID FROM PredictionPPIStructureScore INNER JOIN PredictionPPI ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID WHERE PredictionPPI.PredictionSet='%s'" % (prediction_set_id)
-        return_set = set()
-        for r in self.DDG_db.execute_select(q):
-            return_set.add( r['PredictionPPIID'] )
-        return return_set
+            return set([r['ID'] for r in self.DDG_db.execute_select('''
+                SELECT DISTINCT PredictionPPI.ID FROM PredictionPPIStructureScore
+                INNER JOIN PredictionPPI
+                ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID
+                WHERE PredictionPPI.PredictionSet=%s''', parameters=(prediction_set_id,))])
 
 
     def get_unfinished_prediction_ids(self, prediction_set_id):

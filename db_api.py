@@ -2135,6 +2135,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     def _get_sqa_prediction_table(self): return None
+    def _get_sqa_prediction_structure_scores_table(self): return None
 
     def _get_prediction_table(self): return None
     def _get_prediction_structure_scores_table(self): return None

@@ -1436,6 +1436,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     def _get_sqa_prediction_table(self): return dbmodel.PredictionPPI
+    def _get_sqa_prediction_structure_scores_table(self): return dbmodel.PredictionPPIStructureScore
 
     prediction_table = 'PredictionPPI'
     def _get_prediction_table(self): return self.prediction_table
