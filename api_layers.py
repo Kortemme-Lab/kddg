@@ -195,6 +195,7 @@ class GenericUserInterface(object):
             doc_strings[function_layer][function_layer_order][function_class] = doc_strings[function_layer][function_layer_order].get(function_class, {})
             doc_strings[function_layer][function_layer_order][function_class][fn_name] = self._get_fn_docstring(fn, fn_name)
 
+
         for function_layer, function_layer_components in sorted(doc_strings.iteritems()):
             function_layer_name = functional_layer[function_layer]
             prefix = ''
@@ -223,6 +224,6 @@ class GenericUserInterface(object):
         # Wind up the hierarchy until we find the class where this function was last defined
         for parent in self.cls.__mro__[1:]:
             overridden = getattr(parent, fn_name, None)
-            if overridden:
+            if overridden and overridden.__doc__:
                 return overridden.__doc__
         return default_name

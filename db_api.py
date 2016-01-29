@@ -644,13 +644,17 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             publications[r['ID']] = self.get_publication(r['ID'])
         return publications
 
+
     def cache_all_score_method_details(self):
         '''Helper function for get_score_method_details'''
         score_methods = {}
+        #prediction = self.get_session().query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
+
         for r in self.DDG_db_utf.execute_select('SELECT * FROM ScoreMethod'):
             score_methods[r['ID']] = r
         self.cached_score_method_details = score_methods
-    
+
+
     @informational_misc
     def get_score_method_details(self, score_method_id = None, allow_recaching = True):
         '''Returns all score method details, unless a score method id is passed, then only those details are returned'''
@@ -671,6 +675,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             # Returns all defined ScoreMethod records
             return self.cached_score_method_details
 
+
     def output_score_method_information(self, score_method_id, output_directory, analysis_set_id = None, take_lowest = None, expectn = None):
         '''Outputs details about score method to a txt file in the specified output directory'''
         score_method_details = sorted([(k, v) for k, v in self.get_score_method_details(score_method_id = score_method_id).iteritems()])
@@ -686,7 +691,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 f.write('\nScore method details\n')
                 for key, value in score_method_details:
                     f.write('%s: %s\n' % (str(key), str(value)))
-        
+
+
     @informational_misc
     def get_score_method_id(self, method_name, method_type = None, method_parameters = None, method_authors = None, fuzzy = True):
         '''Returns the ID for the ScoreMethod with the specified parameters.
