@@ -29,6 +29,10 @@ from api_layers import *
 from db_api import ddG
 import db_schema as dbmodel
 
+
+DeclarativeBase = dbmodel.DeclarativeBase
+
+
 # Constants for cluster runs
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
 output_db3 = 'output.db3'

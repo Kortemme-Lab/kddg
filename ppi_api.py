@@ -34,10 +34,14 @@ from klab.fs.fsio import read_file, write_temp_file
 from klab.rosetta.input_files import Mutfile, Resfile
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 from klab.bio.alignment import ScaffoldModelChainMapper
+from klab.db.sqlalchemy_interface import row_to_dict
 
 import db_schema as dbmodel
 from api_layers import *
 from db_api import ddG, PartialDataException, SanityCheckException
+
+
+DeclarativeBase = dbmodel.DeclarativeBase
 
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
@@ -242,20 +246,25 @@ class BindingAffinityDDGInterface(ddG):
 
     @informational_job
     def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
-        prediction_record = self.DDG_db.execute_select('SELECT * FROM PredictionPPI WHERE ID=%s', parameters=(prediction_id,))
-        if not prediction_record:
-            raise Exception('No details could be found for prediction #%d in the database.' % prediction_id)
-        prediction_record = prediction_record[0]
-        prediction_record['Files'] = {}
-        if include_files:
-            prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
+
+        try:
+            prediction_record = self.get_session().query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
+        except Exception, e:
+            raise colortext.Exception('No details could be found for prediction #{0} in the database.\n{1}\n{2}'.format(prediction_id, str(e), traceback.format_exc()))
 
         # mutfile_content = self.create_mutfile(prediction_id)
 
         # Read the UserPPDataSetExperiment details
-        user_dataset_experiment_id = prediction_record['UserPPDataSetExperimentID']
+        user_dataset_experiment_id = prediction_record.UserPPDataSetExperimentID
         ude_details = self.get_user_dataset_experiment_details(user_dataset_experiment_id)
-        assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record['PPMutagenesisID'])
+        assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record.PPMutagenesisID)
+
+        # Convert the record to dict
+        prediction_record = row_to_dict(prediction_record, DeclarativeBase)
+        prediction_record['Files'] = {}
+        if include_files:
+            prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
+
         for k, v in ude_details.iteritems():
             assert(k not in prediction_record)
             prediction_record[k] = v

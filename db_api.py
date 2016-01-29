@@ -75,7 +75,7 @@ class PartialDataException(Exception): pass
 class SanityCheckException(Exception): pass
 
 
-
+DeclarativeBase = dbmodel.DeclarativeBase
 
 
 class MutationSet(object):
@@ -925,6 +925,16 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @informational_job
+    def get_job_description(self, prediction_id):
+        '''Returns the details necessary to run the job.'''
+        try:
+            prediction = self.get_session().query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
+        except Exception, e:
+            raise colortext.Exception('No details could be found for prediction #{0} in the database.\n{1}\n{2}'.format(prediction_id, str(e), traceback.format_exc()))
+        return str(prediction)
+
+
+    @informational_job
     def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
         '''Returns the details necessary to run the job.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
@@ -937,18 +947,22 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
            If truncate_content is set, it should be an integer specifying the amount of characters to include. This is useful
            to see if the file header is as expected.
         '''
-        params = (self._get_prediction_table(),)
-        qry = 'SELECT {0}File.*, FileContent.Content, FileContent.MIMEType, FileContent.Filesize, FileContent.MD5HexDigest FROM {0}File INNER JOIN FileContent ON FileContentID=FileContent.ID WHERE {0}ID=%s'.format(*params)
-        results = self.DDG_db.execute_select(qry, parameters=(prediction_id,))
         job_files = {}
-        for r in results:
-            if truncate_content and str(truncate_content).isdigit():
-                if len(r['Content']) > int(truncate_content):
-                    r['Content'] = '%s...' % r['Content'][:int(truncate_content)]
-            if set_pdb_occupancy_one and r['Filetype'] == 'PDB': # Set all occupancies to 1
-                pdb = PDB(r["Content"].split("\n"))
+        prediction_record = self.get_session().query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
+        for pf in prediction_record.files:
+            fcontent = pf.content
+            r = row_to_dict(pf, DeclarativeBase)
+            r['Content'] = fcontent.Content
+            r['MIMEType'] = fcontent.MIMEType
+            r['Filesize'] = fcontent.Filesize
+            r['MD5HexDigest'] = fcontent.MD5HexDigest
+            if set_pdb_occupancy_one and pf.Filetype == 'PDB': # Set all occupancies to 1
+                pdb = PDB(fcontent.Content.split("\n"))
                 pdb.fillUnoccupied()
                 r['Content'] = pdb.get_content()
+            if truncate_content and str(truncate_content).isdigit():
+                if len(fcontent.Content) > int(truncate_content):
+                    r['Content'] = '%s...' % fcontent.Content[:int(truncate_content)]
             job_stage = r['Stage']
             del r['Stage']
             job_files[job_stage] = job_files.get(job_stage, [])
@@ -963,7 +977,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         tsession = self.get_session()
         prediction_set = tsession.query(dbmodel.PredictionSet).filter(dbmodel.PredictionSet.ID == prediction_set_id)
         if prediction_set.count() == 1:
-            d = row_to_dict(prediction_set.one())
+            d = row_to_dict(prediction_set.one(), DeclarativeBase)
             d['Job status summary'] = self._get_prediction_set_status_counts(prediction_set_id)
             return d
         return None

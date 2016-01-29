@@ -94,7 +94,7 @@ from db_schema import PDBFile, PDBChain, PDBMolecule, PDBMoleculeChain, PDBResid
 from db_schema import Ligand as DBLigand
 from db_schema import Ion as DBIon
 from db_schema import User as DBUser
-from db_schema import Publication, PublicationAuthor, PublicationIdentifier
+from db_schema import Publication, PublicationAuthor, PublicationIdentifier, DeclarativeBase
 from api_layers import *
 import ddgdbapi
 

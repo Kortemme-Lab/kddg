@@ -442,6 +442,16 @@ class PPComplex(DeclarativeBase):
     Notes = Column(Unicode(1024), nullable=True)
     Warnings = Column(Unicode(1024), nullable=True)
 
+    def __repr__(self):
+        functional_class = None
+        if self.FunctionalClassID:
+            functional_class = self.FunctionalClassID
+        elif self.FunctionalClassID:
+            functional_class = self.PPDBMFunctionalClassID
+        if functional_class:
+            functional_class = '({0})'.format(functional_class)
+        return ('{0} | {1} {2}'.format(self.LName, self.RName, functional_class or '')).strip()
+
 
 class PPIPDBSet(DeclarativeBase):
     __tablename__ = 'PPIPDBSet'
@@ -450,6 +460,21 @@ class PPIPDBSet(DeclarativeBase):
     SetNumber = Column(Integer, nullable=False, primary_key=True)
     IsComplex = Column(TINYINT(1), nullable=False)
     Notes = Column(String(1024), nullable=True)
+
+    # Relationships
+    partner_chains = relationship('PPIPDBPartnerChain', primaryjoin="and_(PPIPDBSet.PPComplexID==PPIPDBPartnerChain.PPComplexID, PPIPDBSet.SetNumber==PPIPDBPartnerChain.SetNumber)", order_by="PPIPDBPartnerChain.Side, PPIPDBPartnerChain.ChainIndex")
+
+    def __repr__(self):
+        d = dict(L = '', R = '')
+        pdb_ids = set([pc.PDBFileID for pc in self.partner_chains])
+        if len(pdb_ids) == 1:
+            for pc in self.partner_chains:
+                d[pc.Side] += pc.Chain
+            return '{0}|{1}'.format(d['L'], d['R'])
+        else:
+            for pc in self.partner_chains:
+                d[pc.Side] += '{0} {1}'.format(pc.PDBFileID, pc.Chain)
+            return '{0}|{1}'.format(','.join(d['L']), ','.join(d['R']))
 
 
 class PPIPDBPartnerChain(DeclarativeBase):
@@ -516,6 +541,10 @@ class PPMutagenesis(DeclarativeBase):
     PPComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=False)
     SKEMPI_KEY = Column(String(256), nullable=True)
 
+    # Relationships
+    complex = relationship('PPComplex', primaryjoin="PPMutagenesis.PPComplexID==PPComplex.ID")
+    pdb_mutations = relationship('PPMutagenesisPDBMutation', primaryjoin="PPMutagenesis.ID==PPMutagenesisPDBMutation.PPMutagenesisID")
+
 
 class PPMutagenesisMutation(DeclarativeBase):
     __tablename__ = 'PPMutagenesisMutation'
@@ -570,6 +599,18 @@ PPIExperimentalMeasurements'''
 #######################################################
 
 
+class UserDataSet(DeclarativeBase):
+    __tablename__ = 'UserDataSet'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    TextID = Column(String(32), nullable=False)
+    UserID = Column(String(64), nullable=True)
+    Description = Column(String(512), nullable=True)
+    DatasetType = Column(Enum('Protein stability','Binding affinity'), nullable=True)
+    FirstCreated = Column(DateTime, nullable=True)
+    LastModified = Column(DateTime, nullable=True)
+
+
 class UserPPDataSetExperiment(DeclarativeBase):
     __tablename__ = 'UserPPDataSetExperiment'
 
@@ -577,13 +618,24 @@ class UserPPDataSetExperiment(DeclarativeBase):
     UserDataSetID = Column(Integer, ForeignKey('UserDataSet.ID'), nullable=False)
     PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesis.ID'), nullable=False)
     PDBFileID = Column(String(10), ForeignKey('PPIPDBPartnerChain.PDBFileID'), nullable=False)
-    PPComplexID = Column(Integer, ForeignKey('PPIPDBPartnerChain.PPComplexID'), ForeignKey('PPIPDBSet.PPComplexID'), nullable=False)
+    PPComplexID = Column(Integer, ForeignKey('PPIPDBPartnerChain.PPComplexID'), ForeignKey('PPIPDBSet.PPComplexID'), ForeignKey('PPComplex.ID'), nullable=False)
     SetNumber = Column(Integer, ForeignKey('PPIPDBPartnerChain.SetNumber'), ForeignKey('PPIPDBSet.SetNumber'), nullable=False)
     IsComplex = Column(TINYINT(1), ForeignKey('PPIPDBSet.IsComplex'), nullable=False)
 
     # Parent relationships
     ppi_pdb_partner_chain = relationship('PPIPDBPartnerChain', primaryjoin="and_(PPIPDBPartnerChain.PDBFileID==UserPPDataSetExperiment.PDBFileID, PPIPDBPartnerChain.PPComplexID==UserPPDataSetExperiment.PPComplexID, PPIPDBPartnerChain.SetNumber==UserPPDataSetExperiment.SetNumber)")
     ppi_pdb_set = relationship('PPIPDBSet', primaryjoin="and_(PPIPDBSet.PPComplexID==UserPPDataSetExperiment.PPComplexID, PPIPDBSet.SetNumber==UserPPDataSetExperiment.SetNumber, PPIPDBSet.IsComplex==UserPPDataSetExperiment.IsComplex)")
+    complex = relationship('PPComplex', primaryjoin="UserPPDataSetExperiment.PPComplexID==PPComplex.ID")
+    user_dataset = relationship('UserDataSet', primaryjoin="UserPPDataSetExperiment.UserDataSetID==UserDataSet.ID")
+    mutagenesis = relationship('PPMutagenesis', primaryjoin="UserPPDataSetExperiment.PPMutagenesisID==PPMutagenesis.ID")
+
+    def __repr__(self):
+        mutations = []
+        for m in self.mutagenesis.pdb_mutations:
+            if m.PPComplexID == self.PPComplexID and m.SetNumber == self.SetNumber and m.PDBFileID == self.PDBFileID:
+                mutations.append('{0} {1}{2}{3}'.format(m.Chain, m.WildTypeAA, m.ResidueID.strip(), m.MutantAA))
+        mutations = ', '.join(mutations)
+        return 'UserPPDataSetExperiment #{0} ({1}). Complex = {2}, Partners = {3}. Mutations: {4}'.format(self.ID, self.user_dataset.TextID, self.complex, self.ppi_pdb_set, mutations or 'N/A')
 
 
 #######################################################
@@ -601,7 +653,7 @@ class Protocol(DeclarativeBase):
     ClassName = Column(String(256), nullable=True)
     Publication = Column(String(64), ForeignKey('Publication.ID'), nullable=True)
 
-#todo: missing related tables
+#todo: add missing protocol-related tables
 
 
 #######################################################
@@ -669,6 +721,14 @@ class PredictionPPI(DeclarativeBase):
     NumberOfMeasurements = Column(Integer, nullable=False, default=1)
     DevelopmentProtocolID = Column(Integer, nullable=True)
 
+    # Relationships
+    files = relationship('PredictionPPIFile', primaryjoin="PredictionPPI.ID==PredictionPPIFile.PredictionPPIID")
+    mutagenesis = relationship('PPMutagenesis', primaryjoin="PredictionPPI.PPMutagenesisID==PPMutagenesis.ID")
+    user_dataset_experiment = relationship('UserPPDataSetExperiment', primaryjoin="PredictionPPI.UserPPDataSetExperimentID==UserPPDataSetExperiment.ID")
+
+    def __repr__(self):
+        return 'Prediction #{0}, {1} ({2}): Mutagenesis #{3}.\n{4}.'.format(self.ID, self.PredictionSet, self.Status, self.mutagenesis.ID, self.user_dataset_experiment)
+
 
 class PredictionPPIFile(DeclarativeBase):
     __tablename__ = 'PredictionPPIFile'
@@ -680,6 +740,10 @@ class PredictionPPIFile(DeclarativeBase):
     Filetype = Column(Enum('Image','MOL','Mutfile','Other','Params','PDB','PDF','Resfile','Text','RosettaPDBMapping'), nullable=False)
     FileRole = Column(String(64), nullable=False)
     Stage = Column(Enum('Input','Output','Analysis'), nullable=True)
+
+    # Relationships
+    content = relationship('FileContent', primaryjoin="PredictionPPIFile.FileContentID==FileContent.ID")
+#qry = 'SELECT {0}File.*, FileContent.Content, FileContent.MIMEType, FileContent.Filesize, FileContent.MD5HexDigest FROM {0}File INNER JOIN FileContent ON FileContentID=FileContent.ID WHERE {0}ID=%s'.format(*params)
 
 
 class PredictionPPIStructureScore(DeclarativeBase):
@@ -763,7 +827,7 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['UserPPDataSetExperiment', 'Protocol', 'ScoreMethod'])
+    generate_sqlalchemy_definition(['UserDataSet'])
 
     #generate_sqlalchemy_definition(['AminoAcid'])
     sys.exit(0)
