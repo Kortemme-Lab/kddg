@@ -104,7 +104,8 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             all_prediction_ids_set.add( prediction_id )
         scored_prediction_ids_set = self.get_prediction_ids_with_scores(prediction_set_id, score_method_id = score_method_id)
         return [x for x in all_prediction_ids_set.difference(scored_prediction_ids_set)]
-        
+
+
     def create_cluster_run_rescore_dir(self, output_dir, passed_job_name = None):
         first_task_count = 0
         dir_count = 1
@@ -181,6 +182,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 r.done()
             write_run_file(settings, job_dict = job_dict)
             first_task_count = last_task_count
+
 
     def add_rescore_cluster_run(self, ddg_output_path, chains_to_move, score_method_id, prediction_id):
         structs_with_both_rounds = self.find_structs_with_both_rounds(ddg_output_path)

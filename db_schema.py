@@ -667,11 +667,11 @@ class ScoreMethod(DeclarativeBase):
     __tablename__ = 'ScoreMethod'
 
     ID = Column(Integer, nullable=False, primary_key=True)
-    MethodName = Column(Unicode(64), nullable=False)
-    MethodType = Column(Unicode(64), nullable=False)
-    Parameters = Column(Unicode(64), nullable=True)
-    Authors = Column(Unicode(255), nullable=False)
-    Notes = Column(Unicode(512), nullable=True)
+    MethodName = Column(Unicode(64, collation='utf8_unicode_ci'), nullable=False)
+    MethodType = Column(Unicode(64, collation='utf8_unicode_ci'), nullable=False)
+    Parameters = Column(Unicode(64, collation='utf8_unicode_ci'), nullable=True)
+    Authors = Column(Unicode(255, collation='utf8_unicode_ci'), nullable=False)
+    Notes = Column(Unicode(512, collation='utf8_unicode_ci'), nullable=True)
 
 
 #######################################################

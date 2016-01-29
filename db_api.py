@@ -136,7 +136,7 @@ class ddG(object):
         try:
             self.importer = DataImportInterface.get_interface_with_config_file()
         except Exception, e:
-            colortext.warning('The data import interface could not be set up. Some features in the API rely on this interface. Please check your configuration file.')
+            colortext.warning('The data import interface could not be set up. Some features in the API rely on this interface. Please check your configuration file.\n{0}\n{1}'.format(e, traceback.format_exc()))
 
 
 
@@ -645,32 +645,28 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         return publications
 
 
-    def cache_all_score_method_details(self):
-        '''Helper function for get_score_method_details'''
+    def _cache_all_score_method_details(self):
+        '''Helper function for get_score_method_details.'''
         score_methods = {}
-        #prediction = self.get_session().query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
-
-        for r in self.DDG_db_utf.execute_select('SELECT * FROM ScoreMethod'):
-            score_methods[r['ID']] = r
+        for r in self.get_session(utf = True).query(dbmodel.ScoreMethod):
+            score_methods[r.ID] = row_to_dict(r)
         self.cached_score_method_details = score_methods
+        return score_methods
 
 
     @informational_misc
     def get_score_method_details(self, score_method_id = None, allow_recaching = True):
         '''Returns all score method details, unless a score method id is passed, then only those details are returned'''
-        if not self.cached_score_method_details:
-            self.cache_all_score_method_details()
+        if not self.cached_score_method_details or (score_method_id and not(score_method_id in self.cached_score_method_details)):
+            self._cache_all_score_method_details()
 
         if score_method_id:
             # Returns ScoreMethod record for specific score_method_id
             if score_method_id in self.cached_score_method_details:
                 return self.cached_score_method_details[score_method_id]
-            elif allow_recaching:
-                # Recache and try one more time
-                self.get_score_method_details(score_method_id = score_method_id, allow_recaching = False)
             else:
-                # We have already tried again once, so fail
-                raise Exception("score_method_id %s isn't in score methods table" % str(score_method_id))
+                # We have already refreshed the cache, so fail
+                raise Exception("score_method_id {0} isn't in score methods table".format(score_method_id))
         else:
             # Returns all defined ScoreMethod records
             return self.cached_score_method_details
@@ -994,8 +990,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         return dict((x, y) for x, y in self.get_session().query(self.PredictionTable.Status, func.count(self.PredictionTable.Status)).filter(self.PredictionTable.PredictionSet == prediction_set_id).group_by(self.PredictionTable.Status))
 
 
-    def get_session(self, new_session = False, autoflush = True, autocommit = False):
-        return self.importer.get_session(new_session = new_session, autoflush = autoflush, autocommit = autocommit)
+    def get_session(self, new_session = False, autoflush = True, autocommit = False, utf = False):
+        return self.importer.get_session(new_session = new_session, autoflush = autoflush, autocommit = autocommit, utf = utf)
 
 
     @informational_job
