@@ -123,7 +123,7 @@ class DataImportInterface(object):
     ##################
 
 
-    def __init__(self, passwd, connect_string, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, cache_dir = None, echo_sql = False):
+    def __init__(self, passwd, connect_string, connect_string_utf, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, cache_dir = None, echo_sql = False):
         '''
         :param passwd:
         :param connect_string:
@@ -154,9 +154,13 @@ class DataImportInterface(object):
 
         # Set up SQLAlchemy connections
         self.connect_string = connect_string
+        self.connect_string_utf = connect_string_utf
         self.engine, self.session = None, None
-        self.get_engine()
-        self.get_session()
+        self.engine_utf, self.session_utf = None, None
+        self.get_engine(utf = False)
+        self.get_engine(utf = True)
+        self.get_session(utf = False)
+        self.get_session(utf = True)
 
         self.rosetta_scripts_path = rosetta_scripts_path
         self.rosetta_database_path = rosetta_database_path
@@ -184,6 +188,7 @@ class DataImportInterface(object):
         host = None
         connection_string = None
         connection_string_key = 'sqlalchemy.{0}.url'.format(database)
+        connection_string_key_utf = 'sqlalchemy.{0}.url.utf'.format(database)
         with open(my_cnf_path, 'r') as f:
             parsing_config_section = False
             for line in f:
@@ -193,7 +198,8 @@ class DataImportInterface(object):
                     parsing_config_section = False
                 elif parsing_config_section:
                     if '=' in line:
-                        key, val = line.strip().split('=')
+                        tokens = line.strip().split('=')
+                        key, val = tokens[0], '='.join(tokens[1:]) # values may contain '=' signs
                         key, val = key.strip(), val.strip()
                         if key == 'user':
                             user = val
@@ -205,13 +211,15 @@ class DataImportInterface(object):
                             host = val
                         elif key == connection_string_key:
                             connection_string = val
+                        elif key == connection_string_key_utf:
+                            connect_string_utf = val
                     else:
                         parsing_config_section = False
 
-        if not user or not password or not host or not connection_string:
+        if not user or not password or not host or not connection_string or not connect_string_utf:
             raise Exception("Couldn't find host(%s), username(%s), password, or connection string in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
 
-        return cls(password, connection_string, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, cache_dir = cache_dir, echo_sql = echo_sql)
+        return cls(password, connection_string, connect_string_utf, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, cache_dir = cache_dir, echo_sql = echo_sql)
 
 
     def __del__(self):
@@ -227,36 +235,47 @@ class DataImportInterface(object):
 
 
 
-    def get_engine(self):
-        if not self.engine:
-            self.engine = create_engine(self.connect_string, echo = self.echo_sql)
-        return self.engine
+    def get_engine(self, utf = False):
+        if utf:
+            if not self.engine_utf:
+                self.engine_utf = create_engine(self.connect_string_utf, echo = self.echo_sql)
+            return self.engine_utf
+        else:
+            if not self.engine:
+                self.engine = create_engine(self.connect_string, echo = self.echo_sql)
+            return self.engine
 
 
-    def get_connection(self):
+    def get_connection(self, utf = False):
         # e.g. connection = importer.get_connection(); connection.execute("SELECT * FROM User")
-        self.get_engine()
-        return self.engine.connect()
+        engine = self.get_engine(utf = utf)
+        return engine.connect()
 
 
-    def get_session(self, new_session = False, autoflush = True, autocommit = False):
-        self.get_engine()
-        if new_session or not(self.session):
+    def get_session(self, new_session = False, autoflush = True, autocommit = False, utf = False):
+        engine = self.get_engine(utf = utf)
+        if new_session or ((not(utf) and not(self.session)) or (utf and not(self.session_utf))):
             maker_ddgdatabase = sessionmaker(autoflush = autoflush, autocommit = autocommit)
             s = scoped_session(maker_ddgdatabase)
             DeclarativeBaseDDG = declarative_base()
             metadata_ddg = DeclarativeBaseDDG.metadata
-            s.configure(bind=self.engine)
-            metadata_ddg.bind = self.engine
+            s.configure(bind=engine)
+            metadata_ddg.bind = engine
             if new_session:
                 return s
             else:
-                self.session = s
-        return self.session
+                if utf:
+                    self.session_utf = s
+                else:
+                    self.session = s
+        if utf:
+            return self.session_utf
+        else:
+            return self.session
 
 
-    def renew(self):
-        self.session = self.get_session(new_session = True)
+    def renew(self, utf = False):
+        self.session = self.get_session(new_session = True, utf = utf)
 
 
     #################################
