@@ -750,7 +750,7 @@ class PredictionPPI(DeclarativeBase):
                  See http://docs.sqlalchemy.org/en/rel_1_1/orm/session_api.html#sqlalchemy.orm.session.make_transient
                  and http://stackoverflow.com/questions/20112850/sqlalchemy-clone-table-row-with-relations?lq=1
         '''
-
+        assert(prediction_set != self.PredictionSet)
         fieldnames = [c.name for c in list(sqlalchemy_inspect(PredictionPPI).columns)]
         new_prediction = PredictionPPI()
         for c in fieldnames:
@@ -777,7 +777,23 @@ class PredictionPPIFile(DeclarativeBase):
 
     # Relationships
     content = relationship('FileContent', viewonly=True, primaryjoin="PredictionPPIFile.FileContentID==FileContent.ID")
-#qry = 'SELECT {0}File.*, FileContent.Content, FileContent.MIMEType, FileContent.Filesize, FileContent.MD5HexDigest FROM {0}File INNER JOIN FileContent ON FileContentID=FileContent.ID WHERE {0}ID=%s'.format(*params)
+
+    def clone(self, prediction_id):
+        '''Returns a new fresh PredictionPPIFile object to be inserted into the database.
+
+           Warning: This code returns a PredictionPPIFile object but the relationships cannot be called on this object e.g.
+              print new_prediction_file.content
+           will fail. I am guessing that the relationships are set up on object instantiation. See comment on PredictionPPI.clone() above.
+        '''
+
+        assert(prediction_id != self.PredictionPPIID)
+        fieldnames = [c.name for c in list(sqlalchemy_inspect(PredictionPPIFile).columns)]
+        new_prediction_file = PredictionPPIFile()
+        for c in fieldnames:
+            setattr(new_prediction_file, c, getattr(self, c))
+        new_prediction_file.ID = None
+        new_prediction_file.PredictionPPIID = prediction_id
+        return new_prediction_file
 
 
 class PredictionPPIStructureScore(DeclarativeBase):

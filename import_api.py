@@ -147,7 +147,6 @@ class DataImportInterface(object):
         test_schema_against_database_instance(self.DDG_db)
 
         if self.cache_dir:
-            print('cache_dir', cache_dir)
             self.initialize_cache_directory()
         else:
             colortext.warning('Warning: No cache directory has been specified in your configuration file e.g.\n  cache_dir = /kortemmelab/data/username/ddgcache\nThis may result in files being retrieved from the RCSB servers multiple times.')

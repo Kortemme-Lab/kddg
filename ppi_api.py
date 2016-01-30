@@ -688,7 +688,6 @@ class BindingAffinityDDGInterface(ddG):
                     prediction_set_dict['ID'] = to_prediction_set_id
                     prediction_set_dict['EntryDate'] = datetime.datetime.now()
                     prediction_set_dict['Description'] = description or 'Clone of {0}'.format(from_prediction_set_id)
-                    pprint.pprint(prediction_set_dict)
                     db_ligand_synonym = get_or_create_in_transaction(tsession, dbmodel.PredictionSet, prediction_set_dict)
                 else:
                     raise Exception('Could not retrieve details for target PredictionSet "{0}". To create a new PredictionSet, set create_if_does_not_exist to True.'.format(to_prediction_set_id))
@@ -706,7 +705,6 @@ class BindingAffinityDDGInterface(ddG):
                         self.PredictionTable.PredictionSet == to_prediction_set_id,
                         self.PredictionTable.UserPPDataSetExperimentID == prediction.UserPPDataSetExperimentID,
                         self.PredictionTable.ProtocolID == prediction.ProtocolID)).count() > 0:
-                    print('Record already exists.')
                     continue
                 else:
                     new_prediction = prediction.clone(to_prediction_set_id)
@@ -714,16 +712,13 @@ class BindingAffinityDDGInterface(ddG):
                     tsession.flush()
                     new_prediction_id = new_prediction.ID
 
-                print(new_prediction_id)
-                # Monday: add related tables e.g. PredictionPPIFile... is that it?
-                break
-
-
+                # Add the prediction file records. The underlying FileContent tables will already exist.
+                for prediction_file in prediction.files:
+                    new_prediction_file = prediction_file.clone(new_prediction_id)
+                    tsession.add(new_prediction_file)
+                    tsession.flush()
                 c += 1
-            print('\f')
-
-            print('Success.\n')
-            raise Exception('Failing on purpose.\n')
+            print('\nSuccess.\n')
             tsession.commit()
             tsession.close()
         except:
