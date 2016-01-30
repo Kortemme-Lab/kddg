@@ -183,7 +183,7 @@ class PDBFile(DeclarativeBase):
     DerivedFrom = Column(String(4), nullable=True)
 
     # Relationships
-    residues = relationship('Publication', primaryjoin="PDBFile.Publication==Publication.ID")
+    residues = relationship('Publication', viewonly=True, primaryjoin="PDBFile.Publication==Publication.ID")
 
     def __repr__(self):
         notes = ''
@@ -211,10 +211,10 @@ class PDBChain(DeclarativeBase):
     Coordinates = deferred(Column(LONGBLOB, nullable=True))
 
     # Parent relationships
-    pdb_file = relationship('PDBFile', primaryjoin="PDBChain.PDBFileID==PDBFile.ID")
+    pdb_file = relationship('PDBFile', viewonly=True, primaryjoin="PDBChain.PDBFileID==PDBFile.ID")
 
     # Children relationships
-    residues = relationship('PDBResidue', primaryjoin="and_(PDBResidue.PDBFileID==PDBChain.PDBFileID, PDBResidue.Chain==PDBChain.Chain)")
+    residues = relationship('PDBResidue', viewonly=True, primaryjoin="and_(PDBResidue.PDBFileID==PDBChain.PDBFileID, PDBResidue.Chain==PDBChain.Chain)")
 
     def __init__(self, **kwargs):
         super(PDBChain, self).__init__(**kwargs)
@@ -239,10 +239,10 @@ class PDBMolecule(DeclarativeBase):
     OtherDetails = Column(String(256), nullable=True)
 
     # Parent relationships
-    pdb_file = relationship('PDBFile', primaryjoin="PDBMolecule.PDBFileID==PDBFile.ID")
+    pdb_file = relationship('PDBFile', viewonly=True, primaryjoin="PDBMolecule.PDBFileID==PDBFile.ID")
 
     # Children relationships
-    chains = relationship("PDBMoleculeChain", primaryjoin="and_(PDBMoleculeChain.PDBFileID==PDBMolecule.PDBFileID, PDBMoleculeChain.MoleculeID==PDBMolecule.MoleculeID)")
+    chains = relationship("PDBMoleculeChain", viewonly=True, primaryjoin="and_(PDBMoleculeChain.PDBFileID==PDBMolecule.PDBFileID, PDBMoleculeChain.MoleculeID==PDBMolecule.MoleculeID)")
 
     def __repr__(self):
         return 'PDBMolecule ({0}-{1}). Name: {2}. Organism: {3}'.format(self.PDBFileID, self.MoleculeID, '/'.join([s for s in [self.Name or '', self.Synonym or ''] if s]), self.Organism or 'N/A')
@@ -256,8 +256,8 @@ class PDBMoleculeChain(DeclarativeBase):
     Chain = Column(String(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
 
     # Parent relationships
-    pdb_molecule = relationship('PDBMolecule', primaryjoin="and_(PDBMoleculeChain.PDBFileID==PDBMolecule.PDBFileID, PDBMoleculeChain.MoleculeID==PDBMolecule.MoleculeID)")
-    pdb_chain = relationship('PDBChain', primaryjoin="and_(PDBMoleculeChain.PDBFileID==PDBChain.PDBFileID, PDBMoleculeChain.Chain==PDBChain.Chain)")
+    pdb_molecule = relationship('PDBMolecule', viewonly=True, primaryjoin="and_(PDBMoleculeChain.PDBFileID==PDBMolecule.PDBFileID, PDBMoleculeChain.MoleculeID==PDBMolecule.MoleculeID)")
+    pdb_chain = relationship('PDBChain', viewonly=True, primaryjoin="and_(PDBMoleculeChain.PDBFileID==PDBChain.PDBFileID, PDBMoleculeChain.Chain==PDBChain.Chain)")
 
     def __repr__(self):
         return 'PDBMoleculeChain ({0}-{1}-{2}).'.format(self.PDBFileID, self.MoleculeID, self.Chain)
@@ -283,10 +283,10 @@ class PDBResidue(DeclarativeBase):
     ComplexDSSP = Column(String(1), nullable=True)
 
     # Parent relationships
-    pdb_chain = relationship('PDBChain', primaryjoin="and_(PDBResidue.PDBFileID==PDBChain.PDBFileID, PDBResidue.Chain==PDBChain.Chain)")
+    pdb_chain = relationship('PDBChain', viewonly=True, primaryjoin="and_(PDBResidue.PDBFileID==PDBChain.PDBFileID, PDBResidue.Chain==PDBChain.Chain)")
 
     # Child relationships
-    residue = relationship('AminoAcid', primaryjoin="PDBResidue.ResidueAA==AminoAcid.Code")
+    residue = relationship('AminoAcid', viewonly=True, primaryjoin="PDBResidue.ResidueAA==AminoAcid.Code")
 
     def __repr__(self):
         return 'PDBResidue {0}. {1} {2} {3} ({4}). Exposure: {5}. DSSP: {6}.'.format(self.residue.LongCode, self.PDBFileID, self.Chain, (self.ResidueAA + self.ResidueID.strip()).ljust(5), self.ResidueType, self.ComplexExposure, self.ComplexDSSP)
@@ -462,7 +462,7 @@ class PPIPDBSet(DeclarativeBase):
     Notes = Column(String(1024), nullable=True)
 
     # Relationships
-    partner_chains = relationship('PPIPDBPartnerChain', primaryjoin="and_(PPIPDBSet.PPComplexID==PPIPDBPartnerChain.PPComplexID, PPIPDBSet.SetNumber==PPIPDBPartnerChain.SetNumber)", order_by="PPIPDBPartnerChain.Side, PPIPDBPartnerChain.ChainIndex")
+    partner_chains = relationship('PPIPDBPartnerChain', viewonly=True, primaryjoin="and_(PPIPDBSet.PPComplexID==PPIPDBPartnerChain.PPComplexID, PPIPDBSet.SetNumber==PPIPDBPartnerChain.SetNumber)", order_by="PPIPDBPartnerChain.Side, PPIPDBPartnerChain.ChainIndex")
 
     def __repr__(self):
         d = dict(L = '', R = '')
@@ -542,8 +542,8 @@ class PPMutagenesis(DeclarativeBase):
     SKEMPI_KEY = Column(String(256), nullable=True)
 
     # Relationships
-    complex = relationship('PPComplex', primaryjoin="PPMutagenesis.PPComplexID==PPComplex.ID")
-    pdb_mutations = relationship('PPMutagenesisPDBMutation', primaryjoin="PPMutagenesis.ID==PPMutagenesisPDBMutation.PPMutagenesisID")
+    complex = relationship('PPComplex', viewonly=True, primaryjoin="PPMutagenesis.PPComplexID==PPComplex.ID")
+    pdb_mutations = relationship('PPMutagenesisPDBMutation', viewonly=True, primaryjoin="PPMutagenesis.ID==PPMutagenesisPDBMutation.PPMutagenesisID")
 
 
 class PPMutagenesisMutation(DeclarativeBase):
@@ -573,12 +573,12 @@ class PPMutagenesisPDBMutation(DeclarativeBase):
     MutantAA = Column(String(1), ForeignKey('AminoAcid.Code'), ForeignKey('PPMutagenesisMutation.MutantAA'), nullable=False)
 
     # Parent relationships
-    pdb_residue = relationship('PDBResidue', primaryjoin="and_(PDBResidue.PDBFileID==PPMutagenesisPDBMutation.PDBFileID, PDBResidue.Chain==PPMutagenesisPDBMutation.Chain, PDBResidue.ResidueID==PPMutagenesisPDBMutation.ResidueID, PDBResidue.ResidueAA==PPMutagenesisPDBMutation.WildTypeAA)")
-    wt_aa = relationship('AminoAcid', primaryjoin="and_(AminoAcid.Code==PPMutagenesisPDBMutation.WildTypeAA)")
-    mut_aa = relationship('AminoAcid', primaryjoin="and_(AminoAcid.Code==PPMutagenesisPDBMutation.WildTypeAA)")
-    pp_mutagenesis_mutation = relationship('PPMutagenesisMutation', primaryjoin="and_(PPMutagenesisMutation.ID==PPMutagenesisPDBMutation.PPMutagenesisMutationID, PPMutagenesisMutation.PPMutagenesisID==PPMutagenesisPDBMutation.PPMutagenesisID, PPMutagenesisMutation.WildTypeAA==PPMutagenesisPDBMutation.WildTypeAA, PPMutagenesisMutation.MutantAA==PPMutagenesisPDBMutation.MutantAA)")
-    ppi_pdb_partner_chain = relationship('PPIPDBPartnerChain', primaryjoin="and_(PPIPDBPartnerChain.PPComplexID==PPMutagenesisPDBMutation.PPComplexID, PPIPDBPartnerChain.SetNumber==PPMutagenesisPDBMutation.SetNumber, PPIPDBPartnerChain.PDBFileID==PPMutagenesisPDBMutation.PDBFileID, PPIPDBPartnerChain.Chain==PPMutagenesisPDBMutation.Chain)")
-    pdb_residue = relationship('PPMutagenesis', primaryjoin="and_(PPMutagenesis.ID==PPMutagenesisPDBMutation.PPMutagenesisID, PPMutagenesis.PPComplexID==PPMutagenesisPDBMutation.PPComplexID)")
+    pdb_residue = relationship('PDBResidue', viewonly=True, primaryjoin="and_(PDBResidue.PDBFileID==PPMutagenesisPDBMutation.PDBFileID, PDBResidue.Chain==PPMutagenesisPDBMutation.Chain, PDBResidue.ResidueID==PPMutagenesisPDBMutation.ResidueID, PDBResidue.ResidueAA==PPMutagenesisPDBMutation.WildTypeAA)")
+    wt_aa = relationship('AminoAcid', viewonly=True, primaryjoin="and_(AminoAcid.Code==PPMutagenesisPDBMutation.WildTypeAA)")
+    mut_aa = relationship('AminoAcid', viewonly=True, primaryjoin="and_(AminoAcid.Code==PPMutagenesisPDBMutation.WildTypeAA)")
+    pp_mutagenesis_mutation = relationship('PPMutagenesisMutation', viewonly=True, primaryjoin="and_(PPMutagenesisMutation.ID==PPMutagenesisPDBMutation.PPMutagenesisMutationID, PPMutagenesisMutation.PPMutagenesisID==PPMutagenesisPDBMutation.PPMutagenesisID, PPMutagenesisMutation.WildTypeAA==PPMutagenesisPDBMutation.WildTypeAA, PPMutagenesisMutation.MutantAA==PPMutagenesisPDBMutation.MutantAA)")
+    ppi_pdb_partner_chain = relationship('PPIPDBPartnerChain', viewonly=True, primaryjoin="and_(PPIPDBPartnerChain.PPComplexID==PPMutagenesisPDBMutation.PPComplexID, PPIPDBPartnerChain.SetNumber==PPMutagenesisPDBMutation.SetNumber, PPIPDBPartnerChain.PDBFileID==PPMutagenesisPDBMutation.PDBFileID, PPIPDBPartnerChain.Chain==PPMutagenesisPDBMutation.Chain)")
+    pdb_residue = relationship('PPMutagenesis', viewonly=True, primaryjoin="and_(PPMutagenesis.ID==PPMutagenesisPDBMutation.PPMutagenesisID, PPMutagenesis.PPComplexID==PPMutagenesisPDBMutation.PPComplexID)")
 
 
 #######################################################
@@ -623,11 +623,11 @@ class UserPPDataSetExperiment(DeclarativeBase):
     IsComplex = Column(TINYINT(1), ForeignKey('PPIPDBSet.IsComplex'), nullable=False)
 
     # Parent relationships
-    ppi_pdb_partner_chain = relationship('PPIPDBPartnerChain', primaryjoin="and_(PPIPDBPartnerChain.PDBFileID==UserPPDataSetExperiment.PDBFileID, PPIPDBPartnerChain.PPComplexID==UserPPDataSetExperiment.PPComplexID, PPIPDBPartnerChain.SetNumber==UserPPDataSetExperiment.SetNumber)")
-    ppi_pdb_set = relationship('PPIPDBSet', primaryjoin="and_(PPIPDBSet.PPComplexID==UserPPDataSetExperiment.PPComplexID, PPIPDBSet.SetNumber==UserPPDataSetExperiment.SetNumber, PPIPDBSet.IsComplex==UserPPDataSetExperiment.IsComplex)")
-    complex = relationship('PPComplex', primaryjoin="UserPPDataSetExperiment.PPComplexID==PPComplex.ID")
-    user_dataset = relationship('UserDataSet', primaryjoin="UserPPDataSetExperiment.UserDataSetID==UserDataSet.ID")
-    mutagenesis = relationship('PPMutagenesis', primaryjoin="UserPPDataSetExperiment.PPMutagenesisID==PPMutagenesis.ID")
+    ppi_pdb_partner_chain = relationship('PPIPDBPartnerChain', viewonly=True, primaryjoin="and_(PPIPDBPartnerChain.PDBFileID==UserPPDataSetExperiment.PDBFileID, PPIPDBPartnerChain.PPComplexID==UserPPDataSetExperiment.PPComplexID, PPIPDBPartnerChain.SetNumber==UserPPDataSetExperiment.SetNumber)")
+    ppi_pdb_set = relationship('PPIPDBSet', viewonly=True, primaryjoin="and_(PPIPDBSet.PPComplexID==UserPPDataSetExperiment.PPComplexID, PPIPDBSet.SetNumber==UserPPDataSetExperiment.SetNumber, PPIPDBSet.IsComplex==UserPPDataSetExperiment.IsComplex)")
+    complex = relationship('PPComplex', viewonly=True, primaryjoin="UserPPDataSetExperiment.PPComplexID==PPComplex.ID")
+    user_dataset = relationship('UserDataSet', viewonly=True, primaryjoin="UserPPDataSetExperiment.UserDataSetID==UserDataSet.ID")
+    mutagenesis = relationship('PPMutagenesis', viewonly=True, primaryjoin="UserPPDataSetExperiment.PPMutagenesisID==PPMutagenesis.ID")
 
     def __repr__(self):
         mutations = []
@@ -722,9 +722,9 @@ class PredictionPPI(DeclarativeBase):
     DevelopmentProtocolID = Column(Integer, nullable=True)
 
     # Relationships
-    files = relationship('PredictionPPIFile', primaryjoin="PredictionPPI.ID==PredictionPPIFile.PredictionPPIID")
-    mutagenesis = relationship('PPMutagenesis', primaryjoin="PredictionPPI.PPMutagenesisID==PPMutagenesis.ID")
-    user_dataset_experiment = relationship('UserPPDataSetExperiment', primaryjoin="PredictionPPI.UserPPDataSetExperimentID==UserPPDataSetExperiment.ID")
+    files = relationship('PredictionPPIFile', viewonly=True, primaryjoin="PredictionPPI.ID==PredictionPPIFile.PredictionPPIID")
+    mutagenesis = relationship('PPMutagenesis', viewonly=True, primaryjoin="PredictionPPI.PPMutagenesisID==PPMutagenesis.ID")
+    user_dataset_experiment = relationship('UserPPDataSetExperiment', viewonly=True, primaryjoin="PredictionPPI.UserPPDataSetExperimentID==UserPPDataSetExperiment.ID")
 
     def __repr__(self):
         return 'Prediction #{0}, {1} ({2}): Mutagenesis #{3}.\n{4}.'.format(self.ID, self.PredictionSet, self.Status, self.mutagenesis.ID, self.user_dataset_experiment)
@@ -742,7 +742,7 @@ class PredictionPPIFile(DeclarativeBase):
     Stage = Column(Enum('Input','Output','Analysis'), nullable=True)
 
     # Relationships
-    content = relationship('FileContent', primaryjoin="PredictionPPIFile.FileContentID==FileContent.ID")
+    content = relationship('FileContent', viewonly=True, primaryjoin="PredictionPPIFile.FileContentID==FileContent.ID")
 #qry = 'SELECT {0}File.*, FileContent.Content, FileContent.MIMEType, FileContent.Filesize, FileContent.MD5HexDigest FROM {0}File INNER JOIN FileContent ON FileContentID=FileContent.ID WHERE {0}ID=%s'.format(*params)
 
 
