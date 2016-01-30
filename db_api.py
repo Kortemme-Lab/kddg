@@ -953,7 +953,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         prediction_record = self.get_session().query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
         for pf in prediction_record.files:
             fcontent = pf.content
-            r = row_to_dict(pf, DeclarativeBase)
+            r = row_to_dict(pf)
             r['Content'] = fcontent.Content
             r['MIMEType'] = fcontent.MIMEType
             r['Filesize'] = fcontent.Filesize
@@ -979,7 +979,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         tsession = self.get_session()
         prediction_set = tsession.query(dbmodel.PredictionSet).filter(dbmodel.PredictionSet.ID == prediction_set_id)
         if prediction_set.count() == 1:
-            d = row_to_dict(prediction_set.one(), DeclarativeBase)
+            d = row_to_dict(prediction_set.one())
             d['Job status summary'] = self._get_prediction_set_status_counts(prediction_set_id)
             return d
         return None
@@ -1285,6 +1285,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     @job_creator
     def add_prediction_run(self, *args, **kwargs):
         '''Adds all jobs corresponding to a user dataset e.g. add_prediction_run("my first run", "AllBindingAffinityData", tagged_subset = "ZEMu").'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
+
+
+    @job_creator
+    def merge_prediction_run(self, from_prediction_set_id, to_prediction_set_id, create_if_does_not_exist = True, series_color = 'ff0000'):
+        '''Adds all of the jobs from from_prediction_set_id to to_prediction_set_id.
+           When to_prediction_set_id is empty, this function makes a clone of from_prediction_set_id.'''
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 

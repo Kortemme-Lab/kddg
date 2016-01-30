@@ -23,6 +23,7 @@ import gzip
 import shutil
 import sqlite3
 import cPickle as pickle
+import datetime
 
 import numpy
 from sqlalchemy import and_
@@ -34,7 +35,7 @@ from klab.fs.fsio import read_file, write_temp_file
 from klab.rosetta.input_files import Mutfile, Resfile
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 from klab.bio.alignment import ScaffoldModelChainMapper
-from klab.db.sqlalchemy_interface import row_to_dict
+from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction
 
 import db_schema as dbmodel
 from api_layers import *
@@ -264,7 +265,7 @@ class BindingAffinityDDGInterface(ddG):
         assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record.PPMutagenesisID)
 
         # Convert the record to dict
-        prediction_record = row_to_dict(prediction_record, DeclarativeBase)
+        prediction_record = row_to_dict(prediction_record)
         prediction_record['Files'] = {}
         if include_files:
             prediction_record['Files'] = self.get_job_files(prediction_id, truncate_content = truncate_content)
@@ -664,6 +665,69 @@ class BindingAffinityDDGInterface(ddG):
         ude = ude[0]
         #colortext.message(pprint.pformat(ude))
         return self._add_job(prediction_set_id, protocol_id, ude['PPMutagenesisID'], ude['PPComplexID'], ude['PDBFileID'], ude['SetNumber'], extra_rosetta_command_flags = extra_rosetta_command_flags, user_dataset_experiment_id = user_dataset_experiment_id, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
+
+
+    @job_creator
+    def merge_prediction_run(self, from_prediction_set_id, to_prediction_set_id, create_if_does_not_exist = True, series_color = 'ff0000', description = None):
+
+        # Start a new transaction
+        tsession = self.get_session(new_session = True)
+        try:
+            # Look up the source prediction set details
+            try:
+                from_prediction_set = self.get_session().query(dbmodel.PredictionSet).filter(dbmodel.PredictionSet.ID == from_prediction_set_id).one()
+            except Exception, e:
+                print(str(e))
+                print(traceback.format_exc())
+                raise Exception('Could not retrieve details for source PredictionSet "{0}".'.format(from_prediction_set_id))
+
+            # Look up or create the target prediction set details
+            try:
+                to_prediction_set_details = self.get_session().query(dbmodel.PredictionSet).filter(dbmodel.PredictionSet.ID == to_prediction_set_id).one()
+            except:
+                if create_if_does_not_exist:
+                    prediction_set_dict = row_to_dict(from_prediction_set)
+                    prediction_set_dict['ID'] = to_prediction_set_id
+                    prediction_set_dict['EntryDate'] = datetime.datetime.now()
+                    prediction_set_dict['Description'] = description or 'Clone of {0}'.format(from_prediction_set_id)
+                    db_ligand_synonym = get_or_create_in_transaction(tsession, dbmodel.PredictionSet, prediction_set_dict)
+                else:
+                    raise Exception('Could not retrieve details for target PredictionSet "{0}". To create a new PredictionSet, set create_if_does_not_exist to True.'.format(to_prediction_set_id))
+
+            # Create prediction records
+            num_predictions = len(from_prediction_set.ppi_predictions)
+            colortext.message('Merging/cloning prediction set.'.format())
+            c = 1
+            for prediction in from_prediction_set.ppi_predictions:
+                colortext.wyellow('{0}/{1}: Prediction #{2}\r'.format(c, num_predictions, str(prediction.ID).ljust(15)))
+
+                # Add a prediction record if it does not already exist
+                new_prediction_id = None
+                if self.get_session().query(self.PredictionTable).filter(and_(
+                        self.PredictionTable.PredictionSet == to_prediction_set_id,
+                        self.PredictionTable.UserPPDataSetExperimentID == prediction.UserPPDataSetExperimentID,
+                        self.PredictionTable.ProtocolID == prediction.ProtocolID)).count() > 0:
+                    continue
+                else:
+                    new_prediction = prediction.clone(to_prediction_set_id)
+                    tsession.add(new_prediction)
+                    tsession.flush()
+                    new_prediction_id = new_prediction.ID
+
+                # Add the prediction file records. The underlying FileContent tables will already exist.
+                for prediction_file in prediction.files:
+                    new_prediction_file = prediction_file.clone(new_prediction_id)
+                    tsession.add(new_prediction_file)
+                    tsession.flush()
+                c += 1
+            print('\nSuccess.\n')
+            tsession.commit()
+            tsession.close()
+        except:
+            colortext.error('Failure.')
+            tsession.rollback()
+            tsession.close()
+            raise
 
 
     @job_creator

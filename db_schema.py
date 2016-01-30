@@ -697,6 +697,11 @@ class PredictionSet(DeclarativeBase):
     CanBeDeleted = Column(TINYINT(1), nullable=False, default=0)
     EntryDate = Column(TIMESTAMP, nullable=False)
 
+    # relationships
+    ppi_predictions = relationship('PredictionPPI', viewonly=True, primaryjoin="PredictionSet.ID==PredictionPPI.PredictionSet")
+
+
+prediction_ppi_clone_null_fields = ['EntryDate', 'StartDate', 'EndDate', 'Errors', 'AdminCommand', 'maxvmem', 'DDGTime']
 
 class PredictionPPI(DeclarativeBase):
     __tablename__ = 'PredictionPPI'
@@ -726,8 +731,37 @@ class PredictionPPI(DeclarativeBase):
     mutagenesis = relationship('PPMutagenesis', viewonly=True, primaryjoin="PredictionPPI.PPMutagenesisID==PPMutagenesis.ID")
     user_dataset_experiment = relationship('UserPPDataSetExperiment', viewonly=True, primaryjoin="PredictionPPI.UserPPDataSetExperimentID==UserPPDataSetExperiment.ID")
 
+
     def __repr__(self):
-        return 'Prediction #{0}, {1} ({2}): Mutagenesis #{3}.\n{4}.'.format(self.ID, self.PredictionSet, self.Status, self.mutagenesis.ID, self.user_dataset_experiment)
+        try:
+            return 'Prediction #{0}, {1} ({2}): Mutagenesis #{3}.\n{4}.'.format(self.ID, self.PredictionSet, self.Status, self.mutagenesis.ID, self.user_dataset_experiment)
+        except:
+            raise Exception('The __repr__ function failed on this Prediction. Was it created using the .clone() method? This function has a known issue.')
+
+
+    def clone(self, prediction_set):
+        '''Returns a new fresh PredictionSet object to be inserted into the database.
+
+           Warning: This code returns a PredictionSet object but the relationships cannot be called on this object e.g.
+              print new_prediction.mutagenesis.ID
+           will fail. I am guessing that the relationships are set up on object instantiation.
+
+           todo: I think the correct way to do this is to use the expunge and transient functions on detached objects.
+                 See http://docs.sqlalchemy.org/en/rel_1_1/orm/session_api.html#sqlalchemy.orm.session.make_transient
+                 and http://stackoverflow.com/questions/20112850/sqlalchemy-clone-table-row-with-relations?lq=1
+        '''
+        assert(prediction_set != self.PredictionSet)
+        fieldnames = [c.name for c in list(sqlalchemy_inspect(PredictionPPI).columns)]
+        new_prediction = PredictionPPI()
+        for c in fieldnames:
+            if c in prediction_ppi_clone_null_fields:
+                setattr(new_prediction, c, None)
+            else:
+                setattr(new_prediction, c, getattr(self, c))
+        new_prediction.ID = None
+        new_prediction.PredictionSet = prediction_set
+        new_prediction.Status = 'queued'
+        return new_prediction
 
 
 class PredictionPPIFile(DeclarativeBase):
@@ -743,7 +777,23 @@ class PredictionPPIFile(DeclarativeBase):
 
     # Relationships
     content = relationship('FileContent', viewonly=True, primaryjoin="PredictionPPIFile.FileContentID==FileContent.ID")
-#qry = 'SELECT {0}File.*, FileContent.Content, FileContent.MIMEType, FileContent.Filesize, FileContent.MD5HexDigest FROM {0}File INNER JOIN FileContent ON FileContentID=FileContent.ID WHERE {0}ID=%s'.format(*params)
+
+    def clone(self, prediction_id):
+        '''Returns a new fresh PredictionPPIFile object to be inserted into the database.
+
+           Warning: This code returns a PredictionPPIFile object but the relationships cannot be called on this object e.g.
+              print new_prediction_file.content
+           will fail. I am guessing that the relationships are set up on object instantiation. See comment on PredictionPPI.clone() above.
+        '''
+
+        assert(prediction_id != self.PredictionPPIID)
+        fieldnames = [c.name for c in list(sqlalchemy_inspect(PredictionPPIFile).columns)]
+        new_prediction_file = PredictionPPIFile()
+        for c in fieldnames:
+            setattr(new_prediction_file, c, getattr(self, c))
+        new_prediction_file.ID = None
+        new_prediction_file.PredictionPPIID = prediction_id
+        return new_prediction_file
 
 
 class PredictionPPIStructureScore(DeclarativeBase):
