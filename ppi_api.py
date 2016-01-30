@@ -256,7 +256,9 @@ class BindingAffinityDDGInterface(ddG):
 
         # Read the UserPPDataSetExperiment details
         user_dataset_experiment_id = prediction_record.UserPPDataSetExperimentID
+        colortext.pcyan('get_user_dataset_experiment_details start')
         ude_details = self.get_user_dataset_experiment_details(user_dataset_experiment_id)
+        colortext.pcyan('get_user_dataset_experiment_details stop')
         assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record.PPMutagenesisID)
 
         # Convert the record to dict
@@ -366,7 +368,9 @@ class BindingAffinityDDGInterface(ddG):
     @informational_job
     def get_user_dataset_experiment_details(self, user_dataset_experiment_id, user_dataset_id = None):
         if user_dataset_id:
+            colortext.ppurple('PRE-SELECT')
             ude = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s AND UserDataSetID=%s', parameters=(user_dataset_experiment_id, user_dataset_id))
+            colortext.ppurple('POST-SELECT')
             if len(ude) != 1:
                 raise colortext.Exception('User dataset experiment %d does not exist for/correspond to the user dataset %s.' % (user_dataset_experiment_id, user_dataset_id))
         else:
