@@ -14,7 +14,7 @@ import copy
 import zipfile
 import datetime
 
-from sqlalchemy import and_
+from sqlalchemy import and_, update
 from sqlalchemy.orm import load_only, Load
 
 import klab.cluster_template.parse_settings as parse_settings
@@ -282,15 +282,15 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                         else:
                             status = 'failed'
 
-                    prediction_record = tsession.query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one().update({
-                        prediction_record.StartDate : starting_time,
-                        prediction_record.EndDate : ending_time,
-                        prediction_record.Status : status,
-                        prediction_record.maxvmem : virtual_memory_usage,
-                        prediction_record.DDGTime : elapsed_time,
-                        prediction_record.ERRORS : str(return_code)
-                    })
-                    prediction_record.commit()
+                    prediction_record = tsession.query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
+                    prediction_record.StartDate = starting_time
+                    prediction_record.EndDate = ending_time
+                    prediction_record.Status = status
+                    prediction_record.maxvmem = virtual_memory_usage
+                    prediction_record.DDGTime = elapsed_time
+                    prediction_record.ERRORS = str(return_code)
+                    tsession.flush()
+                    tsession.commit()
 
 
                     if verbose:
@@ -435,6 +435,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         author = score_method_details['Authors']
         if not chains_to_move:
             job_details = self.get_job_details(prediction_id)
+            job_details['Files'] = None
             substitution_parameters = json.loads(job_details['JSONParameters'])
             chains_to_move = substitution_parameters['%%chainstomove%%']
 

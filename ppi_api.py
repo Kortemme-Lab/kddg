@@ -74,7 +74,9 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
                 parsing_config_section = False
             elif parsing_config_section:
                 if '=' in line:
-                    key, val = line.strip().split('=')
+                    tokens = line.strip().split('=')
+                    key, val = tokens[0], '='.join(tokens[1:]) # values may contain '=' signs
+                    key, val = key.strip(), val.strip()
                     if key == 'user':
                         user = val
                     elif key == 'password':
