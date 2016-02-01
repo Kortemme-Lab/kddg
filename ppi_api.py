@@ -700,6 +700,7 @@ class BindingAffinityDDGInterface(ddG):
             c = 1
             for prediction in from_prediction_set.ppi_predictions:
                 colortext.wyellow('{0}/{1}: Prediction #{2}\r'.format(c, num_predictions, str(prediction.ID).ljust(15)))
+                c += 1
 
                 # Add a prediction record if it does not already exist
                 new_prediction_id = None
@@ -719,7 +720,7 @@ class BindingAffinityDDGInterface(ddG):
                     new_prediction_file = prediction_file.clone(new_prediction_id)
                     tsession.add(new_prediction_file)
                     tsession.flush()
-                c += 1
+
             print('\nSuccess.\n')
             tsession.commit()
             tsession.close()

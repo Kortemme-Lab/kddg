@@ -60,13 +60,6 @@ import time
 import numpy
 import pandas
 
-try:
-    import magic
-except ImportError:
-    print('FAILED TO IMPORT magic PACKAGE.')
-    pass
-
-
 from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
@@ -97,6 +90,12 @@ from db_schema import User as DBUser
 from db_schema import Publication, PublicationAuthor, PublicationIdentifier, DeclarativeBase
 from api_layers import *
 import ddgdbapi
+
+try:
+    import magic
+except ImportError:
+    colortext.error('Failed to import magic package. This failure will prevent you from being able to import new file content into the database.')
+    pass
 
 
 class DataImportInterface(object):
@@ -435,6 +434,30 @@ class DataImportInterface(object):
         return existing_filecontent_id
 
 
+    @informational_file
+    def get_file_id_using_old_interface(self, content, db_cursor = None, hexdigest = None):
+        '''Searches the database to see whether the FileContent already exists. The search uses the digest and filesize as
+           heuristics to speed up the search. If a file has the same hex digest and file size then we do a straight comparison
+           of the contents.
+           If the FileContent exists, the value of the ID field is returned else None is returned.
+           '''
+        # @todo: This function is deprecated. Use get_file_id instead.
+
+        existing_filecontent_id = None
+        hexdigest = hexdigest or get_hexdigest(content)
+        filesize = len(content)
+        if db_cursor:
+            db_cursor.execute('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', (hexdigest, filesize))
+            results = db_cursor.fetchall()
+        else:
+            results = self.DDG_db.execute_select('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', parameters=(hexdigest, filesize))
+        for r in results:
+            if r['Content'] == content:
+                assert(existing_filecontent_id == None) # content uniqueness check
+                existing_filecontent_id = r['ID']
+        return existing_filecontent_id
+
+
     def _add_file_content(self, file_content, tsession = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
         '''Takes file file_content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
            a new record if necessary, and returns the associated FileContent.ID value.'''
@@ -449,16 +472,15 @@ class DataImportInterface(object):
 
         # Create the FileContent record if the file is a new file
         if existing_filecontent_id == None:
-            mime_type = None
-            if forced_mime_type:
-                mime_type = forced_mime_type
-            else:
-                temporary_file = write_temp_file('/tmp', file_content, ftype = 'wb')
-                m=magic.open(magic.MAGIC_MIME_TYPE) # see mime.__dict__ for more values e.g. MAGIC_MIME, MAGIC_MIME_ENCODING, MAGIC_NONE
-                m.load()
-                mime_type = m.file(temporary_file)
-                os.remove(temporary_file)
 
+            # Determing the MIME type
+            mime_type = forced_mime_type
+            if not mime_type:
+                # Note: in case the wrong mime-types are being returned, try saving to file first and then calling magic.from_file.
+                # See commit c62883b58649bd813bf022f7d1193abb06f1676d for the code. This used to be necessary for some odd reason.
+                mime_type = magic.from_buffer(file_content, mime = True)
+
+            # Create the database record
             file_content_record = get_or_create_in_transaction(tsession, FileContent, dict(
                 Content = file_content,
                 MIMEType = mime_type,
@@ -466,13 +488,49 @@ class DataImportInterface(object):
                 MD5HexDigest = hexdigest
             ), missing_columns = ['ID'])
             existing_filecontent_id = file_content_record.ID
-            #if db_cursor:
-            #    sql, params, record_exists = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
-            #    db_cursor.execute(sql, params)
-            #else:
-            #    self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
-            #existing_filecontent_id = self.get_file_id(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
-            #assert(existing_filecontent_id != None)
+
+        assert(existing_filecontent_id != None)
+        return existing_filecontent_id
+
+
+    def _add_file_content_using_old_interface(self, file_content, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
+        '''Takes file content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
+           a new record if necessary, and returns the associated FileContent.ID value.'''
+
+        # todo: This function is deprecated. Use _add_file_content instead.
+
+        if rm_trailing_line_whitespace:
+            file_content = remove_trailing_line_whitespace(file_content)
+
+        # Check to see whether the file has been uploaded before
+        hexdigest = get_hexdigest(file_content)
+        existing_filecontent_id = self.get_file_id_using_old_interface(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
+
+        # Create the FileContent record if the file is a new file
+        if existing_filecontent_id == None:
+
+            # Determing the MIME type
+            mime_type = forced_mime_type
+            if not mime_type:
+                # Note: in case the wrong mime-types are being returned, try saving to file first and then calling magic.from_file.
+                # See commit c62883b58649bd813bf022f7d1193abb06f1676d for the code. This used to be necessary for some odd reason.
+                mime_type = magic.from_buffer(file_content, mime = True)
+
+            # Create the database record
+            d = dict(
+                Content = content,
+                MIMEType = mime_type,
+                Filesize = len(content),
+                MD5HexDigest = hexdigest
+            )
+            if db_cursor:
+                sql, params, record_exists = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
+                db_cursor.execute(sql, params)
+            else:
+                self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
+            existing_filecontent_id = self.get_file_id(content, db_cursor = db_cursor, hexdigest = hexdigest)
+
+        assert(existing_filecontent_id != None)
         return existing_filecontent_id
 
 

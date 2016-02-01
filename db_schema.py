@@ -711,7 +711,7 @@ class PredictionPPI(DeclarativeBase):
     PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesis.ID'), nullable=False)
     UserPPDataSetExperimentID = Column(Integer, ForeignKey('UserPPDataSetExperiment.ID'), nullable=False)
     ProtocolID = Column(String(256), ForeignKey('Protocol.ID'), nullable=True)
-    JSONParameters = Column(Text, nullable=True)
+    JSONParameters = Column(Text, nullable=True) # todo: this should be deferred if possible but last time we set it as deferred it caused a bug (it was quicker to just remove the deferred call than debug)
     EntryDate = Column(TIMESTAMP, nullable=False)
     StartDate = Column(DateTime, nullable=True)
     EndDate = Column(DateTime, nullable=True)
