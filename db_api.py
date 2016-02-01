@@ -1154,7 +1154,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             SeriesAlpha         = series_alpha,
             Description         = description,
         )
-        self.DDG_db.insertDictIfNew("PredictionSet", d, ['ID'])
+        self.DDG_db.insertDictIfNew("PredictionSet", d, ['ID'], locked = False)
         return True
 
     def prediction_set_exists(self, prediction_set_id):
@@ -1922,7 +1922,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                                     ))
             self.DDG_db.insertDictIfNew('AnalysisDataFrame', d, ['PredictionSet', 'DataFrameType', 'ContainsExperimentalData', 'ScoreMethodID', 'UseSingleReportedValue', 'TopX', 'BurialCutoff',
                                                                  'StabilityClassicationExperimentalCutoff', 'StabilityClassicationPredictedCutoff',
-                                                                 'IncludesDerivedMutations', 'DDGAnalysisType'])
+                                                                 'IncludesDerivedMutations', 'DDGAnalysisType'], locked = False)
         else:
             benchmark_run.read_dataframe_from_content(hdf_store_blob)
 
@@ -2235,7 +2235,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     # Prediction setup interface
 
 
-    def _add_prediction_file(self, prediction_id, file_content, filename, filetype, filerole, stage, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
+    def _add_prediction_file(self, prediction_id, file_content, filename, filetype, filerole, stage, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None, file_content_id = None):
         '''This function adds file content to the database and then creates a record associating that content with a prediction.
            If db_cursor is passed then we call that directly. This is crucial for transactions as many of the database functions
            create new cursors which commit changes so transactions do not work properly.'''
@@ -2245,7 +2245,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         if filetype == 'PDB':
             forced_mime_type = forced_mime_type or 'chemical/x-pdb'
 
-        file_content_id = self._add_file_content(file_content, db_cursor = db_cursor, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
+        if file_content_id == None:
+            file_content_id = self._add_file_content(file_content, db_cursor = db_cursor, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
 
         # Link the file contents to the prediction
         d = dict(
@@ -2262,17 +2263,19 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 sql, params, record_exists = self.DDG_db.create_insert_dict_string('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
                 db_cursor.execute(sql, params)
             else:
-                self.DDG_db.insertDictIfNew('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
+                print 'magic d', d
+                self.DDG_db.insertDictIfNew('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'], locked = False)
         elif prediction_table == 'PredictionPPI':
             d['PredictionPPIID'] = prediction_id
             if db_cursor:
                 sql, params, record_exists = self.DDG_db.create_insert_dict_string('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
                 db_cursor.execute(sql, params)
             else:
-                self.DDG_db.insertDictIfNew('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
+                self.DDG_db.insertDictIfNew('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'], locked = False)
         else:
             raise('Invalid table "%s" passed.' % prediction_table)
 
+        return file_content_id
 
     def _add_residue_map_to_prediction(self, prediction_id, residue_mapping):
         assert(type(residue_mapping) == type(self.__dict__))

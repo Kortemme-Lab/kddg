@@ -518,17 +518,17 @@ class DataImportInterface(object):
 
             # Create the database record
             d = dict(
-                Content = content,
+                Content = file_content,
                 MIMEType = mime_type,
-                Filesize = len(content),
+                Filesize = len(file_content),
                 MD5HexDigest = hexdigest
             )
             if db_cursor:
                 sql, params, record_exists = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
                 db_cursor.execute(sql, params)
             else:
-                self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
-            existing_filecontent_id = self.get_file_id(content, db_cursor = db_cursor, hexdigest = hexdigest)
+                self.DDG_db.insertDictIfNew('FileContent', d, ['Content'], locked = False)
+            existing_filecontent_id = self.get_file_id(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
 
         assert(existing_filecontent_id != None)
         return existing_filecontent_id

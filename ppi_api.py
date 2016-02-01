@@ -259,9 +259,7 @@ class BindingAffinityDDGInterface(ddG):
 
         # Read the UserPPDataSetExperiment details
         user_dataset_experiment_id = prediction_record.UserPPDataSetExperimentID
-        colortext.pcyan('get_user_dataset_experiment_details start')
         ude_details = self.get_user_dataset_experiment_details(user_dataset_experiment_id)
-        colortext.pcyan('get_user_dataset_experiment_details stop')
         assert(ude_details['Mutagenesis']['PPMutagenesisID'] == prediction_record.PPMutagenesisID)
 
         # Convert the record to dict
@@ -618,6 +616,7 @@ class BindingAffinityDDGInterface(ddG):
         # All functions within the next with block should use the same database cursor.
         # The commands then function as parts of a transaction which is rolled back if errors occur within the block
         # or else is committed.
+        file_content_id = None
         self.DDG_db._get_connection()
         con = self.DDG_db.connection
         with con:
@@ -628,7 +627,7 @@ class BindingAffinityDDGInterface(ddG):
 
                 if rosetta_script:
                     # Add the Rosetta script to the database, not using cursor
-                    self._add_prediction_file(prediction_id, rosetta_script, os.path.basename(rosetta_script_file), 'RosettaScript', 'RosettaScript', 'Input', rm_trailing_line_whitespace = True)
+                    file_content_id = self._add_prediction_file(prediction_id, rosetta_script, os.path.basename(rosetta_script_file), 'RosettaScript', 'RosettaScript', 'Input', rm_trailing_line_whitespace = True, forced_mime_type = 'text/xml', file_content_id = file_content_id )
 
 
     @job_creator
