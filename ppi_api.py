@@ -1375,6 +1375,7 @@ class BindingAffinityDDGInterface(ddG):
             analysis_set_ids = [],
             prediction_set_series_names = {}, prediction_set_descriptions = {}, prediction_set_credits = {}, prediction_set_colors = {}, prediction_set_alphas = {},
             use_published_data = False,
+            allow_failures = False,
             use_existing_benchmark_data = True, recreate_graphs = False,
             include_derived_mutations = False,
             expectn = 50,
@@ -1451,7 +1452,7 @@ class BindingAffinityDDGInterface(ddG):
                 root_directory = root_directory, # where to find the
                 score_method_id = score_method_id,
                 expectn = expectn,
-                allow_failures = False,
+                allow_failures = allow_failures,
                 debug = debug,
                 restrict_to = restrict_to,
                 remove_cases = remove_cases,
