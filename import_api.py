@@ -60,13 +60,6 @@ import time
 import numpy
 import pandas
 
-try:
-    import magic
-except ImportError:
-    print('FAILED TO IMPORT magic PACKAGE.')
-    pass
-
-
 from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
@@ -97,6 +90,12 @@ from db_schema import User as DBUser
 from db_schema import Publication, PublicationAuthor, PublicationIdentifier, DeclarativeBase
 from api_layers import *
 import ddgdbapi
+
+try:
+    import magic
+except ImportError:
+    colortext.error('Failed to import magic package. This failure will prevent you from being able to import new file content into the database.')
+    pass
 
 
 class DataImportInterface(object):
@@ -473,28 +472,15 @@ class DataImportInterface(object):
 
         # Create the FileContent record if the file is a new file
         if existing_filecontent_id == None:
-            mime_type = None
-            if forced_mime_type:
-                mime_type = forced_mime_type
-            else:
-                temporary_file = write_temp_file('/tmp', file_content, ftype = 'wb')
 
-                # todo: remove this code after everything seems to work for a while
-                # the old API (Ubuntu python-magic) gave different results when using char buffers or file paths
-                # this code is left to test whether the new API (PyPi python-magic) has the same behavior
+            # Determing the MIME type
+            mime_type = forced_mime_type
+            if not mime_type:
+                # Note: in case the wrong mime-types are being returned, try saving to file first and then calling magic.from_file.
+                # See commit c62883b58649bd813bf022f7d1193abb06f1676d for the code. This used to be necessary for some odd reason.
+                mime_type = magic.from_buffer(file_content, mime = True)
 
-                mime_type_f = magic.from_file(temporary_file, mime = True)
-                mime_type_b = magic.from_buffer(content, mime = True)
-                if mime_type_f != mime_type_b:
-                    raise colortext.Exception('Fail case hit: magic.from_file detected "{0}", magic.from_buffer detected "{1}".'.format(mime_type_f, mime_type_b))
-                mime_type = mime_type_f
-
-                #m=magic.open(magic.MAGIC_MIME_TYPE) # see mime.__dict__ for more values e.g. MAGIC_MIME, MAGIC_MIME_ENCODING, MAGIC_NONE
-                #m.load()
-                #mime_type = m.file(temporary_file)
-
-                os.remove(temporary_file)
-
+            # Create the database record
             file_content_record = get_or_create_in_transaction(tsession, FileContent, dict(
                 Content = file_content,
                 MIMEType = mime_type,
@@ -502,65 +488,49 @@ class DataImportInterface(object):
                 MD5HexDigest = hexdigest
             ), missing_columns = ['ID'])
             existing_filecontent_id = file_content_record.ID
-            #if db_cursor:
-            #    sql, params, record_exists = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
-            #    db_cursor.execute(sql, params)
-            #else:
-            #    self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
-            #existing_filecontent_id = self.get_file_id(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
-            #assert(existing_filecontent_id != None)
+
+        assert(existing_filecontent_id != None)
         return existing_filecontent_id
 
 
-    def _add_file_content_using_old_interface(self, content, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
+    def _add_file_content_using_old_interface(self, file_content, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
         '''Takes file content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
            a new record if necessary, and returns the associated FileContent.ID value.'''
 
         # todo: This function is deprecated. Use _add_file_content instead.
 
         if rm_trailing_line_whitespace:
-            content = remove_trailing_line_whitespace(content)
+            file_content = remove_trailing_line_whitespace(file_content)
 
         # Check to see whether the file has been uploaded before
-        hexdigest = get_hexdigest(content)
-        existing_filecontent_id = self.get_file_id_using_old_interface(content, db_cursor = db_cursor, hexdigest = hexdigest)
+        hexdigest = get_hexdigest(file_content)
+        existing_filecontent_id = self.get_file_id_using_old_interface(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
 
         # Create the FileContent record if the file is a new file
         if existing_filecontent_id == None:
-            mime_type = None
-            if forced_mime_type:
-                mime_type = forced_mime_type
-            else:
-                temporary_file = write_temp_file('/tmp', content, ftype = 'wb')
 
-                # todo: remove this code after everything seems to work for a while
-                # the old API (Ubuntu python-magic) gave different results when using char buffers or file paths
-                # this code is left to test whether the new API (PyPi python-magic) has the same behavior
-                mime_type_f = magic.from_file(temporary_file, mime = True)
-                mime_type_b = magic.from_buffer(content, mime = True)
-                if mime_type_f != mime_type_b:
-                    raise colortext.Exception('Fail case hit: magic.from_file detected "{0}", magic.from_buffer detected "{1}".'.format(mime_type_f, mime_type_b))
-                mime_type = mime_type_f
-                #m=magic.open(magic.MAGIC_MIME_TYPE) # see mime.__dict__ for more values e.g. MAGIC_MIME, MAGIC_MIME_ENCODING, MAGIC_NONE
-                #m.load()
-                #mime_type = m.file(temporary_file)
-                os.remove(temporary_file)
+            # Determing the MIME type
+            mime_type = forced_mime_type
+            if not mime_type:
+                # Note: in case the wrong mime-types are being returned, try saving to file first and then calling magic.from_file.
+                # See commit c62883b58649bd813bf022f7d1193abb06f1676d for the code. This used to be necessary for some odd reason.
+                mime_type = magic.from_buffer(file_content, mime = True)
 
+            # Create the database record
             d = dict(
                 Content = content,
                 MIMEType = mime_type,
                 Filesize = len(content),
                 MD5HexDigest = hexdigest
             )
-
             if db_cursor:
                 sql, params, record_exists = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
                 db_cursor.execute(sql, params)
             else:
                 self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
-                pass
             existing_filecontent_id = self.get_file_id(content, db_cursor = db_cursor, hexdigest = hexdigest)
-            assert(existing_filecontent_id != None)
+
+        assert(existing_filecontent_id != None)
         return existing_filecontent_id
 
 
