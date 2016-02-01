@@ -22,10 +22,6 @@ import zipfile
 import StringIO
 import gzip
 import pprint
-try:
-    import magic
-except ImportError:
-    pass
 import json
 
 from io import BytesIO
@@ -754,29 +750,6 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         d['ScoreType'] = score_type
         d['StructureID'] = structure_id
         return d
-
-
-    @informational_file
-    def get_file_id(self, content, db_cursor = None, hexdigest = None):
-        '''Searches the database to see whether the FileContent already exists. The search uses the digest and filesize as
-           heuristics to speed up the search. If a file has the same hex digest and file size then we do a straight comparison
-           of the contents.
-           If the FileContent exists, the value of the ID field is returned else None is returned.
-           '''
-        # @todo: this should be replaced with a call to importer.get_file_id
-        existing_filecontent_id = None
-        hexdigest = hexdigest or get_hexdigest(content)
-        filesize = len(content)
-        if db_cursor:
-            db_cursor.execute('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', (hexdigest, filesize))
-            results = db_cursor.fetchall()
-        else:
-            results = self.DDG_db.execute_select('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', parameters=(hexdigest, filesize))
-        for r in results:
-            if r['Content'] == content:
-                assert(existing_filecontent_id == None) # content uniqueness check
-                existing_filecontent_id = r['ID']
-        return existing_filecontent_id
 
 
     @informational_pdb
@@ -2220,43 +2193,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def _add_file_content(self, content, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
         '''Takes file content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
            a new record if necessary, and returns the associated FileContent.ID value.'''
-
         # @todo: this should be replaced with a call to importer._add_file_content
-
-        if rm_trailing_line_whitespace:
-            content = remove_trailing_line_whitespace(content)
-
-        # Check to see whether the file has been uploaded before
-        hexdigest = get_hexdigest(content)
-        existing_filecontent_id = self.get_file_id(content, db_cursor = db_cursor, hexdigest = hexdigest)
-
-        # Create the FileContent record if the file is a new file
-        if existing_filecontent_id == None:
-            mime_type = None
-            if forced_mime_type:
-                mime_type = forced_mime_type
-            else:
-                temporary_file = write_temp_file('/tmp', content, ftype = 'wb')
-                m=magic.open(magic.MAGIC_MIME_TYPE) # see mime.__dict__ for more values e.g. MAGIC_MIME, MAGIC_MIME_ENCODING, MAGIC_NONE
-                m.load()
-                mime_type = m.file(temporary_file)
-                os.remove(temporary_file)
-
-            d = dict(
-                Content = content,
-                MIMEType = mime_type,
-                Filesize = len(content),
-                MD5HexDigest = hexdigest
-            )
-
-            if db_cursor:
-                sql, params, record_exists = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
-                db_cursor.execute(sql, params)
-            else:
-                self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
-            existing_filecontent_id = self.get_file_id(content, db_cursor = db_cursor, hexdigest = hexdigest)
-            assert(existing_filecontent_id != None)
-        return existing_filecontent_id
+        return self.importer._add_file_content_using_old_interface(content, db_cursor = db_cursor, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
 
 
     ###########################################################################################

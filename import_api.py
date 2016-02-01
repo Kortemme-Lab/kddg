@@ -435,6 +435,30 @@ class DataImportInterface(object):
         return existing_filecontent_id
 
 
+    @informational_file
+    def get_file_id_using_old_interface(self, content, db_cursor = None, hexdigest = None):
+        '''Searches the database to see whether the FileContent already exists. The search uses the digest and filesize as
+           heuristics to speed up the search. If a file has the same hex digest and file size then we do a straight comparison
+           of the contents.
+           If the FileContent exists, the value of the ID field is returned else None is returned.
+           '''
+        # @todo: This function is deprecated. Use get_file_id instead.
+
+        existing_filecontent_id = None
+        hexdigest = hexdigest or get_hexdigest(content)
+        filesize = len(content)
+        if db_cursor:
+            db_cursor.execute('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', (hexdigest, filesize))
+            results = db_cursor.fetchall()
+        else:
+            results = self.DDG_db.execute_select('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', parameters=(hexdigest, filesize))
+        for r in results:
+            if r['Content'] == content:
+                assert(existing_filecontent_id == None) # content uniqueness check
+                existing_filecontent_id = r['ID']
+        return existing_filecontent_id
+
+
     def _add_file_content(self, file_content, tsession = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
         '''Takes file file_content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
            a new record if necessary, and returns the associated FileContent.ID value.'''
@@ -454,9 +478,21 @@ class DataImportInterface(object):
                 mime_type = forced_mime_type
             else:
                 temporary_file = write_temp_file('/tmp', file_content, ftype = 'wb')
-                m=magic.open(magic.MAGIC_MIME_TYPE) # see mime.__dict__ for more values e.g. MAGIC_MIME, MAGIC_MIME_ENCODING, MAGIC_NONE
-                m.load()
-                mime_type = m.file(temporary_file)
+
+                # todo: remove this code after everything seems to work for a while
+                # the old API (Ubuntu python-magic) gave different results when using char buffers or file paths
+                # this code is left to test whether the new API (PyPi python-magic) has the same behavior
+
+                mime_type_f = magic.from_file(temporary_file, mime = True)
+                mime_type_b = magic.from_buffer(content, mime = True)
+                if mime_type_f != mime_type_b:
+                    raise colortext.Exception('Fail case hit: magic.from_file detected "{0}", magic.from_buffer detected "{1}".'.format(mime_type_f, mime_type_b))
+                mime_type = mime_type_f
+
+                #m=magic.open(magic.MAGIC_MIME_TYPE) # see mime.__dict__ for more values e.g. MAGIC_MIME, MAGIC_MIME_ENCODING, MAGIC_NONE
+                #m.load()
+                #mime_type = m.file(temporary_file)
+
                 os.remove(temporary_file)
 
             file_content_record = get_or_create_in_transaction(tsession, FileContent, dict(
@@ -473,6 +509,58 @@ class DataImportInterface(object):
             #    self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
             #existing_filecontent_id = self.get_file_id(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
             #assert(existing_filecontent_id != None)
+        return existing_filecontent_id
+
+
+    def _add_file_content_using_old_interface(self, content, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
+        '''Takes file content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
+           a new record if necessary, and returns the associated FileContent.ID value.'''
+
+        # todo: This function is deprecated. Use _add_file_content instead.
+
+        if rm_trailing_line_whitespace:
+            content = remove_trailing_line_whitespace(content)
+
+        # Check to see whether the file has been uploaded before
+        hexdigest = get_hexdigest(content)
+        existing_filecontent_id = self.get_file_id_using_old_interface(content, db_cursor = db_cursor, hexdigest = hexdigest)
+
+        # Create the FileContent record if the file is a new file
+        if existing_filecontent_id == None:
+            mime_type = None
+            if forced_mime_type:
+                mime_type = forced_mime_type
+            else:
+                temporary_file = write_temp_file('/tmp', content, ftype = 'wb')
+
+                # todo: remove this code after everything seems to work for a while
+                # the old API (Ubuntu python-magic) gave different results when using char buffers or file paths
+                # this code is left to test whether the new API (PyPi python-magic) has the same behavior
+                mime_type_f = magic.from_file(temporary_file, mime = True)
+                mime_type_b = magic.from_buffer(content, mime = True)
+                if mime_type_f != mime_type_b:
+                    raise colortext.Exception('Fail case hit: magic.from_file detected "{0}", magic.from_buffer detected "{1}".'.format(mime_type_f, mime_type_b))
+                mime_type = mime_type_f
+                #m=magic.open(magic.MAGIC_MIME_TYPE) # see mime.__dict__ for more values e.g. MAGIC_MIME, MAGIC_MIME_ENCODING, MAGIC_NONE
+                #m.load()
+                #mime_type = m.file(temporary_file)
+                os.remove(temporary_file)
+
+            d = dict(
+                Content = content,
+                MIMEType = mime_type,
+                Filesize = len(content),
+                MD5HexDigest = hexdigest
+            )
+
+            if db_cursor:
+                sql, params, record_exists = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
+                db_cursor.execute(sql, params)
+            else:
+                self.DDG_db.insertDictIfNew('FileContent', d, ['Content'])
+                pass
+            existing_filecontent_id = self.get_file_id(content, db_cursor = db_cursor, hexdigest = hexdigest)
+            assert(existing_filecontent_id != None)
         return existing_filecontent_id
 
 
