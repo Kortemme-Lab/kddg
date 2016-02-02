@@ -442,6 +442,7 @@ class PPComplex(DeclarativeBase):
     Notes = Column(Unicode(1024), nullable=True)
     Warnings = Column(Unicode(1024), nullable=True)
 
+
     def __repr__(self):
         functional_class = None
         if self.FunctionalClassID:
