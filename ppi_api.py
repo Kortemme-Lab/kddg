@@ -45,13 +45,13 @@ from db_api import ddG, PartialDataException, SanityCheckException
 DeclarativeBase = dbmodel.DeclarativeBase
 
 
-def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
+def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
     '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
-    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
 
 
-def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None, get_interface_factory = get_interface):
+def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None, get_interface_factory = get_interface, passed_port = None):
     # Uses ~/.my.cnf to get authentication information
     ### Example .my.cnf (host_config_name will equal guybrush2):
     ### [clientguybrush2]
@@ -66,6 +66,7 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
     user = None
     password = None
     host = None
+    port = None
     with open(my_cnf_path, 'r') as f:
         parsing_config_section = False
         for line in f:
@@ -84,21 +85,24 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
                         password = val
                     elif key == 'host':
                         host = val
+                    elif key == 'port':
+                        port = int(val)
                 else:
                     parsing_config_section = False
+    port = passed_port or port or 3306
 
     if not user or not password or not host:
         raise Exception("Couldn't find host(%s), username(%s), or password in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
 
-    return get_interface_factory(password, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+    return get_interface_factory(password, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
 
 
 class BindingAffinityDDGInterface(ddG):
     '''This is the internal API class that should be NOT used to interface with the database.'''
 
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None):
-        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
+        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
 
 

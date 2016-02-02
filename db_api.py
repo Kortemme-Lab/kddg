@@ -107,11 +107,11 @@ class ddG(object):
 
     GET_JOB_FN_CALL_COUNTER_MAX = 10
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
         if passwd:
             passwd = passwd.strip()
-        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname)
-        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True)
+        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
+        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True, port = port)
         self.prediction_data_path = None
         self.rosetta_scripts_path = rosetta_scripts_path
         self.rosetta_database_path = rosetta_database_path

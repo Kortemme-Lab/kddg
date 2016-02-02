@@ -1947,7 +1947,7 @@ class ddGDatabase(DatabaseInterface):
     chainErrors = {}
     chainWarnings= {}
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', use_utf=False):
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', use_utf=False, port = 3306):
         if not passwd:
             if os.path.exists("pw"):
                 F = open("pw")
@@ -1965,7 +1965,7 @@ class ddGDatabase(DatabaseInterface):
             user = username,
             passwd = passwd,
             host = hostname,
-            port = 3306,
+            port = port,
             unix_socket = "/var/lib/mysql/mysql.sock",
             use_utf = use_utf,
         )
