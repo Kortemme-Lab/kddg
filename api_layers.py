@@ -23,8 +23,10 @@ functional_layer = {
     4 : 'Analysis layer',
     5 : 'Application layer',
     6 : 'Consistency layer',
+    7 : 'Data entry layer',
     None: 'Miscellanous'
 }
+
 
 def alien(func):
     func._helptype = 'Alien functions (these should be moved into another package)'
@@ -32,11 +34,13 @@ def alien(func):
     func._layer_order = 0
     return func
 
+
 def brokenfn(func):
     func._helptype = 'Broken functions: this need to be fixed/updated'
     func._layer = 0
     func._layer_order = 1
     return func
+
 
 def deprecated(func):
     func._helptype = 'Deprecated functions. These should be removed but exist for now to print errors upon use'
@@ -44,11 +48,13 @@ def deprecated(func):
     func._layer_order = 2
     return func
 
+
 def informational_misc(func):
     func._helptype = 'Miscellaneous information API'
     func._layer = 1
     func._layer_order = 0
     return func
+
 
 def informational_file(func):
     func._helptype = 'File information API'
@@ -56,11 +62,13 @@ def informational_file(func):
     func._layer_order = 1
     return func
 
+
 def informational_pdb(func):
     func._helptype = 'Structure information API'
     func._layer = 1
     func._layer_order = 2
     return func
+
 
 def informational_complex(func):
     func._helptype = 'Complex information API'
@@ -68,11 +76,13 @@ def informational_complex(func):
     func._layer_order = 3
     return func
 
+
 def informational_job(func):
     func._helptype = 'Prediction information API'
     func._layer = 1
     func._layer_order = 4
     return func
+
 
 def job_creator(func):
     func._helptype = 'Job creation API'
@@ -80,11 +90,13 @@ def job_creator(func):
     func._layer_order = 0
     return func
 
+
 def job_input(func):
     func._helptype = 'Input file generation API'
     func._layer = 2
     func._layer_order = 1
     return func
+
 
 def job_execution(func):
     func._helptype = 'Job execution API'
@@ -92,11 +104,13 @@ def job_execution(func):
     func._layer_order = 2
     return func
 
+
 def job_completion(func):
     func._helptype = 'Job completion API'
     func._layer = 2
     func._layer_order = 3
     return func
+
 
 def job_results(func):
     func._helptype = 'Results API'
@@ -104,11 +118,13 @@ def job_results(func):
     func._layer_order = 0
     return func
 
+
 def analysis_api(func):
     func._helptype = 'Analysis API'
     func._layer = 4
     func._layer_order = 0
     return func
+
 
 def app_pymol(func):
     func._helptype = 'PyMOL API'
@@ -116,11 +132,20 @@ def app_pymol(func):
     func._layer_order = 0
     return func
 
+
 def sanity_check(func):
     func._helptype = 'Data consistency /sanity checks'
     func._layer = 6
     func._layer_order = 0
     return func
+
+
+def ppi_data_entry(func):
+    func._helptype = 'Data entry'
+    func._layer = 7
+    func._layer_order = 0
+    return func
+
 
 
 class GenericUserInterface(object):
