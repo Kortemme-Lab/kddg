@@ -1635,3 +1635,83 @@ class BindingAffinityDDGInterface(ddG):
         }
         sql, params, record_exists = self.DDG_db.create_insert_dict_string('DevelopmentProtocol', dev_prot_record)
         self.DDG_db.execute(sql, params)
+
+
+    ###########################################################################################
+    ## Data entry layer
+    ##
+    ## This part of the API is responsible for data entry (e.g. complex definitions)
+    ###########################################################################################
+
+
+    #== Job creation API ===========================================================
+    #
+    # This part of the API is responsible for inserting prediction jobs in the database via
+    # the trickle-down proteomics paradigm.
+
+
+    #######################################
+    #                                     #
+    #  Protein-protein complex data entry #
+    #                          public API #
+    #                                     #
+    #                                     #
+    #   PPComplex                         #
+    #   PPIPDBPartnerChain                #
+    #   PPIPDBSet                         #
+    #                                     #
+    #  Missing tables:                    #
+    #       PPIConformationalChange       #
+    #       PPIDatabaseComplex            #
+    #       PPIDataSetCrossmap            #
+    #                                     #
+    #######################################
+
+
+    @ppi_data_entry
+    def add_complex(self, pdb_ids, keywords = []):
+
+        a='''
+        for pdb_id in pdb_ids:
+        existing_records = self.DDG_db.execute_select('SELECT * FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))
+        if existing_records:
+            colortext.warning('The PDB file {0} exists in the database.'.format(pdb_id))
+        complex_ids = self.search_complexes_by_pdb_id(pdb_id)
+        if complex_ids:
+            colortext.warning('The PDB file {0} has associated complexes: {1}'.format(pdb_id, ', '.join(map(str, complex_ids))))
+            assert(len(complex_ids) == 1)
+            complex_id = complex_ids[0]
+            colortext.warning('Complex #{0}'.format(complex_id))
+            pprint.pprint(self.get_complex_details(complex_id))
+
+        assert(type(keywords) == list)
+        keywords = set(keywords)
+
+        ids = []
+        for keyword in keywords:
+            ids.extend(self.get_complex_ids_matching_protein_name(keyword))
+        ids = sorted(set(ids))
+
+        for id in ids:
+            d = self.get_complex_details(id)
+            colortext.warning(id)
+            print('{0}, {1}, {2}'.format(d['LName'].encode('utf-8').strip(), d['LShortName'].encode('utf-8').strip(), d['LHTMLName'].encode('utf-8').strip()))
+            print('{0}, {1}, {2}'.format(d['RName'].encode('utf-8').strip(), d['RShortName'].encode('utf-8').strip(), d['RHTMLName'].encode('utf-8').strip()))
+
+
+        mut_complex_3H7P = dict(
+            LName = 'Ubiquitin (yeast) K63R',
+            LShortName = 'Ubiquitin K63R',
+            LHTMLName = 'Ubiquitin (yeast) K63R',
+            RName = 'Ubiquitin (yeast)',
+            RShortName = 'Ubiquitin',
+            RHTMLName = 'Ubiquitin (yeast)',
+            FunctionalClassID = 'OX',
+            PPDBMFunctionalClassID = 'O',
+            PPDBMDifficulty = None,
+            IsWildType = False,
+            WildTypeComplexID = wt_complex_id,
+            Notes = None,
+            Warnings = None,
+        )
+        DDGdb.insertDictIfNew('PPComplex', mut_complex_3H7P, ['LName', 'RName'])'''
