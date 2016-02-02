@@ -341,8 +341,8 @@ class DataImportInterface(object):
                 if hit_starting_pdb:
                     colortext.message('Updating data for {0} ({1}/{2}).'.format(pdb_id, counter, num_pdb_ids))
                     tsession = self.get_session(new_session = True)
-                    ligand_params_files = pdb_ligand_params_files.get(pdb_id, {})
-                    self.add_pdb_data(tsession, pdb_id, update_sections = update_sections, ligand_params_files = ligand_params_files)
+                    ligand_params_file_paths = pdb_ligand_params_files.get(pdb_id, {})
+                    self.add_pdb_data(tsession, pdb_id, update_sections = update_sections, ligand_params_file_paths = ligand_params_file_paths)
                     tsession.commit()
                     tsession.close()
         if not hit_starting_pdb:
@@ -637,7 +637,7 @@ class DataImportInterface(object):
         return contents
 
 
-    def add_pdb_from_rcsb(self, pdb_id, previously_added = set(), update_sections = set(), params_file = None, trust_database_content = False, ligand_params_files = {}):
+    def add_pdb_from_rcsb(self, pdb_id, previously_added = set(), update_sections = set(), trust_database_content = False, ligand_params_file_paths = {}):
         '''NOTE: This API is used to create and analysis predictions or retrieve information from the database.
                  This function adds new raw data to the database and does not seem to belong here. It should be moved into
                  an admin API instead.
@@ -654,7 +654,7 @@ class DataImportInterface(object):
                todo: FileContent (see ticket 1489)
         '''
 
-        assert(params_file == None) # todo: handle this case when we need to. See the implementation for add_designed_pdb
+        assert(not ligand_params_file_paths) # todo: handle this case when we need to. See the implementation for add_designed_pdb
 
         if pdb_id in previously_added:
             return pdb_id
@@ -698,7 +698,7 @@ class DataImportInterface(object):
                 self._add_pdb_publication(tsession, db_record_object.ID, pdb_object = pdb_object)
 
             # add all other data
-            self.add_pdb_data(tsession, pdb_id, update_sections = update_sections, ligand_params_files = ligand_params_files)
+            self.add_pdb_data(tsession, pdb_id, update_sections = update_sections, ligand_params_file_paths = ligand_params_file_paths)
 
             previously_added.add(pdb_id)
 
@@ -771,7 +771,7 @@ class DataImportInterface(object):
         return PDB(db_record.Content, parse_ligands = True)
 
 
-    def add_pdb_data(self, tsession, database_pdb_id, update_sections = set(), ligand_mapping = {}, chain_mapping = {}, ligand_params_files = {}):
+    def add_pdb_data(self, tsession, database_pdb_id, update_sections = set(), ligand_mapping = {}, chain_mapping = {}, ligand_params_file_paths = {}):
         '''
             The point of separating the data entry into these sub-functions and calling them from this function is so we
             have an API to update the information for specific PDB files.
@@ -807,7 +807,7 @@ class DataImportInterface(object):
             self._add_pdb_residues(tsession, database_pdb_id, pdb_object)
         if not(update_sections) or ('Ligands' in update_sections):
             colortext.warning('*** Ligands ***')
-            self._add_pdb_rcsb_ligands(tsession, database_pdb_id, pdb_object, ligand_mapping, ligand_params_files = ligand_params_files)
+            self._add_pdb_rcsb_ligands(tsession, database_pdb_id, pdb_object, ligand_mapping, ligand_params_file_paths = ligand_params_file_paths)
         if not(update_sections) or ('Ions' in update_sections):
             colortext.warning('*** Ions ***')
             self._add_pdb_rcsb_ions(tsession, database_pdb_id, pdb_object)
@@ -1115,7 +1115,7 @@ class DataImportInterface(object):
         #print(count)
 
 
-    def _add_pdb_rcsb_ligands(self, tsession, database_pdb_id, pdb_object = None, ligand_mapping = {}, ligand_params_files = {}):
+    def _add_pdb_rcsb_ligands(self, tsession, database_pdb_id, pdb_object = None, ligand_mapping = {}, ligand_params_file_paths = {}):
         '''This function associates the ligands of a PDB file (which may be arbitrarily named) with ligands entered in
            the database using the ligand's PDB code. The insertion is handled by a transaction which should be set up
            by the caller.
@@ -1179,20 +1179,22 @@ class DataImportInterface(object):
                     raise Exception('An exception occurred committing ligand "{0}" from {1} to the database.'.format(lig.PDBCode, database_pdb_id))
 
         # Params files
-        if ligand_params_files:
-            if not(0 < max(map(len, ligand_params_files.keys())) <= 3):
-                bad_keys = sorted([k for k in ligand_params_files.keys() if len(k) > 3])
+        if ligand_params_file_paths:
+            if not(0 < max(map(len, ligand_params_file_paths.keys())) <= 3):
+                bad_keys = sorted([k for k in ligand_params_file_paths.keys() if len(k) > 3])
                 raise colortext.Exception('The ligand codes "{0}" are invalid - all codes must be between 1 and 3 characters e.g. "CIT".'.format('", "'.join(bad_keys)))
-        bad_keys = sorted(set(ligand_params_files.keys()).difference(pdb_object.get_ligand_codes()))
+        bad_keys = sorted(set(ligand_params_file_paths.keys()).difference(pdb_object.get_ligand_codes()))
         if bad_keys:
             raise colortext.Exception('The ligand codes "{0}" were specified but were not found in the PDB file.'.format('", "'.join(bad_keys)))
-        if ligand_params_files:
+
+        ligand_params_file_content = {}
+        if ligand_params_file_paths:
 
             # Read all params files
-            for ligand_code, params_filepath in ligand_params_files.iteritems():
-                ligand_params_files[ligand_code] = read_file(params_filepath)
+            for ligand_code, params_filepath in ligand_params_file_paths.iteritems():
+                ligand_params_file_content[ligand_code] = read_file(params_filepath)
 
-            for ligand_code, params_file_content in ligand_params_files.iteritems():
+            for ligand_code, params_file_content in ligand_params_file_content.iteritems():
                 # First, add a new file using FileContent.
                 file_content_id = self._add_file_content(params_file_content, tsession = tsession, rm_trailing_line_whitespace = True, forced_mime_type = 'text/plain')
 
@@ -1396,15 +1398,29 @@ class DataImportInterface(object):
                 ))
 
 
-    def add_designed_pdb_file(self, designed_pdb_filepath, design_pdb_id, original_pdb_id, description, username, chain_mapping = {}, ligand_mapping = {}, previously_added = set()):
+    def add_designed_pdb_file(self, designed_pdb_filepath, design_pdb_id, original_pdb_id,
+                              file_source, description, user_id,
+                              chain_mapping = {}, ligand_mapping = {}, previously_added = set(),
+                              ligand_params_file_paths = {},
+                              resolution = None, techniques = None, transmembrane = None,
+                              publication = None,
+                              trust_database_content = False,
+                              update_sections = set()):
         '''Wrapper for add_designed_pdb.'''
-        return self.add_designed_pdb(self, PDB.from_filepath(designed_pdb_filepath), design_pdb_id, original_pdb_id, description, username, chain_mapping = chain_mapping, ligand_mapping = ligand_mapping, previously_added = previously_added)
+        return self.add_designed_pdb(self, PDB.from_filepath(designed_pdb_filepath), design_pdb_id, original_pdb_id,
+                                     file_source, description, user_id,
+                                     chain_mapping = chain_mapping, ligand_mapping = ligand_mapping, previously_added = previously_added,
+                                     ligand_params_file_paths = ligand_params_file_paths,
+                                     resolution = resolution, techniques = techniques, transmembrane = transmembrane,
+                                     publication = publication,
+                                     trust_database_content = trust_database_content,
+                                     update_sections = update_sections)
 
 
     def add_designed_pdb(self, designed_pdb_object, design_pdb_id, original_pdb_id,
                                file_source, description, user_id,
                                chain_mapping = {}, ligand_mapping = {}, previously_added = set(),
-                               ligand_params_files = {},
+                               ligand_params_file_paths = {},
                                resolution = None, techniques = None, transmembrane = None,
                                publication = None,
                                trust_database_content = False,
@@ -1423,7 +1439,7 @@ class DataImportInterface(object):
         assert(isinstance(file_source, str) and (file_source.strip()))
         assert(isinstance(description, str) and (description.strip()))
         assert(isinstance(user_id, str) and (user_id.strip()))
-        assert(isinstance(ligand_params_files, dict))
+        assert(isinstance(ligand_params_file_paths, dict))
         assert(isinstance(chain_mapping, dict) and chain_mapping)
         assert(isinstance(ligand_mapping, LigandMap) and ligand_mapping)
         assert(resolution == None or isinstance(resolution, float))
@@ -1529,7 +1545,7 @@ class DataImportInterface(object):
             assert(not publication) # todo: add publication entry here
 
             # add all other data
-            self.add_pdb_data(tsession, design_pdb_id, update_sections = set(), ligand_mapping = ligand_mapping, chain_mapping = chain_mapping, ligand_params_files = ligand_params_files)
+            self.add_pdb_data(tsession, design_pdb_id, update_sections = set(), ligand_mapping = ligand_mapping, chain_mapping = chain_mapping, ligand_params_file_paths = ligand_params_file_paths)
 
             previously_added.add(design_pdb_id)
 
