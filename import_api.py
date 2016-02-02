@@ -1230,8 +1230,6 @@ class DataImportInterface(object):
         ions = {}
         for c, cions in pdb_object.ions.iteritems():
             for seq_id, pdb_ion_object in cions.iteritems():
-                pprint.pprint(pdb_ion_object.__dict__)
-                pprint.pprint(pdb_ion_object.get_db_records(database_pdb_id))
                 if not ions.get(pdb_ion_object.PDBCode):
                     ions[pdb_ion_object.PDBCode] = copy.deepcopy(pdb_ion_object.get_db_records(database_pdb_id)['Ion'])
                 else:
@@ -1240,26 +1238,24 @@ class DataImportInterface(object):
                     for k, v in ions[pdb_ion_object.PDBCode].iteritems():
                         assert(v == subsequent_instance[k])
 
-        colortext.warning(pprint.pformat(ions))
         # Make sure that the ions in the PDB file have the same formula, description, etc. as currently in the database
         existing_ion_codes = set()
         for pdb_code, d in ions.iteritems():
-            colortext.pcyan(pdb_code)
-            if db_record.FileSource == 'RCSB':
-                existing_db_record = tsession.query(DBIon).filter(DBIon.PDBCode == pdb_code)
-                colortext.pcyan(d)
-                if existing_db_record.count() > 0:
-                    assert(existing_db_record.count() == 1)
-                    existing_db_record = existing_db_record.one()
-                    colortext.pcyan(existing_db_record.__dict__)
-                    pprint.pprint(ions[pdb_ion_object.PDBCode])
-                    if ions[pdb_ion_object.PDBCode]['PDBCode'] == existing_db_record.PDBCode:
+            existing_db_record = tsession.query(DBIon).filter(DBIon.PDBCode == pdb_code)
+            if existing_db_record.count() > 0:
+                assert(existing_db_record.count() == 1)
+                existing_db_record = existing_db_record.one()
+                if ions[pdb_ion_object.PDBCode]['PDBCode'] == existing_db_record.PDBCode:
+                    if db_record.FileSource == 'RCSB':
                         assert(ions[pdb_ion_object.PDBCode]['Description'] == existing_db_record.Description) # This can differ e.g. CL in 127L is 3(CL 1-) since there are 3 ions but in PDB files with 2 ions, this can be 2(CL 1-). We can assert this if we do extra parsing.
                         assert(ions[pdb_ion_object.PDBCode]['Formula'] == existing_db_record.Formula) # This can differ e.g. CL in 127L is 3(CL 1-) since there are 3 ions but in PDB files with 2 ions, this can be 2(CL 1-). We can assert this if we do extra parsing.
-                    existing_ion_codes.add(pdb_code)
-            else:
-                #WED START HERE
-                raise Exception('We cannot add ion "{0}" from this file as there is no Ion record in the database. This ion should have been added by an underlying RCSB file.'.format(pdb_code))
+                    else:
+                        if ions[pdb_ion_object.PDBCode]['Description'] != existing_db_record.Description:
+                            colortext.warning('The description for {0} ("{1}") does not match the database record. This may occur if the PDB headers are missing. However, it also may indicate that the code "{0}" for the ion was manually altered which is not handled by our pipeline and could cause errors.'.format(pdb_code, ions[pdb_ion_object.PDBCode]['Description']))
+                        if ions[pdb_ion_object.PDBCode]['Formula'] != existing_db_record.Formula:
+                            colortext.warning('The formula for {0} ("{1}") does not match the database record. This may occur if the PDB headers are missing. However, it also may indicate that the code "{0}" for the ion was manually altered which is not handled by our pipeline and could cause errors.'.format(pdb_code, ions[pdb_ion_object.PDBCode]['Formula']))
+                existing_ion_codes.add(pdb_code)
+
 
         # Create the main Ion records, only creating records for ions in RCSB files.
         if db_record.FileSource == 'RCSB':
@@ -1267,7 +1263,6 @@ class DataImportInterface(object):
                 if pdb_code not in existing_ion_codes:
                     # Do not add existing records
                     colortext.message('Adding ion {0}'.format(pdb_code))
-                    pprint.pprint(ion_record)
                     db_ion = get_or_create_in_transaction(tsession, DBIon, ion_record, missing_columns = ['ID'])
 
         # Get the mapping from PDB code to Ion objects
@@ -1280,10 +1275,10 @@ class DataImportInterface(object):
         # Record all instances of ions in the PDB file (add PDBIon records).
         for c, cions in pdb_object.ions.iteritems():
             for seq_id, pdb_ion_object in cions.iteritems():
-
                 assert(pdb_ion_object.get_db_records(None)['Ion']['PDBCode'] == db_ions[pdb_ion_object.PDBCode].PDBCode)
-                #assert(pdb_ion_object.get_db_records(None)['Ion']['Formula'] == db_ions[pdb_ion_object.PDBCode].Formula) # not always true e.g. see CL comment above. We can assert this if we do extra parsing.
-                assert(pdb_ion_object.get_db_records(None)['Ion']['Description'] == db_ions[pdb_ion_object.PDBCode].Description)
+                if db_record.FileSource == 'RCSB':
+                    #assert(pdb_ion_object.get_db_records(None)['Ion']['Formula'] == db_ions[pdb_ion_object.PDBCode].Formula) # not always true e.g. see CL comment above. We can assert this if we do extra parsing.
+                    assert(pdb_ion_object.get_db_records(None)['Ion']['Description'] == db_ions[pdb_ion_object.PDBCode].Description)
                 pdb_ion_record = pdb_ion_object.get_db_records(database_pdb_id, ion_id = db_ions[pdb_ion_object.PDBCode].ID)['PDBIon']
                 try:
                     db_ion = get_or_create_in_transaction(tsession, PDBIon, pdb_ion_record)
@@ -1291,8 +1286,6 @@ class DataImportInterface(object):
                     colortext.error(str(e))
                     colortext.error(traceback.format_exc())
                     raise Exception('An exception occurred committing ion "{0}" from {1} to the database.'.format(pdb_ion_object.get_db_records(None)['Ion']['PDBCode'], database_pdb_id))
-
-        raise Exception('test')
 
 
     def _add_pdb_uniprot_mapping(self, tsession, database_pdb_id, pdb_object = None):
@@ -1549,7 +1542,6 @@ class DataImportInterface(object):
 
             previously_added.add(design_pdb_id)
 
-            raise Exception('Planned failure.') #@todo
             print('Success.\n')
             tsession.commit()
             tsession.close()
@@ -1581,6 +1573,10 @@ class DataImportInterface(object):
                     # We cannot assert(chain_ids == sorted(chain_mapping.keys())) as this can fail e.g. if a user splits
                     # chain C (protein + ligand) into chain A (protein) and chain X (ligand). Instead, we use this weaker assertion.
                     assert(pdb_object.chain_types[chain_id] != 'Protein')
+
+
+
+
 
 
 def _test():
