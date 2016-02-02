@@ -158,8 +158,8 @@ class GenericUserInterface(object):
        '''
 
     @staticmethod
-    def generate(cls, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
-        return GenericUserInterface(cls, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+    def generate(cls, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
+        return GenericUserInterface(cls, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
 
     @staticmethod
     def bind_object_function(fn):
@@ -167,9 +167,9 @@ class GenericUserInterface(object):
         def wrapper(*args, **kwargs): return fn(*args, **kwargs)
         return wrapper
 
-    def __init__(self, cls, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
+    def __init__(self, cls, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
 
-        self._ddg_interface = cls(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+        self._ddg_interface = cls(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
         self._api_functions = []
         self._api_function_args = {}
         self.DDG_db = self._ddg_interface.DDG_db

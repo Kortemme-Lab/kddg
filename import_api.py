@@ -122,7 +122,7 @@ class DataImportInterface(object):
     ##################
 
 
-    def __init__(self, passwd, connect_string, connect_string_utf, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, cache_dir = None, echo_sql = False):
+    def __init__(self, passwd, connect_string, connect_string_utf, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, cache_dir = None, echo_sql = False, port = 3306):
         '''
         :param passwd:
         :param connect_string:
@@ -137,8 +137,8 @@ class DataImportInterface(object):
 
         # Set up MySQLdb connections
         passwd = passwd.strip()
-        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname)
-        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True)
+        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
+        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True, port = port)
 
         self.cache_dir = cache_dir
         self.echo_sql = echo_sql
@@ -168,7 +168,7 @@ class DataImportInterface(object):
 
 
     @classmethod
-    def get_interface_with_config_file(cls, database = 'ddg', host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None, my_cnf_path = None, cache_dir = None, echo_sql = False):
+    def get_interface_with_config_file(cls, database = 'ddg', host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None, my_cnf_path = None, cache_dir = None, echo_sql = False, port = 3306):
         # Uses ~/.my.cnf to get authentication information
         ### Example .my.cnf (host_config_name will equal guybrush2):
         ### [clientguybrush2]
@@ -207,6 +207,8 @@ class DataImportInterface(object):
                             cache_dir = val
                         elif key == 'host':
                             host = val
+                        elif key == 'port':
+                            port = int(val)
                         elif key == connection_string_key:
                             connection_string = val
                         elif key == connection_string_key_utf:
@@ -217,7 +219,7 @@ class DataImportInterface(object):
         if not user or not password or not host or not connection_string or not connect_string_utf:
             raise Exception("Couldn't find host(%s), username(%s), password, or connection string in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
 
-        return cls(password, connection_string, connect_string_utf, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, cache_dir = cache_dir, echo_sql = echo_sql)
+        return cls(password, connection_string, connect_string_utf, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, cache_dir = cache_dir, echo_sql = echo_sql, port = port)
 
 
     def __del__(self):

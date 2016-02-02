@@ -107,11 +107,11 @@ class ddG(object):
 
     GET_JOB_FN_CALL_COUNTER_MAX = 10
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
         if passwd:
             passwd = passwd.strip()
-        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname)
-        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True)
+        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
+        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True, port = port)
         self.prediction_data_path = None
         self.rosetta_scripts_path = rosetta_scripts_path
         self.rosetta_database_path = rosetta_database_path
@@ -974,6 +974,12 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         return [r.ID for r in self.get_session().query(self.PredictionTable).filter(self.PredictionTable.PredictionSet == prediction_set_id)]
 
 
+    def _get_prediction_set_prediction_table_rows(self, prediction_set_id):
+        '''Returns the list of Prediction IDs associated with the PredictionSet.'''
+        self._assert_prediction_set_is_correct_type(prediction_set_id)
+        return {r.ID : r for r in self.get_session().query(self.PredictionTable).filter(self.PredictionTable.PredictionSet == prediction_set_id)}
+
+
     @informational_job
     def get_defined_user_datasets(self):
         '''Return a dict detailing the defined UserDataSets, their tagged subsets (if any), and the mutagenesis counts
@@ -1492,7 +1498,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
         prediction_id_field = prediction_id_field or self._get_prediction_id_field()
         prediction_structure_scores_table = prediction_structure_scores_table or self._get_prediction_structure_scores_table()
-        
+
         if safe:
             # Sanity checks
             for score in scores:
@@ -1511,7 +1517,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 sql, params, record_exists = self.DDG_db.create_insert_dict_string(prediction_structure_scores_table, score, PKfields = [prediction_id_field, 'ScoreMethodID', 'ScoreType', 'StructureID'], check_existing = True)
             else:
                 sql, params, record_exists = self.DDG_db.create_insert_dict_string(prediction_structure_scores_table, score, PKfields = [prediction_id_field, 'ScoreMethodID', 'ScoreType', 'StructureID'], check_existing = False)
-                
+
             if sql_query:
                 assert( sql == sql_query )
             else:
@@ -1555,7 +1561,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
         prediction_structure_scores_table = prediction_structure_scores_table or self._get_prediction_structure_scores_table()
         prediction_id_field = prediction_id_field or self._get_prediction_id_field()
-        
+
         try:
             con = self.DDG_db.connection
             with con:
@@ -1759,7 +1765,20 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @analysis_api
-    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None):
+    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None, prediction_table_rows_cache = None, dataframe_type = None):
+        '''Returns a dictionary with values relevant to predictions e.g. binding affinity, monomeric stability.'''
+        prediction_data = {}
+        # Add memory and runtime
+        if prediction_table_rows_cache != None:
+            prediction = prediction_table_rows_cache.get(prediction_id)
+            prediction_data['RunTime'] = float(prediction.DDGTime)
+            prediction_data['MaxMemory'] = float(prediction.maxvmem)
+        else:
+            raise Exception("Not implemented. Write a function to get the data only for this prediction_id here")
+
+        return self._get_prediction_data(prediction_id, score_method_id, main_ddg_analysis_type, top_x = top_x, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory, prediction_data = prediction_data, dataframe_type = dataframe_type)
+
+    def _get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None):
         '''Returns a dictionary with values relevant to predictions e.g. binding affinity, monomeric stability.'''
         raise Exception('Abstract method. This needs to be overridden by a subclass.')
 
@@ -1826,9 +1845,11 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 print('Computing the TopX values for each prediction case; skipping missing data without attempting to extract.')
             num_predictions_in_prediction_set = len(prediction_ids)
             failed_cases = set()
+            prediction_table_rows_cache = self._get_prediction_set_prediction_table_rows(prediction_set_id)
+            ## get_job_description(self, prediction_id)
             for prediction_id in prediction_ids:
                 try:
-                    analysis_data[prediction_id] = self.get_prediction_data(prediction_id, score_method_id, ddg_analysis_type, top_x = take_lowest, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory, dataframe_type = dataframe_type)
+                    analysis_data[prediction_id] = self.get_prediction_data(prediction_id, score_method_id, ddg_analysis_type, top_x = take_lowest, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory, dataframe_type = dataframe_type, prediction_table_rows_cache = prediction_table_rows_cache)
                 except FatalException, e:
                     raise
                 except PartialDataException, e:
