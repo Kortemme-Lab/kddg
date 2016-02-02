@@ -1254,8 +1254,7 @@ class BindingAffinityDDGInterface(ddG):
             raise Exception(str(e))
 
 
-    @analysis_api
-    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = False, root_directory = None, dataframe_type = "Binding affinity"):
+    def _get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = False, root_directory = None, dataframe_type = "Binding affinity", prediction_data = {}):
         try:
             top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
         except Exception, e:
@@ -1270,10 +1269,10 @@ class BindingAffinityDDGInterface(ddG):
             except Exception, e:
                 raise
         top_x_ddg_stability = self.get_top_x_ddg_stability(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
-        return {
-            main_ddg_analysis_type : top_x_ddg,
-            'DDGStability_Top%d' % top_x : top_x_ddg_stability,
-        }
+
+        prediction_data[main_ddg_analysis_type] = top_x_ddg
+        prediction_data['DDGStability_Top%d' % top_x] = top_x_ddg_stability
+        return prediction_data
 
 
     @analysis_api
@@ -1481,7 +1480,7 @@ class BindingAffinityDDGInterface(ddG):
                     expectn = expectn,
                 )
 
-                break
+                return benchmark_run
                 # recreate_graphs
                 # analysis_directory = output_directory
 
