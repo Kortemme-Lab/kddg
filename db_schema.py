@@ -322,6 +322,17 @@ class PDBIon(DeclarativeBase):
     Element = Column(String(2), nullable=False)
 
 
+class PDB2PDBChainMap(DeclarativeBase):
+    __tablename__ = 'PDB2PDBChainMap'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PDBFileID1 = Column(String(10), nullable=False)
+    Chain1 = Column(String(1), nullable=False)
+    PDBFileID2 = Column(String(10), nullable=False)
+    Chain2 = Column(String(1), nullable=False)
+    SequenceIdentity = Column(DOUBLE, nullable=False)
+
+
 #########################################
 #                                       #
 #  Publications and associated records  #
@@ -878,7 +889,7 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['UserDataSet'])
+    generate_sqlalchemy_definition(['PDB2PDBChainMap'])
 
     #generate_sqlalchemy_definition(['AminoAcid'])
     sys.exit(0)

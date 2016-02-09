@@ -35,6 +35,7 @@ from klab.fs.fsio import read_file, write_temp_file
 from klab.rosetta.input_files import Mutfile, Resfile
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 from klab.bio.alignment import ScaffoldModelChainMapper
+from klab.bio.clustalo import PDBChainSequenceAligner
 from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction
 
 import db_schema as dbmodel
@@ -1701,7 +1702,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @ppi_data_entry
-    def add_complex(self, complex_definition, keywords = [], force = False, allow_missing_params_files = False):
+    def add_complex(self, complex_definition, keywords = [], force = False, allow_missing_params_files = False, debug = True, minimum_sequence_identity = 95.0):
         '''Add a complex to the database using a defined dict structure.
 
         :param complex_definition: A dict fitting the defined structure (see below).
@@ -1715,9 +1716,15 @@ class BindingAffinityDDGInterface(ddG):
                                            then the file will be added but the ligand is not guaranteed to be kept
                                            by the protocol (this depends on the version of Rosetta - versions from February
                                            2016 onwards should have better ligand support).
+        :param minimum_sequence_identity: For non-RCSB files, we require a chain mapping from chains to the corresponding
+                                          RCSB chains. Clustal is run to ensure that the sequence identity is at least this
+                                          value.
+        :param debug: If debug is set to True then the transaction used to insert the complex into the database will be
+                      rolled back and a message stating that the insertion would have been successful is returned in the
+                      return dict.
         :return: On successful import, the dict {success = True, ComplexID -> Long, SetNumber -> Long} corresponding to
                  the database PPIPDBSet primary key is returned. If a similar complex is detected and force is False then
-                 a dict {success = False, message -> String} will be returned instead. On error, a dict
+                 a dict {success = False, debug = debug, message -> String} will be returned instead. On error, a dict
                  {success = False, error -> String} is returned.
 
         The database uses Unicode to encode the strings, allowing us to use e.g. Greek characters
@@ -1730,32 +1737,267 @@ class BindingAffinityDDGInterface(ddG):
             dict(
                 Structure = dict(
 
-                    # Fields required for all complexes
+                    # Fields required for all complexes. We require non-RCSB structures to be based on RCSB structures at least in this import interface.
                     rcsb_id = '1K5D',
 
-                    # At least one of these fields is required for non-RCSB complexes
+                    # Exactly one of these fields must be specified for non-RCSB complexes.
+                    pdb_object = p,
                     file_path = 'pdbs/1K5D2.pdb',
-                    file_contents = '...',
 
                     # Fields required for non-RCSB complexes.
-                    db_id = '1K5D_TP0',
+                    db_id = '1K5D_TP0', # must be between 5-10 characters
                     techniques = "PDB_REDO",
+                    file_source = "Roger Wilco",
+                    user_id = "sierra",
 
-                    # Exactly one of these fields is required for non-RCSB complexes. The list of chains in identical_chains
-                    # (resp. the keys in chain_mapping) must cover all protein, DNA, and RNA chains in the input file
-                    # Since ligands are sometimes reassigned to a new chain e.g. 'X', we do not require a mapping for them
+                    # Required for non-RCSB complexes and optional for RCSB complexes
+                    description = 'GSP1 complex (RanGAP1) from Tina Perica. This file was taken from PDB_REDO. Removed residues 180-213 from chain A (RAN/GSP1) (the ones wrapping around YRB1).',
+
+                    # Exactly one of these fields must be specified for non-RCSB complexes.
+                    # If identical_chains is passed then it must be set to True and all protein, DNA, and RNA chains in
+                    # the input file must have the same chain ID as in the RCSB file.
+                    # If chain_mapping is instead passed then the keys must cover all protein, DNA, and RNA chains in the input file.
+                    # Since ligands are sometimes reassigned to a new chain e.g. 'X', we do not require a mapping for them in
+                    # chain_mapping and we do not consider them in the sanity check for the identical_chains case.
                     # Note: This logic does not currently handle cases where multiple chains in the RCSB file were merged into one
                     #       chain in the input file i.e. chain A in the input file corresponds to chains L and H in the RCSB
                     #       structure.
-                    identical_chains = ['A', 'C']
+                    # Clustal is run over the chain mapping to ensure a sequence identity of minimum_sequence_identity% (95% by default).
+                    identical_chains = True
                         # or
                     chain_mapping = dict(
                         A = 'C', # To help other uses read the input file, it is useful to mention any other choices available i.e. "choice of A, D, G, J." followed by the chain name e.g. "RAN"
                         C = 'A', # e.g. "choice of C, F, I, L. Ran GTPase activating protein 1"
                     ),
 
-                    # Required for non-RCSB complexes and optional for RCSB complexes
-                    description = 'GSP1 complex (RanGAP1) from Tina Perica. This file was taken from PDB_REDO. Removed residues 180-213 from chain A (RAN/GSP1) (the ones wrapping around YRB1).',
+                    # Fields required for non-RCSB complexes if there are ligands/ions in the input structure.
+                    # First, all ligands and ions will be found in the input structure. Each (non-water) ligand and ion code must be
+                    # covered in either the ligand_instance_mapping, the ligand_code_mapping, or the unchanged_ligand_codes mapping
+                    # In practice, you will probably one want to use ligand_code_mapping, unchanged_ligand_codes, and unchanged_ion_codes
+                    # as it is rare for ion codes to be changed.
+                    # LigandMap is defined in klab.bio.ligand.
+                    # The three types of mapping are:
+
+                    # 1. detailed mappings - one mapping per instance. You will probably not want to bother using this format as it can become unwieldy with large numbers of ligands
+                    ligand_instance_mapping = LigandMap.from_tuples_dict({ # Input PDB's HET code, residue ID -> RCSB HET code, RCSB residue ID
+                        ('G13', 'X   1 ') : ('GNP', 'A1250 '),
+                    }),
+                    ion_instance_mapping = LigandMap.from_tuples_dict({ # Input PDB's HET code, residue ID -> RCSB HET code, RCSB residue ID
+                        ('UNX', 'A1249 ') : ('MG', 'A1250 '),
+                    }),
+
+                    # 2. ligand type mappings - one mapping per ligand code. This is the easiest to specify when there are changes to ligand codes
+                    ligand_code_mapping = {
+                        'G13' : 'GNP',
+                    )
+                    ion_code_mapping = {
+                        'UNX' : 'MG',
+                    )
+
+                    # 3. white lists - lists of ligand and ion codes which have not changed. Most of your cases will probably fall into this category
+                    unchanged_ligand_codes = ['MSE'],
+                    unchanged_ion_codes = ['FE2'],
+
+                    # Fields currently advised when there are ligands in the structure in order for the protocols to handle
+                    # ligands properly. This may be a non-issue in the future; at the time of writing, February 5th 2016,
+                    # there was a large push by the Rosetta XRW to address the problem of handling arbitrary ligands so this
+                    # problem may be mainly solved.
+                    params_file_paths = {
+                        'G13' : 'temp/pdbs/1K5D2.params'
+                    },
+                ),
+                Complex = dict(
+                    # There are two cases - the complex exists in the database or we will be adding a new complex.
+                    # Note: Before adding new complexes, you should make sure that there is no existing complex in the
+                    #       database. This will help to reduce redundancy and provide us with better data.
+
+                    # These fields are required in both cases and specify the partners of the complex
+                    # Note: Please ensure that the LChains (resp. RChains) chains correspond to the protein/complex
+                    # identified by LName, LShortName, LHTMLName (resp. RName, RShortName, RHTMLName)
+                    LChains = ['A'],
+                    RChains = ['C'],
+
+                    # Case 1: These fields should be used if there is an existing complex in the database.
+                    ComplexID = 202,
+
+                    # Case 2: These fields should only be used if there is no existing complex in the database.
+                    AdditionalKeywords = ['GSP1'], # Used to search for existing complexes. The PDB ID, LName, LShortName, etc. fields will automatically be used for the search so there is no need to specify those.
+                    LName = 'Ras-related nuclear protein', # the full protein name for the left partner. This is a Unicode field.
+                    LShortName = 'RAN', # the short-hand name commonly used
+                    LHTMLName = 'RAN', # a version of the short-hand name converted to HTML e.g. &alpha; used in place of an alpha character. This is an ASCII field.
+                    RName = 'Ran-specific GTPase-activating protein', # similar
+                    RShortName = 'RanGAP1', # similar
+                    RHTMLName = 'RanGAP1', # similar
+                    FunctionalClassID = 'OG', # One of A (Antibody-antigen), AB (Antigen/Bound Antibody), EI (Enzyme/inhibitor), ER (Enzyme containing complex),
+                                              # ES (Enzyme containing complex), OG (G-proteins), OR (Receptors), or OX (Miscellaneous)
+                    PPDBMFunctionalClassID = 'O', # One of A (Antibody-antigen), AB (Antigen/Bound Antibody), E (Enzyme/Inhibitor or Enzyme/Substrate), or O (Miscellaneous)
+                    PPDBMDifficulty = None,   # specific to the protein-protein docking benchmark i.e. use None here
+                    IsWildType = True,        # if this is the wildtype sequence
+                    WildTypeComplexID = None, # if this is not wildtype sequence and the wildtype complex is in the database, please specify that complex ID here
+                    Notes = '...'             # any notes on the complex e.g. 'There is a related complex in the database (complex #119 at the time of writing) with all three unique chains from 1K5D (AB|C).'
+                    Warnings = None,          # any warnings about the complex in general. Note: Structural warnings belong in the description field of the Structure dict.
+                )
+            )
+        '''
+
+        # complex_definition, keywords = [], force = False, allow_missing_params_files = False, debug = True
+
+        structural_details = complex_definition['Structure']
+        complex_details = complex_definition['Complex']
+
+        tsession = self.importer.get_session(new_session = True)
+        rcsb_id = structural_details['rcsb_id']
+        params_file_paths = structural_details.get('params_file_paths', {})
+        for k, v in params_file_paths.iteritems():
+            params_file_paths[k] = os.path.abspath(v)
+
+        # Step 1: Add the associated PDB files
+        if 'file_path' or 'pdb_object' in structural_details:
+
+
+            from klab.bio.ligand import LigandMap
+
+
+            pdb2pdb_chain_maps = []
+
+            # Required fields
+            database_id = structural_details['db_id']
+            techniques = structural_details['techniques']
+            assert(5 <= len(database_id) <= 10)
+            if 'description' not in structural_details:
+                 raise colortext.Exception('A description is required for non-RCSB files. This should include any details on the structure preparation.')
+            if 'file_source' not in structural_details:
+                 raise colortext.Exception('''A file_source is required for non-RCSB files. This should describe where the file came from e.g. "PDB REDO", "Rosetta", or the creator's name e.g. "Jon Snow".''')
+            if 'user_id' not in structural_details:
+                 raise colortext.Exception('A user_id is required for non-RCSB files. This should correspond to a record in the User table.')
+
+            # Read the input PDB
+            designed_pdb_object = None
+            if structural_details.get('pdb_object'):
+                if structural_details.get('file_path'):
+                    raise colortext.Exception('Only one of pdb_object and file_path should be specified, not both.')
+                designed_pdb_object = structural_details.get('pdb_object')
+            else:
+                if not structural_details.get('file_path'):
+                    raise colortext.Exception('Exactly one of pdb_object or file_path must be specified.')
+                pdb_file_path = os.path.abspath(structural_details['file_path'])
+                if not os.path.exists(pdb_file_path):
+                    raise colortext.Exception('Could not locate the file "{0}".'.format(pdb_file_path))
+                designed_pdb_object = PDB(read_file(pdb_file_path))
+
+            # Read the chain IDs
+            all_chain_ids, main_chain_ids = [], []
+            for k, v in sorted(designed_pdb_object.chain_types.iteritems()):
+                all_chain_ids.append(k)
+                if v != 'Unknown' and v != 'Solution' and v != 'Ligand':
+                    main_chain_ids.append(k)
+
+            # Check the chain mapping
+            chain_mapping, chain_mapping_keys = {}, set()
+            if 'identical_chains' in structural_details:
+                # Create a partial chain mapping (ignoring ligand chains which may have a corresponding match)
+                assert('chain_mapping' not in structural_details)
+                assert(structural_details['identical_chains'] == True)
+                for c in main_chain_ids:
+                    chain_mapping[c] = c
+                    chain_mapping_keys.add(c)
+            else:
+                # Check that the chain mapping domain is a complete mapping over the main chain IDs ( main_chain_ids <= chain_mapping.keys() <= all_chain_ids where "<=" is non-strict subset of)
+                assert('chain_mapping' in structural_details)
+                chain_mapping = structural_details['chain_mapping']
+                chain_mapping_keys = set(chain_mapping.keys())
+                assert(len(chain_mapping_keys.intersection(set(main_chain_ids))) == len(main_chain_ids)) # main_chain_ids is a subset of chain_mapping_keys
+                assert(len(set(all_chain_ids).intersection(chain_mapping_keys)) == len(chain_mapping_keys)) # chain_mapping_keys is a subset of all_chain_ids
+            unmapped_chains = sorted(set(all_chain_ids).difference(chain_mapping_keys))
+
+            # Add the RCSB structure to the database and then use that object to run Clustal
+            self.importer.add_pdb_from_rcsb(rcsb_id, trust_database_content = True, ligand_params_file_paths = {})
+            rcsb_object = self.importer.get_pdb_object(rcsb_id, tsession = None)
+            design_sequences = None
+            if designed_pdb_object.seqres_sequences:
+                design_sequences = designed_pdb_object.seqres_sequences
+            else:
+                design_sequences = designed_pdb_object.atom_sequences
+            pcsa = PDBChainSequenceAligner()
+            for chain_id, sequence in sorted(rcsb_object.seqres_sequences.iteritems()):
+                pcsa.add(rcsb_id, chain_id, str(sequence))
+            for chain_id, sequence in sorted(design_sequences.iteritems()):
+                pcsa.add(database_id, chain_id, str(sequence))
+            output, best_matches = pcsa.align()
+            colortext.warning(pprint.pformat(best_matches))
+            for dc, rc in sorted(chain_mapping.iteritems()):
+                # todo: this mapping is untested on ligand chains. We could do: for all c in unmapped_chains, see if the 3-letter sequences match and, if so, and add those
+                k1 = '{0}_{1}'.format(database_id, dc)
+                k2 = '{0}_{1}'.format(rcsb_id, rc)
+                print(k1, k2)
+                assert(k1 in best_matches and k2 in best_matches[k1])
+                sequence_identity = best_matches[k1][k2]
+                pdb2pdb_chain_maps.append(dict(
+                    PDBFileID1 = database_id,
+                    Chain1 = dc,
+                    PDBFileID2 = rcsb_id,
+                    Chain2 = rc,
+                    SequenceIdentity = sequence_identity,
+                ))
+                if sequence_identity < minimum_sequence_identity:
+                    raise colortext.Exception('The chain mapping is defined as {0}, chain {1} -> {2}, chain {3} but the sequence identity for these chains is only {4}%.'.format(database_id, dc, rcsb_id, rc, sequence_identity))
+
+            # Make sure that no params files were specified that do not fit the PDB file
+            ligands_not_present = set(params_file_paths.keys()).difference(designed_pdb_object.get_ligand_codes())
+            if len(ligands_not_present) > 0:
+                raise colortext.Exception('Params files were specified for ligands which do not exist in the PDB file: "{0}".'.format('", "'.join(ligands_not_present)))
+
+            # Sanity-check the ligand mapping for consistency
+            ligand_code_map = {}
+            if 'ligand_instance_mapping' in structural_details:
+                pprint.pprint(structural_details['ligand_instance_mapping'].code_map)
+                for k, v in structural_details['ligand_instance_mapping'].code_map.iteritems():
+                    assert(ligand_code_map.get(k) == None or ligand_code_map[k] == v)
+                    ligand_code_map[k] = v
+            if 'ligand_code_mapping' in structural_details:
+                pprint.pprint(structural_details['ligand_code_mapping'])
+                for k, v in structural_details['ligand_code_mapping'].iteritems():
+                    assert(ligand_code_map.get(k) == None or ligand_code_map[k] == v)
+                    ligand_code_map[k] = v
+            if 'unchanged_ligand_codes' in structural_details:
+                for k in structural_details['unchanged_ligand_codes']:
+                    assert(ligand_code_map.get(k) == None or ligand_code_map[k] == k)
+                    ligand_code_map[k] = k
+            pprint.pprint(ligand_code_map)
+
+            # Sanity-check the ligand mapping for completeness
+            ligand_mapping = LigandMap.from_code_map(ligand_code_map)
+            print(sorted(ligand_code_map.keys()), sorted(designed_pdb_object.get_ligand_codes()))
+            assert(sorted(ligand_code_map.keys()) == sorted(designed_pdb_object.get_ligand_codes()))
+
+            # todo: currently unhandled
+            assert('ion_instance_mapping' not in structural_details and 'ion_code_mapping' not in structural_details)
+
+            # todo: update this function call
+            importer.add_designed_pdb(designed_pdb_object, database_id, rcsb_id,
+                                  structural_details['file_source'], structural_details['description'] , structural_details['user_id'],
+                                  chain_mapping = chain_mapping, ligand_mapping = ligand_mapping,
+                                  ligand_params_file_paths = structural_details.get('params_file_paths', {}), techniques=techniques)
+
+            for pdb2pdb_chain_map in pdb2pdb_chain_maps:
+                pdb2pdb_chain_map = get_or_create_in_transaction(tsession, dbmodel.PDB2PDBChainMap, pdb2pdb_chain_map)
+
+        else:
+            # RCSB file
+            raise colortext.Exception('This should work but has not been tested')
+            # Read the RCSB PDB
+            rcsb_pdb_object = self.importer.get_pdb_object(rcsb_id, tsession = None)
+
+            # Params files
+            print(rcsb_pdb_object.get_ligand_codes())
+            assert(len(set(params_file_paths.keys()).difference(rcsb_pdb_object.get_ligand_codes())) == 0)
+
+            self.importer.add_pdb_from_rcsb(rcsb_id, trust_database_content = True, ligand_params_file_paths = params_file_paths)
+
+
+        colortext.message('Importing {0} as {1}'.format(tina_pdb_id, tina_db_id))
+
+        '''
 
                     # Fields required for non-RCSB complexes if there are ligands/ions in the input structure.
                     # First, all ligands and ions will be found in the input structure. Each (non-water) ligand and ion code must be
@@ -1793,53 +2035,80 @@ class BindingAffinityDDGInterface(ddG):
                         'G13' : 'temp/pdbs/1K5D2.params'
                     },
                 ),
-                Complex = dict(
-                    # There are two cases - the complex exists in the database or we will be adding a new complex.
-                    # Note: Before adding new complexes, you should make sure that there is no existing complex in the
-                    #       database. This will help to reduce redundancy and provide us with better data.
-
-                    # These fields are required in both cases and specify the partners of the complex
-                    # Note: Please ensure that the LChains (resp. RChains) chains correspond to the protein/complex
-                    # identified by LName, LShortName, LHTMLName (resp. RName, RShortName, RHTMLName)
-                    LChains = ['A'],
-                    RChains = ['C'],
-
-                    # Case 1: These fields should be used if there is an existing complex in the database.
-                    ComplexID = 202,
-
-                    # Case 2: These fields should only be used if there is no existing complex in the database.
-                    AdditionalKeywords = ['GSP1'], # Used to search for existing complexes. The PDB ID, LName, LShortName, etc. fields will automatically be used for the search so there is no need to specify those.
-                    ForceAddition = False, # similar to the force function parameter. Only set this after searching for the complex the first time.
-                    LName = 'Ras-related nuclear protein', # the full protein name for the left partner. This is a Unicode field.
-                    LShortName = 'RAN', # the short-hand name commonly used
-                    LHTMLName = 'RAN', # a version of the short-hand name converted to HTML e.g. &alpha; used in place of an alpha character. This is an ASCII field.
-                    RName = 'Ran-specific GTPase-activating protein', # similar
-                    RShortName = 'RanGAP1', # similar
-                    RHTMLName = 'RanGAP1', # similar
-                    FunctionalClassID = 'OG', # One of A (Antibody-antigen), AB (Antigen/Bound Antibody), EI (Enzyme/inhibitor), ER (Enzyme containing complex),
-                                              # ES (Enzyme containing complex), OG (G-proteins), OR (Receptors), or OX (Miscellaneous)
-                    PPDBMFunctionalClassID = 'O', # One of A (Antibody-antigen), AB (Antigen/Bound Antibody), E (Enzyme/Inhibitor or Enzyme/Substrate), or O (Miscellaneous)
-                    PPDBMDifficulty = None,   # specific to the protein-protein docking benchmark i.e. use None here
-                    IsWildType = True,        # if this is the wildtype sequence
-                    WildTypeComplexID = None, # if this is not wildtype sequence and the wildtype complex is in the database, please specify that complex ID here
-                    Notes = '...'             # any notes on the complex e.g. 'There is a related complex in the database (complex #119 at the time of writing) with all three unique chains from 1K5D (AB|C).'
-                    Warnings = None,          # any warnings about the complex in general. Note: Structural warnings belong in the description field of the Structure dict.
-                )
-            )
         '''
 
 
-        assert ForceAddition == force
 
-        complex_definition, keywords = [], force = False, allow_missing_params_files = False):
+
+        assert(sorted(details['Structure']['chain_mapping'].keys()) == sorted(details['Complex']['LChains'] + details['Complex']['RChains']))
+
+        assert(details['Structure']['unchanged_ligand_codes'] or details['Structure']['ligand_mapping'])
+
+        for k in details['Structure']['params_files'].keys():
+            print(k)
+            assert(k in details['Structure']['ligand_mapping'.code_map])
+
+
+        assert ComplexID or ComplexDetails - LChains and RChains
+
+
+        tina_pdb_id = tina_pdb_id.upper()
+        rcsb_pdb_id = tina_pdb_id_to_rcsb_pdb_id[tina_pdb_id]
+        assert(structural_details['rcsb_id'] == rcsb_pdb_id)
+
+        tina_pdb_object = tina_pdb_objects[tina_pdb_id]
+        rcsb_pdb_object = rcsb_pdb_objects[rcsb_pdb_id]
+        tina_db_id = structural_details['db_id']
+
+        assert((tina_db_id != tina_pdb_id) and (tina_db_id != rcsb_pdb_id) and (len(tina_db_id) > 7) and (tina_db_id[4:7] == '_TP'))
+
+        #    Step 1: Add complexes
+        complex_id = None
+        if 'complex_id' in complex_details:
+           complex_id = complex_details['complex_id']
+        else:
+
+
+            Complex = dict(
+                ComplexID = 202,
+                LChains = ['A'],
+                RChains = ['B'],
+            )
+
+        ppi_api.add_complex
+
+        mut_complex_3H7P = dict(
+            LName = 'Ubiquitin (yeast) K63R',
+            LShortName = 'Ubiquitin K63R',
+            LHTMLName = 'Ubiquitin (yeast) K63R',
+            RName = 'Ubiquitin (yeast)',
+            RShortName = 'Ubiquitin',
+            RHTMLName = 'Ubiquitin (yeast)',
+            FunctionalClassID = 'OX',
+            PPDBMFunctionalClassID = 'O',
+            PPDBMDifficulty = None,
+            IsWildType = False,
+            WildTypeComplexID = wt_complex_id,
+            Notes = None,
+            Warnings = None,
+        )
+        DDGdb.insertDictIfNew('PPComplex', mut_complex_3H7P, ['LName', 'RName'])
+
+
+
+
+
+
+
+        #complex_definition, keywords = [], force = False, allow_missing_params_files = False)
 
 
         self.find_complex(pdbs, keywords)
 
-        pdb_ids
+        #pdb_ids
 
-            complex = complex_definition['Complex']
-            Keywords = [complex['LName'], complex['LShortName'], complex['LHTMLName'], complex['RName'], complex['RShortName'], complex['RHTMLName']]
+        #complex = complex_definition['Complex']
+        #Keywords = [complex['LName'], complex['LShortName'], complex['LHTMLName'], complex['RName'], complex['RShortName'], complex['RHTMLName']]
 
 
         mut_complex_3H7P = dict(
@@ -1857,7 +2126,9 @@ class BindingAffinityDDGInterface(ddG):
             Notes = None,
             Warnings = None,
         )
-        DDGdb.insertDictIfNew('PPComplex', mut_complex_3H7P, ['LName', 'RName'])'''
+        DDGdb.insertDictIfNew('PPComplex', mut_complex_3H7P, ['LName', 'RName'])
+
+        '''
 
     for tina_pdb_id, details in sorted(complex_definitions.iteritems()):
 
@@ -1922,4 +2193,4 @@ class BindingAffinityDDGInterface(ddG):
             Notes = None,
             Warnings = None,
         )
-        DDGdb.insertDictIfNew('PPComplex', mut_complex_3H7P, ['LName', 'RName'])
+        DDGdb.insertDictIfNew('PPComplex', mut_complex_3H7P, ['LName', 'RName'])'''
