@@ -28,10 +28,9 @@ from ppi_api import BindingAffinityDDGInterface, get_interface
 from api_layers import *
 from db_api import ddG
 import db_schema as dbmodel
-
+from util import fill_empty_score_dict
 
 DeclarativeBase = dbmodel.DeclarativeBase
-
 
 # Constants for cluster runs
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
@@ -63,47 +62,6 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         self.unzipped_ddg_output_paths = [] # Stores paths to unzipped ddG job output directories (that need to be cleared at the end of this object's life, or before)
 
 
-    def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
-        '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
-        '''
-        score_table = self._get_sqa_prediction_structure_scores_table()
-        prediction_table = self.PredictionTable
-
-        # todo: fix this call. it currently runs very slowly
-        #prediction_ids = self.get_session().query(score_table, prediction_table).\
-        #        filter(and_(prediction_table.ID == score_table.PredictionPPIID, prediction_table.PredictionSet == prediction_set_id)).\
-        #        options(Load(prediction_table).load_only("ID"))
-        #
-        #if score_method_id != None:
-        #    prediction_ids = prediction_ids.filter(score_table.ScoreMethodID == score_method_id)
-
-        if score_method_id != None:
-            return set([r['ID'] for r in self.DDG_db.execute_select('''
-                SELECT DISTINCT PredictionPPI.ID FROM PredictionPPIStructureScore
-                INNER JOIN PredictionPPI
-                ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID
-                WHERE PredictionPPI.PredictionSet=%s AND PredictionPPIStructureScore.ScoreMethodID=%s''', parameters=(prediction_set_id, score_method_id))])
-        else:
-            return set([r['ID'] for r in self.DDG_db.execute_select('''
-                SELECT DISTINCT PredictionPPI.ID FROM PredictionPPIStructureScore
-                INNER JOIN PredictionPPI
-                ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID
-                WHERE PredictionPPI.PredictionSet=%s''', parameters=(prediction_set_id,))])
-
-
-    def get_unfinished_prediction_ids(self, prediction_set_id):
-        '''Returns a set of all prediction_ids that have Status != "done"
-        '''
-        return [r.ID for r in self.get_session().query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status != 'done'))]
-
-
-    def get_prediction_ids_without_scores(self, prediction_set_id, score_method_id = None):
-        all_prediction_ids = [x for x in self.get_prediction_ids(prediction_set_id)]
-        all_prediction_ids_set = set()
-        for prediction_id in all_prediction_ids:
-            all_prediction_ids_set.add( prediction_id )
-        scored_prediction_ids_set = self.get_prediction_ids_with_scores(prediction_set_id, score_method_id = score_method_id)
-        return [x for x in all_prediction_ids_set.difference(scored_prediction_ids_set)]
 
 
     def create_cluster_run_rescore_dir(self, output_dir, passed_job_name = None):
@@ -545,26 +503,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         return scores
 
     def add_scores_from_cluster_rescore(self, output_dirs, prediction_structure_scores_table, prediction_id_field, score_method_id):
-        settings = parse_settings.get_dict()
-        rosetta_scripts_path = settings['local_rosetta_installation_path'] + '/source/bin/' + 'rosetta_scripts' + settings['local_rosetta_binary_type']
-
-        DDGdb = self.DDG_db
-
-        prediction_ids_and_structs_score_count = {}
-        print 'Running database query to find out which predictions need to be loaded'
-        for row in DDGdb.execute_select("SELECT %s, ScoreType, StructureID FROM %s WHERE ScoreType IN ('WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex') AND ScoreMethodID=%d" % (prediction_id_field, prediction_structure_scores_table, score_method_id)):
-            prediction_id = long(row[prediction_id_field])
-            score_type = row['ScoreType']
-            structure_id = int(row['StructureID'])
-            if (prediction_id, structure_id) not in prediction_ids_and_structs_score_count:
-                prediction_ids_and_structs_score_count[(prediction_id, structure_id)] = 0
-            prediction_ids_and_structs_score_count[(prediction_id, structure_id)] += 1
-        structs_with_some_scores = set()
-        for prediction_id, structure_id in prediction_ids_and_structs_score_count:
-            if prediction_ids_and_structs_score_count[(prediction_id, structure_id)] > 0:
-                structs_with_some_scores.add( (prediction_id, structure_id) )
-                if prediction_ids_and_structs_score_count[(prediction_id, structure_id)] != 6:
-                    print 'Missing data:', prediction_id, structure_id, prediction_ids_and_structs_score_count[(prediction_id, structure_id)]
+        structs_with_some_scores = self.get_structs_with_some_scores()
 
         if isinstance(output_dirs, basestring):
             output_dirs = [output_dirs]
@@ -711,15 +650,6 @@ def process_cluster_rescore_helper(ddg_output_path, prediction_id, pdb_path, cha
         'FLAGLIST' : extra_flags,
     }
     return (task_name, arg_dict)
-
-def fill_empty_score_dict(score_dict, prediction_id, structure_id, score_type, score_method_id, prediction_structure_scores_table, prediction_id_field):
-    d = copy.deepcopy(score_dict)
-    if prediction_id_field != None:
-        d[prediction_id_field] = prediction_id
-    d['ScoreMethodID'] = score_method_id
-    d['ScoreType'] = score_type
-    d['StructureID'] = structure_id
-    return d
 
 def make_scores_list(empty_score_dict, wt_output_db3, mut_output_db3, prediction_id, round_num, score_method_id, prediction_structure_scores_table = None, prediction_id_field = None):
     # "left" structure has struct_id=1

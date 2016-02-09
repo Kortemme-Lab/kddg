@@ -29,22 +29,13 @@ from ppi_api import BindingAffinityDDGInterface, get_interface
 from api_layers import *
 from db_api import ddG
 import db_schema as dbmodel
-
+from util import fill_empty_score_dict
 
 DeclarativeBase = dbmodel.DeclarativeBase
-
 
 # Constants for cluster runs
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
 output_db3 = 'output.db3'
-setup_run_with_multiprocessing = True
-tmpdir_location = '/dbscratch/%s/tmp' % getpass.getuser()
-
-def total_seconds(td):
-    '''
-    Included in python 2.7 but here for backwards-compatibility for old Python versions
-    '''
-    return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) / 10**6
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
     '''This is the function that should be used to get a RosettaScriptsInterface object. It hides the private methods
@@ -54,303 +45,9 @@ def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf
 class RosettaScriptsInterface(BindingAffinityDDGInterface):
     def __init__(self, passwd = None, username = None, hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
         super(RosettaScriptsInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
-        self.rescore_args = {} # Stores arguments for rescoring step, to be dumped later
-        self.all_score_types = ['WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex']
-        self.all_score_types_index = {}
-        for i, score_type in enumerate(self.all_score_types):
-            self.all_score_types_index[score_type] = i
-        self.master_scores_list = []
-        self.ddg_output_path_cache = {} # Stores paths to ddG job output directories, or unzipped job output directories
-        self.unzipped_ddg_output_paths = [] # Stores paths to unzipped ddG job output directories (that need to be cleared at the end of this object's life, or before)
-
-
-    def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
-        '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
-        '''
-        score_table = self._get_sqa_prediction_structure_scores_table()
-        prediction_table = self.PredictionTable
-
-        # todo: fix this call. it currently runs very slowly
-        #prediction_ids = self.get_session().query(score_table, prediction_table).\
-        #        filter(and_(prediction_table.ID == score_table.PredictionPPIID, prediction_table.PredictionSet == prediction_set_id)).\
-        #        options(Load(prediction_table).load_only("ID"))
-        #
-        #if score_method_id != None:
-        #    prediction_ids = prediction_ids.filter(score_table.ScoreMethodID == score_method_id)
-
-        if score_method_id != None:
-            return set([r['ID'] for r in self.DDG_db.execute_select('''
-                SELECT DISTINCT PredictionPPI.ID FROM PredictionPPIStructureScore
-                INNER JOIN PredictionPPI
-                ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID
-                WHERE PredictionPPI.PredictionSet=%s AND PredictionPPIStructureScore.ScoreMethodID=%s''', parameters=(prediction_set_id, score_method_id))])
-        else:
-            return set([r['ID'] for r in self.DDG_db.execute_select('''
-                SELECT DISTINCT PredictionPPI.ID FROM PredictionPPIStructureScore
-                INNER JOIN PredictionPPI
-                ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID
-                WHERE PredictionPPI.PredictionSet=%s''', parameters=(prediction_set_id,))])
-
-
-    def get_unfinished_prediction_ids(self, prediction_set_id):
-        '''Returns a set of all prediction_ids that have Status != "done"
-        '''
-        return [r.ID for r in self.get_session().query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status != 'done'))]
-
-
-    def get_prediction_ids_without_scores(self, prediction_set_id, score_method_id = None):
-        all_prediction_ids = [x for x in self.get_prediction_ids(prediction_set_id)]
-        all_prediction_ids_set = set()
-        for prediction_id in all_prediction_ids:
-            all_prediction_ids_set.add( prediction_id )
-        scored_prediction_ids_set = self.get_prediction_ids_with_scores(prediction_set_id, score_method_id = score_method_id)
-        return [x for x in all_prediction_ids_set.difference(scored_prediction_ids_set)]
-
-
-    def create_cluster_run_rescore_dir(self, output_dir, passed_job_name = None):
-        first_task_count = 0
-        dir_count = 1
-        rescore_args_keys = sorted( self.rescore_args.keys() )
-
-        while first_task_count + 1 < len(rescore_args_keys):
-            settings = parse_settings.get_dict()
-            job_name = '%s-%d' % (passed_job_name, dir_count) or '%s-%s_rescore_ddg_monomer-%d' % (time.strftime("%y%m%d"), getpass.getuser(), dir_count)
-            dir_count += 1
-            job_output_dir = os.path.join(output_dir, job_name)
-            if not os.path.isdir(job_output_dir):
-                try:
-                    os.makedirs(job_output_dir)
-                except OSError:
-                    pass
-
-            num_jobs = 0
-            max_prediction_id = 0
-            break_loop = False
-            last_task_count = first_task_count
-            for ddg_output_path in rescore_args_keys[first_task_count:]:
-                last_task_count += 1
-                for prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, extra_flags in self.rescore_args[ddg_output_path]:
-                    num_jobs += 1
-                    if prediction_id > max_prediction_id:
-                        max_prediction_id = prediction_id
-                    if num_jobs >= 50000:
-                        break_loop = True
-                if break_loop:
-                    break
-
-            settings['scriptname'] = 'rescore_ddg_monomer'
-            settings['tasks_per_process'] = 50
-            settings['numjobs'] = num_jobs
-            settings['mem_free'] = '1.4G'
-            settings['appname'] = 'rosetta_scripts'
-            settings['output_dir'] = job_output_dir
-            job_dict = {}
-            job_data_dir = os.path.join(job_output_dir, 'data')
-            if not os.path.isdir(job_data_dir):
-                try:
-                    os.makedirs(job_data_dir)
-                except OSError:
-                    pass
-
-            data_protocol_path = os.path.join(job_data_dir, os.path.basename(rosetta_scripts_xml_file))
-            if not os.path.isfile(data_protocol_path):
-                shutil.copy(rosetta_scripts_xml_file, data_protocol_path)
-            rel_protocol_path = os.path.relpath(data_protocol_path, job_output_dir)
-            settings['rosetta_args_list'] = ['-inout:dbms:database_name', output_db3]
-
-            r = Reporter('copying/zipping ddG output PDBs', entries='PDBs')
-            print 'Total number of tasks: %d' % num_jobs
-            r.set_total_count(num_jobs)
-
-
-            if setup_run_with_multiprocessing:
-                worker = MultiWorker(process_cluster_rescore_helper, n_cpu=min(multiprocessing.cpu_count(), 16), reporter=r)
-
-            for ddg_output_path in rescore_args_keys[first_task_count:last_task_count]:
-                for prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, extra_flags in self.rescore_args[ddg_output_path]:
-                    if setup_run_with_multiprocessing:
-                        worker.addJob( (ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path, max_prediction_id, extra_flags ) )
-                    else:
-                        task_name, arg_dict = process_cluster_rescore_helper( ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path, max_prediction_id, extra_flags )
-                        job_dict[task_name] = arg_dict
-                        r.increment_report()
-
-            if setup_run_with_multiprocessing:
-                worker.finishJobs()
-                for task_name, arg_dict in worker.data:
-                    job_dict[task_name] = arg_dict
-            else:
-                r.done()
-            write_run_file(settings, job_dict = job_dict)
-            first_task_count = last_task_count
-
-
-    def add_rescore_cluster_run(self, ddg_output_path, chains_to_move, score_method_id, prediction_id):
-        structs_with_both_rounds = self.find_structs_with_both_rounds(ddg_output_path)
-
-        score_method_details = self.get_score_method_details()[score_method_id]
-        method_name = score_method_details['MethodName']
-        author = score_method_details['Authors']
-
-        if method_name.startswith('Rescore-') and author == 'Kyle Barlow':
-            score_fxn = method_name[8:].lower()
-            if score_fxn.startswith('beta'):
-                extra_flags = ['-' + score_fxn]
-            else:
-                extra_flags = []
-        else:
-            score_fxn = 'interface'
-            extra_flags = []
-
-        if ddg_output_path not in self.rescore_args:
-            self.rescore_args[ddg_output_path] = []
-
-        for round_num in structs_with_both_rounds:
-            wt_pdb, mutant_pdb = structs_with_both_rounds[round_num]
-            self.rescore_args[ddg_output_path].append([
-                prediction_id,
-                os.path.abspath(wt_pdb),
-                chains_to_move,
-                score_fxn,
-                round_num,
-                'wt',
-                extra_flags,
-            ])
-            self.rescore_args[ddg_output_path].append([
-                prediction_id,
-                os.path.abspath(mutant_pdb),
-                chains_to_move,
-                score_fxn,
-                round_num,
-                'mut',
-                extra_flags,
-            ])
-
-    def update_prediction_id_status(self, prediction_set_id, root_directory, verbose = True):
-        # Looks for output file in root directory and reads for job status
-        unfinished_prediction_ids = self.get_unfinished_prediction_ids(prediction_set_id)
-        if len(unfinished_prediction_ids) == 0:
-            return
-        if verbose:
-            r = Reporter('parsing output files (if they exist) for queued predictions')
-            r.set_total_count( len(unfinished_prediction_ids) )
-
-        # Constants
-        output_file_substring = 'run-2.py.o'
-        date_format_string = '%Y-%m-%d %H:%M:%S'
-        starting_time_string = 'Starting time:'
-        ending_time_string = 'Ending time:'
-        tsession = self.importer.session
-        for prediction_id in unfinished_prediction_ids:
-            ddg_output_dir = self.find_ddg_output_directory(prediction_id, root_directory)
-            if ddg_output_dir:
-                output_files = [os.path.join(ddg_output_dir, f) for f in os.listdir(ddg_output_dir) if output_file_substring in f]
-                if len(output_files) == 0:
-                    if verbose:
-                        print '\nDirectory %s missing output file\n' % ddg_output_dir
-                        r.decrement_total_count()
-                elif len(output_files) > 1:
-                    raise Exception('ERROR: found more than one output file (defined as having string %s in name) in directory %s' % (output_file_substring, ddg_output_dir))
-                else:
-                    # Parse output file
-                    starting_time = None
-                    ending_time = None
-                    return_code = None
-                    virtual_memory_usage = None
-                    elapsed_time = None
-                    status = 'active'
-                    with open(output_files[0], 'r') as f:
-                        for line in f:
-                            if line.startswith(starting_time_string):
-                                starting_time = line[len(starting_time_string):].strip()
-                            elif line.startswith(ending_time_string):
-                                ending_time = line[len(ending_time_string):].strip()
-                            elif 'return code' in line:
-                                return_code = int(line.strip().split()[-1].strip())
-                            elif 'virtual memory usage' in line:
-                                line = line.strip()
-                                assert( line.endswith('G') )
-                                line = line[:-1]
-                                virtual_memory_usage = float(line.strip().split()[-1].strip())
-                    if starting_time and ending_time:
-                        starting_time_dt = datetime.datetime.strptime(starting_time, date_format_string)
-                        ending_time_dt = datetime.datetime.strptime(ending_time, date_format_string)
-                        elapsed_time = total_seconds(ending_time_dt - starting_time_dt) / 60.0 # 60 seconds in a minute
-
-                    if return_code != None:
-                        if return_code == 0:
-                            status = 'done'
-                        else:
-                            status = 'failed'
-
-                    prediction_record = tsession.query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
-                    prediction_record.StartDate = starting_time
-                    prediction_record.EndDate = ending_time
-                    prediction_record.Status = status
-                    prediction_record.maxvmem = virtual_memory_usage
-                    prediction_record.DDGTime = elapsed_time
-                    prediction_record.ERRORS = str(return_code)
-                    tsession.flush()
-                    tsession.commit()
-
-
-                    if verbose:
-                        r.increment_report()
-            elif verbose:
-                r.decrement_total_count()
-
-        if verbose:
-            r.done()
-
-    def find_ddg_output_directory(self, prediction_id, root_directory):
-        # Returns the ddG output directory path in root directory if it exists
-        # If not, checks to see if zipped output directory exists in root directory, and if so,
-        #    returns path to unzipped temporary directory
-        if prediction_id in self.ddg_output_path_cache:
-            return self.ddg_output_path_cache[prediction_id]
-
-        ddg_output_path = os.path.join(root_directory, '%d-ddg' % prediction_id)
-        if not os.path.isdir( ddg_output_path ):
-            ddg_output_zip = os.path.join(root_directory, '%d.zip' % prediction_id)
-            if os.path.isfile(ddg_output_zip):
-                tmp_dir = unzip_to_tmp_dir(prediction_id, ddg_output_zip)
-                self.unzipped_ddg_output_paths.append( tmp_dir )
-                ddg_output_path = os.path.join(tmp_dir, '%d-ddg' % prediction_id)
-
-        if not os.path.isdir( ddg_output_path):
-            return None
-        else:
-            self.ddg_output_path_cache[prediction_id] = ddg_output_path
-            return ddg_output_path
-
-    def cleanup_tmp_ddg_output_directories(self):
-        # Removes any temporary unzipped ddG monomer output directories
-        if len(self.unzipped_ddg_output_paths) == 0:
-            return
-
-        r = Reporter('Removing temporary directories')
-        r.set_total_count( len(self.unzipped_ddg_output_paths) )
-        for tmp_dir in self.unzipped_ddg_output_paths:
-            shutil.rmtree(tmp_dir)
-            r.increment_report()
-        self.unzipped_ddg_output_paths = []
-        r.done()
 
     @job_completion
-    def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None, max_prediction_ids_to_process=None, setup_cluster_run = False):
-        '''Extracts the data for the prediction set run and stores it into the database.
-
-           For all PredictionIDs associated with the PredictionSet:
-             - looks for a subdirectory of root_directory with the same name as the ID e.g. /some/folder/21412
-             - call extract_data_for_case
-
-           Note: we do not use a transaction at this level. We could but it may end up being a very large transaction
-           depending on the dataset size. It seems to make more sense to me to use transactions at the single prediction
-           level i.e. in extract_data_for_case
-
-           root_directory defaults to /kortemmelab/shared/DDG/ppijobs.
-           If force is True then existing records should be overridden.
-        '''
+    def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None):
         root_directory = root_directory or self.prediction_data_path
 
         ### Find all prediction_ids that need to have updated states
@@ -361,104 +58,37 @@ class RosettaScriptsInterface(BindingAffinityDDGInterface):
         ### Find all prediction_ids with missing scores and setup rescoring or rescore on the fly
         prediction_ids = self.get_prediction_ids_without_scores(prediction_set_id, score_method_id = score_method_id)
 
-        random.shuffle( prediction_ids )
-        print '%d prediction_ids are yet to be scored' % len(prediction_ids)
-        if setup_cluster_run:
-            job_name = '%s-%s' % (time.strftime("%y%m%d"), sanitize_filename(prediction_set_id))
-            r = Reporter('fetching job details for prediction_ids', entries='job details')
-            r.set_total_count(len(prediction_ids))
-            for prediction_id in prediction_ids:
-                ddg_output_path = self.find_ddg_output_directory(prediction_id, root_directory)
-                job_details = self.get_job_details(prediction_id)
-                substitution_parameters = json.loads(job_details['JSONParameters'])
-                chains_to_move = substitution_parameters['%%chainstomove%%']
-                if ddg_output_path:
-                    self.add_rescore_cluster_run(ddg_output_path, chains_to_move, score_method_id, prediction_id)
-                r.increment_report()
-            r.done()
-            self.create_cluster_run_rescore_dir( os.path.join(tmpdir_location, 'cluster_run'), passed_job_name = job_name )
-        else:
-            r = Reporter('rescoring prediction directories with multiprocessing', entries='prediction ids')
-            if max_prediction_ids_to_process:
-                r.set_total_count( max_prediction_ids_to_process )
-            else:
-                r.set_total_count( len(prediction_ids) )
+        self.add_scores_from_db3s(root_directory, score_method_id = score_method_id)
 
-            missing_data_count = 0
-            for prediction_id in prediction_ids:
-                ddg_output_path = self.find_ddg_output_directory(prediction_id, root_directory)
-                if ddg_output_path:
-                    self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force, score_method_id = score_method_id)
-                    r.increment_report()
-                else:
-                    r.decrement_total_count()
-                    missing_data_count += 1
-                if max_prediction_ids_to_process and r.n >= max_prediction_ids_to_process:
-                    print 'Breaking early; processed %d prediction ids' % r.n
-                    break
-            r.done()
-            if missing_data_count > 0:
-                print 'Missing data folders/zips for %d prediction_ids' % missing_data_count
-
-        self.cleanup_tmp_ddg_output_directories() # Remove temporary directories (if created)
-
-    def find_structs_with_both_rounds(self, ddg_output_path):
-        '''Searchs directory ddg_output_path to find ddg_monomer output structures for all rounds with both wt and mut structures'''
-        output_pdbs = [x for x in os.listdir(ddg_output_path) if '.pdb' in x]
-        mut_output_pdbs = { int(x.split('.')[0].split('_')[3]) : x for x in output_pdbs if x.startswith('mut')}
-        wt_output_pdbs = { int(x.split('.')[0].split('_')[3]) : x for x in output_pdbs if '_wt_' in x}
-        all_round_nums = set()
-        structs_with_both_rounds = {}
-        for round_num in mut_output_pdbs.keys():
-            all_round_nums.add( round_num )
-        for round_num in wt_output_pdbs.keys():
-            all_round_nums.add( round_num )
-        for round_num in all_round_nums:
-            if round_num in wt_output_pdbs and round_num in mut_output_pdbs:
-                structs_with_both_rounds[round_num] = (
-                    os.path.join(ddg_output_path, wt_output_pdbs[round_num]),
-                    os.path.join(ddg_output_path, mut_output_pdbs[round_num]),
-                )
-        return structs_with_both_rounds
-
-    def add_scores_from_db3s(self, output_dirs, expect_n = None, round_num = 1, score_method_id = None):
+    def add_scores_from_db3s(self, output_dir, expect_n = None, round_num = 1, score_method_id = None):
         prediction_structure_scores_table = self.prediction_table + 'StructureScore'
         prediction_id_field = self.prediction_table + 'ID'
 
         structs_with_some_scores = self.get_structs_with_some_scores(expect_n = expect_n)
 
-        if isinstance(output_dirs, basestring):
-            output_dirs = [output_dirs]
-
         available_db3_files = {}
         available_db3_files_set = set()
-        r = Reporter('looking for output .db3 files in output directories', entries = 'output dirs')
-        r.set_total_count( len(output_dirs) )
-        for output_dir in output_dirs:
-            # Take the last step data directory job pickle
-            data_dirs = sorted( [d for d in os.listdir(output_dir) if d.startswith('data')] )
-            m = re.match( '(?:data-)(\d+)', data_dirs[-1] )
-            if m:
-                job_dict_file = 'job_dict-%d.pickle' % int(m.group(1))
+        # Take the last step data directory job pickle
+        data_dirs = sorted( [d for d in os.listdir(output_dir) if d.startswith('data')] )
+        m = re.match( '(?:data-)(\d+)', data_dirs[-1] )
+        if m:
+            job_dict_file = 'job_dict-%d.pickle' % int(m.group(1))
+        else:
+            job_dict_file = 'job_dict.pickle'
+        job_dict_path = os.path.join(os.path.join(output_dir, data_dirs[-1]), job_dict_file)
+
+        with open(job_dict_path, 'r') as f:
+            job_dict = pickle.load(f)
+
+        for task_name in job_dict:
+            task_name = str(task_name)
+            prediction_id = long(task_name)
+            db3_file = os.path.join(output_dir, os.path.join(task_name, 'output.db3.gz'))
+            if os.path.isfile(db3_file):
+                available_db3_files[ (prediction_id, round_num) ] = db3_file
+                available_db3_files_set.add( (prediction_id, round_num) )
             else:
-                job_dict_file = 'job_dict.pickle'
-            job_dict_path = os.path.join(os.path.join(output_dir, data_dirs[-1]), job_dict_file)
-
-            with open(job_dict_path, 'r') as f:
-                job_dict = pickle.load(f)
-
-            for task_name in job_dict:
-                task_name = str(task_name)
-                prediction_id = long(task_name)
-                db3_file = os.path.join(output_dir, os.path.join(task_name, 'output.db3.gz'))
-                if os.path.isfile(db3_file):
-                    available_db3_files[ (prediction_id, round_num) ] = db3_file
-                    available_db3_files_set.add( (prediction_id, round_num) )
-                else:
-                    print 'Missing db3 file:', db3_file
-
-            r.increment_report()
-        r.done()
+                print 'Missing db3 file:', db3_file
 
         db3_files_to_process = available_db3_files_set.difference(structs_with_some_scores)
         print 'Found %d scores in db3 files needed to add to database' % len(db3_files_to_process)
@@ -497,49 +127,6 @@ def read_db3_scores_helper(empty_score_dict, prediction_id, round_num, output_db
     shutil.rmtree(tmp_dir)
     return ( (None, prediction_id, scores_list), {'prediction_structure_scores_table' : prediction_structure_scores_table, 'prediction_id_field' : prediction_id_field} )
 
-def process_cluster_rescore_helper(ddg_output_path, prediction_id, pdb_path, chains_to_move, score_fxn, round_num, struct_type, job_data_dir, job_output_dir, rel_protocol_path, max_prediction_id, extra_flags):
-    task_name = make_task_name_path(max_prediction_id, prediction_id, round_num, struct_type)
-    prediction_id_data_dir = os.path.join(job_data_dir, task_name)
-    pdb_name = os.path.basename(pdb_path)
-    if pdb_name.endswith('.gz'):
-        pdb_name_zipped = pdb_name
-    else:
-        pdb_name_zipped = pdb_name + '.gz'
-    data_pdb_path = os.path.join(prediction_id_data_dir, pdb_name_zipped)
-
-    if os.path.isdir(prediction_id_data_dir) and not os.path.isfile(data_pdb_path):
-        shutil.rmtree(prediction_id_data_dir)
-
-    if not os.path.isdir(prediction_id_data_dir):
-        try:
-            os.makedirs(prediction_id_data_dir)
-        except OSError:
-            pass
-
-        new_pdb = os.path.join(prediction_id_data_dir, pdb_name)
-        shutil.copy(pdb_path, new_pdb)
-        if not new_pdb.endswith('.gz'):
-            new_pdb = zip_file_with_gzip(new_pdb)
-        assert( os.path.abspath(data_pdb_path) == os.path.abspath(new_pdb) )
-
-    rel_pdb_path = os.path.relpath(data_pdb_path, job_output_dir)
-    arg_dict = {
-        '-parser:script_vars' : ['chainstomove=%s' % chains_to_move,  'currentscorefxn=%s' % score_fxn],
-        '-s' : rel_pdb_path,
-        '-parser:protocol' : rel_protocol_path,
-        'FLAGLIST' : extra_flags,
-    }
-    return (task_name, arg_dict)
-
-def fill_empty_score_dict(score_dict, prediction_id, structure_id, score_type, score_method_id, prediction_structure_scores_table, prediction_id_field):
-    d = copy.deepcopy(score_dict)
-    if prediction_id_field != None:
-        d[prediction_id_field] = prediction_id
-    d['ScoreMethodID'] = score_method_id
-    d['ScoreType'] = score_type
-    d['StructureID'] = structure_id
-    return d
-
 def make_scores_list(empty_score_dict, db3_file, prediction_id, round_num, score_method_id, prediction_structure_scores_table = None, prediction_id_field = None):
     # Fill empty score dict
     score_dict = fill_empty_score_dict(empty_score_dict, prediction_id, round_num, 'DDG', score_method_id, prediction_structure_scores_table, prediction_id_field)
@@ -576,11 +163,3 @@ def make_scores_list(empty_score_dict, db3_file, prediction_id, round_num, score
     if tmp_dir:
         shutil.rmtree(tmp_dir)
     return score_dict
-
-def unzip_to_tmp_dir(prediction_id, zip_file):
-    tmp_dir = tempfile.mkdtemp(prefix='unzip_to_tmp_')
-    unzip_path = os.path.join(tmp_dir, '%d-ddg' % prediction_id)
-    os.makedirs(unzip_path)
-    with zipfile.ZipFile(zip_file, 'r') as job_zip:
-        job_zip.extractall(unzip_path)
-    return tmp_dir
