@@ -105,6 +105,40 @@ class BindingAffinityDDGInterface(ddG):
         super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
 
+    def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
+        '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
+        '''
+        score_table = self._get_sqa_prediction_structure_scores_table()
+        prediction_table = self.PredictionTable
+
+        if score_method_id != None:
+            return set([r['ID'] for r in self.DDG_db.execute_select('''
+                SELECT DISTINCT PredictionPPI.ID FROM PredictionPPIStructureScore
+                INNER JOIN PredictionPPI
+                ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID
+                WHERE PredictionPPI.PredictionSet=%s AND PredictionPPIStructureScore.ScoreMethodID=%s''', parameters=(prediction_set_id, score_method_id))])
+        else:
+            return set([r['ID'] for r in self.DDG_db.execute_select('''
+                SELECT DISTINCT PredictionPPI.ID FROM PredictionPPIStructureScore
+                INNER JOIN PredictionPPI
+                ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID
+                WHERE PredictionPPI.PredictionSet=%s''', parameters=(prediction_set_id,))])
+
+
+    def get_unfinished_prediction_ids(self, prediction_set_id):
+        '''Returns a set of all prediction_ids that have Status != "done"
+        '''
+        return [r.ID for r in self.get_session().query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status != 'done'))]
+
+
+    def get_prediction_ids_without_scores(self, prediction_set_id, score_method_id = None):
+        all_prediction_ids = [x for x in self.get_prediction_ids(prediction_set_id)]
+        all_prediction_ids_set = set()
+        for prediction_id in all_prediction_ids:
+            all_prediction_ids_set.add( prediction_id )
+        scored_prediction_ids_set = self.get_prediction_ids_with_scores(prediction_set_id, score_method_id = score_method_id)
+        return [x for x in all_prediction_ids_set.difference(scored_prediction_ids_set)]
+
 
     ###########################################################################################
     ## Information layer
