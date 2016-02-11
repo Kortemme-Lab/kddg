@@ -477,16 +477,17 @@ class PPIPDBSet(DeclarativeBase):
     partner_chains = relationship('PPIPDBPartnerChain', viewonly=True, primaryjoin="and_(PPIPDBSet.PPComplexID==PPIPDBPartnerChain.PPComplexID, PPIPDBSet.SetNumber==PPIPDBPartnerChain.SetNumber)", order_by="PPIPDBPartnerChain.Side, PPIPDBPartnerChain.ChainIndex")
 
     def __repr__(self):
-        d = dict(L = '', R = '')
         pdb_ids = set([pc.PDBFileID for pc in self.partner_chains])
         if len(pdb_ids) == 1:
+            d = dict(L = '', R = '')
             for pc in self.partner_chains:
                 d[pc.Side] += pc.Chain
-            return '{0}|{1}'.format(d['L'], d['R'])
+            return '#{0} {1}|{2}'.format(self.SetNumber, d['L'], d['R'])
         else:
+            d = dict(L = [], R = [])
             for pc in self.partner_chains:
-                d[pc.Side] += '{0} {1}'.format(pc.PDBFileID, pc.Chain)
-            return '{0}|{1}'.format(','.join(d['L']), ','.join(d['R']))
+                d[pc.Side].append('{0} {1}'.format(pc.PDBFileID, pc.Chain))
+            return '#{0} {1}|{2}'.format(self.SetNumber, ','.join(d['L']), ','.join(d['R']))
 
 
 class PPIPDBPartnerChain(DeclarativeBase):
