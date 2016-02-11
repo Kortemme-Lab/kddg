@@ -771,9 +771,16 @@ class DataImportInterface(object):
         db_record_object.BFactorDeviation = overall_bfactors['stddev']
 
 
+    def is_session_utf(self, tsession):
+        return str(tsession.bind.url).lower().find('utf') != -1
+
+
     def get_pdb_object(self, database_pdb_id, tsession = None):
         '''Create a PDB object from content in the database.'''
+        if tsession:
+            assert(not(self.is_session_utf(tsession)))
         tsession = tsession or self.get_session()
+        assert(not(self.is_session_utf(tsession)))
         db_record = get_single_record_from_query(tsession.query(PDBFile).filter(PDBFile.ID == database_pdb_id))
         assert(db_record)
         return PDB(db_record.Content, parse_ligands = True)
@@ -1513,7 +1520,6 @@ class DataImportInterface(object):
         # Checks and balances
         ################################
 
-
         rcsb_id = structural_details['rcsb_id']
         ligand_params_file_paths = structural_details.get('ligand_params_file_paths', {})
         assert(isinstance(ligand_params_file_paths, dict))
@@ -1521,14 +1527,14 @@ class DataImportInterface(object):
             ligand_params_file_paths[k] = os.path.abspath(v)
 
         # Type checks
-        assert(isinstance(rcsb_id, str) and (4 == len(rcsb_id.strip())))
-        rcsb_id = rcsb_id.strip()
+        assert((isinstance(rcsb_id, str) or isinstance(rcsb_id, unicode)) and (4 == len(rcsb_id.strip())))
+        rcsb_id = str(rcsb_id.strip())
 
         # Adding an RCSB structure - cascade into add_pdb_from_rcsb
         if not('file_path' in structural_details or 'pdb_object' in structural_details):
 
             # Read the RCSB PDB
-            rcsb_pdb_object = self.get_pdb_object(rcsb_id, tsession = tsession)
+            rcsb_pdb_object = self.get_pdb_object(rcsb_id)
 
             # Params files
             assert(len(set(ligand_params_file_paths.keys()).difference(rcsb_pdb_object.get_ligand_codes())) == 0)
@@ -1542,10 +1548,10 @@ class DataImportInterface(object):
         # Required fields
         design_pdb_id = structural_details['db_id']
         techniques = structural_details['techniques']
-        assert(isinstance(design_pdb_id, str) and (5 <= len(design_pdb_id.strip()) <= 10))
-        design_pdb_id = design_pdb_id.strip()
+        assert((isinstance(design_pdb_id, str) or isinstance(design_pdb_id, unicode)) and (5 <= len(design_pdb_id.strip()) <= 10))
+        design_pdb_id = str(design_pdb_id.strip())
         techniques = (techniques or '').strip() or None
-        if not (techniques != None and isinstance(techniques, str)):
+        if (techniques == None) or not(isinstance(techniques, str) or isinstance(techniques, unicode)):
             raise colortext.Exception('The technique for generating the PDB file must be specified e.g. "Rosetta model" or "PDB_REDO structure" or "Manual edit".')
         if 'description' not in structural_details:
              raise colortext.Exception('A description is required for non-RCSB files. This should include any details on the structure preparation.')
@@ -1554,12 +1560,12 @@ class DataImportInterface(object):
         if 'user_id' not in structural_details:
              raise colortext.Exception('A user_id is required for non-RCSB files. This should correspond to a record in the User table.')
         file_source, description, user_id = structural_details['file_source'], structural_details['description'] , structural_details['user_id']
-        assert(isinstance(file_source, str) and (file_source.strip()))
-        assert(isinstance(description, str) and (description.strip()))
-        assert(isinstance(user_id, str) and (user_id.strip()))
+        assert((isinstance(file_source, str) or isinstance(file_source, unicode)) and (file_source.strip()))
+        assert((isinstance(description, str) or isinstance(description, unicode)) and (description.strip()))
+        assert((isinstance(user_id, str) or isinstance(user_id, unicode)) and (user_id.strip()))
         file_source = file_source.strip()
         description = description.strip()
-        user_id = user_id.strip()
+        user_id = str(user_id.strip())
 
         # User checks. Make sure the user has a record in the database
         try:
@@ -1633,8 +1639,9 @@ class DataImportInterface(object):
                 # Hacky but there seems to be a race condition here between closing the previous transaction in add_pdb_from_rcsb and creating the new transaction (tsession) above
                 try:
                     rcsb_object = self.get_pdb_object(rcsb_id, tsession = tsession)
-                except:
-                    print('.')
+                except Exception, e:
+                    colortext.warning(str(e))
+                    colortext.warning(traceback.format_exc())
                     attempts += 1
                     time.sleep(1)
             if not rcsb_object:
@@ -1643,6 +1650,7 @@ class DataImportInterface(object):
             # Run Clustal to check whether the chain mapping is correct
             rcsb_db_record_object = get_single_record_from_query(tsession.query(PDBFile).filter(PDBFile.ID == rcsb_id))
             design_sequences = None
+
             if designed_pdb_object.seqres_sequences:
                 design_sequences = designed_pdb_object.seqres_sequences
             else:
