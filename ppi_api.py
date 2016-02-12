@@ -671,7 +671,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = None):
+    def add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, keep_all_lines = False, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = None):
         '''This function inserts a prediction into the database.
             The parameters define:
                 - the prediction set id used to group this prediction with other predictions for analysis;
@@ -679,15 +679,15 @@ class BindingAffinityDDGInterface(ddG):
                 - the set of mutations and PDB complex associated with the mutagenesis experiment;
                 - whether HETATM lines are to be kept or not.
                 - additional Rosetta flags e.g. "-ignore_zero_occupancy false" used to determine the mapping from PDB to Rosetta numbering. These flags should correspond to those used in the protocol otherwise errors could occur.
-            We strip the PDB based on the chains defined by the complex and keep_hetatm_lines and store the PDB in the database.
+            We strip the PDB based on the chains defined by the complex and keep_all_lines and keep_hetatm_lines and store the PDB in the database.
             Next, the mapping from Rosetta numbering to PDB numbering is determined and stored in the database.
             Then, the appropriate input files e.g. resfiles or mutfiles are generated and stored in the database.
             Finally, we add the prediction record and associate it with the generated files.'''
-        return self._add_job(prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
+        return self._add_job(prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_all_lines = keep_all_lines, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
 
 
     @job_creator
-    def add_job_by_user_dataset_record(self, prediction_set_id, user_dataset_name, user_dataset_experiment_id, protocol_id, extra_rosetta_command_flags = None, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = None):
+    def add_job_by_user_dataset_record(self, prediction_set_id, user_dataset_name, user_dataset_experiment_id, protocol_id, extra_rosetta_command_flags = None, keep_all_lines = False, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = None):
         '''Add a prediction job based on a user dataset record. This is typically called during add_prediction_run rather than directly by the user.
            user_dataset_name is implied by user_dataset_experiment_id but we include it for sanity checking errors in data-entry.
 
@@ -703,7 +703,7 @@ class BindingAffinityDDGInterface(ddG):
             raise colortext.Exception('User dataset experiment %d does not exist for/correspond to this user dataset.' % user_dataset_experiment_id)
         ude = ude[0]
         #colortext.message(pprint.pformat(ude))
-        return self._add_job(prediction_set_id, protocol_id, ude['PPMutagenesisID'], ude['PPComplexID'], ude['PDBFileID'], ude['SetNumber'], extra_rosetta_command_flags = extra_rosetta_command_flags, user_dataset_experiment_id = user_dataset_experiment_id, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
+        return self._add_job(prediction_set_id, protocol_id, ude['PPMutagenesisID'], ude['PPComplexID'], ude['PDBFileID'], ude['SetNumber'], extra_rosetta_command_flags = extra_rosetta_command_flags, user_dataset_experiment_id = user_dataset_experiment_id, keep_all_lines = keep_all_lines, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = test_only, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
 
 
     @job_creator
@@ -771,7 +771,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @job_creator
-    def add_prediction_run(self, prediction_set_id, user_dataset_name, extra_rosetta_command_flags = None, protocol_id = None, tagged_subset = None, keep_hetatm_lines = False, input_files = {}, quiet = False, test_only = False, only_single_mutations = False, short_run = False, test_run_first = True, show_full_errors = False):
+    def add_prediction_run(self, prediction_set_id, user_dataset_name, extra_rosetta_command_flags = None, protocol_id = None, tagged_subset = None, keep_all_lines = False, keep_hetatm_lines = False, input_files = {}, quiet = False, test_only = False, only_single_mutations = False, short_run = False, test_run_first = True, show_full_errors = False):
         '''Adds all jobs corresponding to a user dataset e.g. add_prediction_run("my first run", "AllBindingAffinityData", tagged_subset = "ZEMu").
            If keep_hetatm_lines is False then all HETATM records for the PDB prediction chains will be removed. Otherwise, they are kept.
            input_files is a global parameter for the run which is generally empty. Any files added here will be associated to all predictions in the run.
@@ -819,7 +819,7 @@ class BindingAffinityDDGInterface(ddG):
                 if len(existing_results) > 0: continue
 
                 # Test the prediction setup
-                prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = True, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
+                prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags, keep_all_lines = keep_all_lines, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = True, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
                 # Progress counter
                 count += 1
                 if showprogress and count % records_per_dot == 0: colortext.write(".", "cyan", flush = True)
@@ -849,7 +849,7 @@ class BindingAffinityDDGInterface(ddG):
                 # Add the prediction
                 try:
                     user_dataset_id = self.get_defined_user_datasets()[user_dataset_name]['ID']
-                    prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags,  keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = False, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
+                    prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags,  keep_all_lines = keep_all_lines, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = False, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
                 except Exception, e:
                     user_dataset_id = self.get_defined_user_datasets()[user_dataset_name]['ID']
                     ude_record = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s AND UserDataSetID=%s', parameters=(ude['ID'], user_dataset_id))
@@ -875,7 +875,7 @@ class BindingAffinityDDGInterface(ddG):
 
     def _create_pdb_residues_to_rosetta_cache_mp(self, pdb_residues_to_rosetta_cache, pdb_file_id, pdb_chains_to_keep, extra_rosetta_command_flags, keep_hetatm_lines):
         # Retrieve the PDB file content, strip out the unused chains, and create a PDB object
-        raise Exception('Shane should finish this')
+        raise Exception('Shane should finish this and add keep_all_lines')
         assert(type(pdb_residues_to_rosetta_cache) == None)# use the manager dictproxy)
         pdb_file = self.DDG_db.execute_select("SELECT * FROM PDBFile WHERE ID=%s", parameters = (pdb_file_id,))
         p = PDB(pdb_file[0]['Content'])
@@ -908,6 +908,7 @@ class BindingAffinityDDGInterface(ddG):
            '''
 
         # Check preconditions
+        assert(keep_all_lines)
         assert(not(input_files)) # todo: do something with input_files when we use that here - call self._add_file_content, associate the filenames with the FileContent IDs, and pass that dict to add_job which will create PredictionPPIFile records
         assert(only_single_mutations == False) # todo: support this later? it may make more sense to just define new UserDataSets
         self._add_prediction_run_preconditions(prediction_set_id, user_dataset_name, tagged_subset)
@@ -956,7 +957,7 @@ class BindingAffinityDDGInterface(ddG):
                 # Add the prediction
                 try:
                     user_dataset_id = self.get_defined_user_datasets()[user_dataset_name]['ID']
-                    prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags,  keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = False, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
+                    prediction_id = self.add_job_by_user_dataset_record(prediction_set_id, user_dataset_name, ude['ID'], protocol_id, extra_rosetta_command_flags = extra_rosetta_command_flags,  keep_all_lines = keep_all_lines, keep_hetatm_lines = keep_hetatm_lines, input_files = input_files, test_only = False, pdb_residues_to_rosetta_cache = pdb_residues_to_rosetta_cache)
                 except Exception, e:
                     user_dataset_id = self.get_defined_user_datasets()[user_dataset_name]['ID']
                     ude_record = self.DDG_db.execute_select('SELECT * FROM UserPPDataSetExperiment WHERE ID=%s AND UserDataSetID=%s', parameters=(ude['ID'], user_dataset_id))
@@ -988,7 +989,7 @@ class BindingAffinityDDGInterface(ddG):
         #for each prediction record, add the record and all associated predictionfile records,
 
 
-    def _add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, user_dataset_experiment_id = None, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = {}):
+    def _add_job(self, prediction_set_id, protocol_id, pp_mutagenesis_id, pp_complex_id, pdb_file_id, pp_complex_pdb_set_number, extra_rosetta_command_flags = None, user_dataset_experiment_id = None, keep_all_lines = False, keep_hetatm_lines = False, input_files = {}, test_only = False, pdb_residues_to_rosetta_cache = {}):
         '''This is the internal function which adds a prediction job to the database. We distinguish it from add_job as
            prediction jobs added using that function should have no associated user dataset experiment ID.
 
@@ -1028,10 +1029,12 @@ class BindingAffinityDDGInterface(ddG):
             # Retrieve the PDB file content, strip out the unused chains, and create a PDB object
             pdb_file = self.DDG_db.execute_select("SELECT * FROM PDBFile WHERE ID=%s", parameters = (pdb_file_id,))
             p = PDB(pdb_file[0]['Content'])
-            p.strip_to_chains(list(pdb_chains_to_keep))
-            if not keep_hetatm_lines:
-                p.strip_HETATMs()
-            stripped_p = PDB('\n'.join(p.lines))
+            stripped_p = p
+            if not keep_all_lines:
+                p.strip_to_chains(list(pdb_chains_to_keep))
+                if not keep_hetatm_lines:
+                    p.strip_HETATMs()
+                stripped_p = PDB('\n'.join(p.lines))
 
         # Determine PDB chains to move
         pdb_chains_to_move_str = ','.join(sorted(set(pdb_chains['R'])))

@@ -214,7 +214,7 @@ class MonomericStabilityDDGInterface(ddG):
             from Rosetta residue numbering to PDB residue numbering.'''
         raise Exception('This function needs to be rewritten.')
         raise Exception('Make sure to call charge by residue function, _charge_prediction_set_by_residue_count')
-
+        raise Exception('Add keep_all_lines option')
         parameters = (experimentID,)
         assert(ReverseMutation == False) # todo: allow this later
         try:
