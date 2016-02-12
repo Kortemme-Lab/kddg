@@ -351,6 +351,7 @@ class DataImportInterface(object):
         if not hit_starting_pdb:
             raise Exception('We never hit the starting PDB "{0}".'.format(start_at))
 
+
     #################################
     #                               #
     #  Ligand entry - public API    #
@@ -1519,6 +1520,8 @@ class DataImportInterface(object):
         ################################
         # Checks and balances
         ################################
+
+        assert('project_name' in structural_details) # todo: add a ProjectPDBFile record. We should require that all new PDB files are associated with a project.
 
         rcsb_id = structural_details['rcsb_id']
         ligand_params_file_paths = structural_details.get('ligand_params_file_paths', {})
