@@ -1521,8 +1521,6 @@ class DataImportInterface(object):
         # Checks and balances
         ################################
 
-        assert('project_name' in structural_details) # todo: add a ProjectPDBFile record. We should require that all new PDB files are associated with a project.
-
         rcsb_id = structural_details['rcsb_id']
         ligand_params_file_paths = structural_details.get('ligand_params_file_paths', {})
         assert(isinstance(ligand_params_file_paths, dict))
@@ -1546,9 +1544,10 @@ class DataImportInterface(object):
                                             update_sections = update_sections, ligand_params_file_paths = ligand_params_file_paths, debug = debug)
 
         # The remainder of this function adds a designed structure to the database
-        pdb2pdb_chain_maps = []
+        assert('project_name' in structural_details) # todo: add a ProjectPDBFile record. We should require that all new PDB files are associated with a project.
 
         # Required fields
+        pdb2pdb_chain_maps = []
         design_pdb_id = structural_details['db_id']
         techniques = structural_details['techniques']
         assert((isinstance(design_pdb_id, str) or isinstance(design_pdb_id, unicode)) and (5 <= len(design_pdb_id.strip()) <= 10))
