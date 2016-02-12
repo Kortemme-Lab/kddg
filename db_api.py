@@ -58,7 +58,7 @@ from klab.stats.misc import get_xy_dataset_statistics
 from klab.general.strutil import remove_trailing_line_whitespace
 from klab.hash.md5 import get_hexdigest
 from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
-from klab.db.sqlalchemy_interface import row_to_dict
+from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction
 
 import score
 import ddgdbapi
@@ -2137,6 +2137,49 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         '''Writes the PyMOL session for a pair of structures to disk.'''
         PSE_file_contents = self.create_pymol_session_in_memory(prediction_id, task_number, pymol_executable = pymol_executable)
         write_file(output_filepath, PSE_file_contents, 'wb')
+
+
+    @general_data_entry
+    def associate_pdb_file_with_project(self, pdb_file_id, project_id, notes = None):
+        tsession = self.get_session(new_session = True)
+        record = None
+        try:
+            record = get_or_create_in_transaction(tsession, dbmodel.ProjectPDBFile, dict(
+                        PDBFileID = pdb_file_id,
+                        ProjectID = project_id,
+                        Notes = notes,
+                    ))
+            tsession.commit()
+            tsession.close()
+        except Exception, e:
+            tsession.rollback()
+            tsession.close()
+            raise
+        return record
+
+
+    @general_data_entry
+    def add_user_dataset(self, user_id, text_id, description):
+        dt = datetime.datetime.now()
+        tsession = self.get_session(new_session = True)
+        try:
+            user_record = tsession.query(dbmodel.User).filter(dbmodel.User.ID == user_id).one()
+        except:
+            raise Exception('Could not retrieve a record for user "{0}".'.format(user_id))
+
+        user_data_set = get_or_create_in_transaction(tsession, dbmodel.UserDataSet, dict(
+                TextID = text_id,
+                UserID = user_id,
+                Description = description,
+                DatasetType = self._get_prediction_dataset_type(),
+                FirstCreated = dt,
+                LastModified = dt,
+            ), missing_columns = ['ID'], variable_columns = ['FirstCreated', 'LastModified'])
+        tsession.commit()
+        tsession.close()
+        return user_data_set
+
+
 
 
     ################################################################################################
