@@ -107,7 +107,7 @@ class ddG(object):
 
     GET_JOB_FN_CALL_COUNTER_MAX = 10
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
         if passwd:
             passwd = passwd.strip()
         self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
@@ -129,9 +129,12 @@ class ddG(object):
         self.cached_score_method_details = None
 
         # File cache - LIFO order
-        self.file_content_buffer_size = 100
+        self.file_content_buffer_size = file_content_buffer_size or 100
         self.file_content_cache = {}
         self.file_content_buffer = []
+        self.file_content_cache_hits = 0
+        self.file_content_cache_misses = 0
+        assert(isinstance(self.file_content_buffer_size, int))
 
         # Create an instance of the import API
         try:
@@ -920,38 +923,47 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
-    def get_file_from_cache(self, file_content_id):
+    @informational_misc
+    def get_file_content_cache_stats(self):
+        '''Returns basic statistics on the file content cache access.'''
+        return dict(
+            size = self.file_content_buffer_size,
+            hits = self.file_content_cache_hits,
+            misses = self.file_content_cache_misses
+        )
+
+
+    def _get_file_content_from_cache(self, file_content_id):
 
         # Sanity check
         assert(len(self.file_content_cache) == len(self.file_content_buffer))
         assert(sorted(self.file_content_cache.keys()) == sorted(self.file_content_buffer))
 
         if file_content_id not in self.file_content_cache:
-            file_content = self.get_session().query(self.FileContent).filter(self.FileContent.ID == file_content_id).one()
-            record = row_to_dict(file_content)
+            self.file_content_cache_misses += 1
 
-            pprint.pprint(record)
-            sys.exit(0)
+            file_content = self.get_session().query(dbmodel.FileContent).filter(dbmodel.FileContent.ID == file_content_id).one()
+            record = row_to_dict(file_content)
 
             # Add the file content to the API cache
             self.file_content_buffer.append(file_content_id)
-            self.file_content_cache[file_content_id] = record
+            self.file_content_cache[file_content_id] = record['Content']
 
-            print('buffer size', len(self.file_content_buffer))
             num_records_to_remove = max(len(self.file_content_buffer) - self.file_content_buffer_size, 0)
-            print('num_records_to_remove', num_records_to_remove)
             if num_records_to_remove > 0:
-                for file_content_id in self.file_content_buffer[:num_records_to_remove]:
-                    del file_content_cache[file_content_id]
+                for stored_file_content_id in self.file_content_buffer[:num_records_to_remove]:
+                    del self.file_content_cache[stored_file_content_id]
                 self.file_content_buffer = self.file_content_buffer[num_records_to_remove:]
-                assert(len(self.file_content_buffer) == len(self.file_content_buffer_size))
+                assert(len(self.file_content_buffer) == self.file_content_buffer_size)
 
                 assert(len(self.file_content_cache) == len(self.file_content_buffer))
                 assert(sorted(self.file_content_cache.keys()) == sorted(self.file_content_buffer))
+        else:
+            self.file_content_cache_hits += 1
 
         # Promote the most recently active files to the start of the buffer
-        file_content_buffer.remove(file_content_id)
-        file_content_buffer.append(file_content_id)
+        self.file_content_buffer.remove(file_content_id)
+        self.file_content_buffer.append(file_content_id)
 
         return self.file_content_cache[file_content_id]
 
@@ -966,11 +978,6 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         assert(truncate_content == None or (isinstance(truncate_content, int) and truncate_content >= 0))
         job_files = {}
         prediction_record = self.get_session().query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
-
-        #self.get_file_from_cache(file_content_id)
-
-
-
         for pf in prediction_record.files:
             r = row_to_dict(pf)
             if truncate_content != 0:
@@ -978,15 +985,16 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 r['MIMEType'] = fcontent.MIMEType
                 r['Filesize'] = fcontent.Filesize
                 r['MD5HexDigest'] = fcontent.MD5HexDigest
+                file_content = self._get_file_content_from_cache(fcontent.ID)
                 if set_pdb_occupancy_one and pf.Filetype == 'PDB': # Set all occupancies to 1
-                    pdb = PDB(fcontent.Content.split("\n"))
+                    pdb = PDB(file_content.split("\n"))
                     pdb.fillUnoccupied()
                     r['Content'] = pdb.get_content()
                 else:
-                    r['Content'] = fcontent.Content
+                    r['Content'] = file_content
                 if truncate_content:
-                    if len(fcontent.Content) > int(truncate_content):
-                        r['Content'] = '%s...' % fcontent.Content[:int(truncate_content)]
+                    if len(file_content) > int(truncate_content):
+                        r['Content'] = '%s...' % file_content[:int(truncate_content)]
             else:
                 r['Content'] = None
                 r['MIMEType'] = None

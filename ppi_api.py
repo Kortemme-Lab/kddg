@@ -45,10 +45,10 @@ from db_api import ddG, PartialDataException, SanityCheckException
 DeclarativeBase = dbmodel.DeclarativeBase
 
 
-def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
+def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
     '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
-    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
+    return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port, file_content_buffer_size = file_content_buffer_size)
 
 
 def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None, get_interface_factory = get_interface, passed_port = None):
@@ -67,6 +67,7 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
     password = None
     host = None
     port = None
+    file_content_buffer_size = None
     with open(my_cnf_path, 'r') as f:
         parsing_config_section = False
         for line in f:
@@ -85,6 +86,8 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
                         password = val
                     elif key == 'host':
                         host = val
+                    elif key == 'file_content_buffer_size': # todo: add this to the monomer interface
+                        file_content_buffer_size = int(val)
                     elif key == 'port':
                         port = int(val)
                 else:
@@ -94,15 +97,15 @@ def get_interface_with_config_file(host_config_name = 'kortemmelab', rosetta_scr
     if not user or not password or not host:
         raise Exception("Couldn't find host(%s), username(%s), or password in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
 
-    return get_interface_factory(password, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
+    return get_interface_factory(password, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port, file_content_buffer_size = file_content_buffer_size)
 
 
 class BindingAffinityDDGInterface(ddG):
     '''This is the internal API class that should be NOT used to interface with the database.'''
 
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
-        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
+        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port, file_content_buffer_size = file_content_buffer_size)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
 
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
