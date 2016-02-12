@@ -287,7 +287,6 @@ class BindingAffinityDDGInterface(ddG):
 
     @informational_job
     def get_job_details(self, prediction_id, include_files = True, truncate_content = None):
-
         try:
             prediction_record = self.get_session().query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
         except Exception, e:

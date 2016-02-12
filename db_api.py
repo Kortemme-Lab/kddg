@@ -922,22 +922,31 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
            If truncate_content is set, it should be an integer specifying the amount of characters to include. This is useful
            to see if the file header is as expected.
         '''
+        assert(truncate_content == None or (isinstance(truncate_content, int) and truncate_content >= 0))
         job_files = {}
         prediction_record = self.get_session().query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
         for pf in prediction_record.files:
-            fcontent = pf.content
             r = row_to_dict(pf)
-            r['Content'] = fcontent.Content
-            r['MIMEType'] = fcontent.MIMEType
-            r['Filesize'] = fcontent.Filesize
-            r['MD5HexDigest'] = fcontent.MD5HexDigest
-            if set_pdb_occupancy_one and pf.Filetype == 'PDB': # Set all occupancies to 1
-                pdb = PDB(fcontent.Content.split("\n"))
-                pdb.fillUnoccupied()
-                r['Content'] = pdb.get_content()
-            if truncate_content and str(truncate_content).isdigit():
-                if len(fcontent.Content) > int(truncate_content):
-                    r['Content'] = '%s...' % fcontent.Content[:int(truncate_content)]
+            if truncate_content != 0:
+                fcontent = pf.content
+                r['MIMEType'] = fcontent.MIMEType
+                r['Filesize'] = fcontent.Filesize
+                r['MD5HexDigest'] = fcontent.MD5HexDigest
+                if set_pdb_occupancy_one and pf.Filetype == 'PDB': # Set all occupancies to 1
+                    pdb = PDB(fcontent.Content.split("\n"))
+                    pdb.fillUnoccupied()
+                    r['Content'] = pdb.get_content()
+                else:
+                    r['Content'] = fcontent.Content
+                if truncate_content:
+                    if len(fcontent.Content) > int(truncate_content):
+                        r['Content'] = '%s...' % fcontent.Content[:int(truncate_content)]
+            else:
+                r['Content'] = None
+                r['MIMEType'] = None
+                r['Filesize'] = None
+                r['MD5HexDigest'] = None
+                r['Content'] = None
             job_stage = r['Stage']
             del r['Stage']
             job_files[job_stage] = job_files.get(job_stage, [])
