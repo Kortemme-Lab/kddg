@@ -58,7 +58,7 @@ from klab.stats.misc import get_xy_dataset_statistics
 from klab.general.strutil import remove_trailing_line_whitespace
 from klab.hash.md5 import get_hexdigest
 from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
-from klab.db.sqlalchemy_interface import row_to_dict
+from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction
 
 import score
 import ddgdbapi
@@ -2139,6 +2139,49 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         write_file(output_filepath, PSE_file_contents, 'wb')
 
 
+    @general_data_entry
+    def associate_pdb_file_with_project(self, pdb_file_id, project_id, notes = None):
+        tsession = self.get_session(new_session = True)
+        record = None
+        try:
+            record = get_or_create_in_transaction(tsession, dbmodel.ProjectPDBFile, dict(
+                        PDBFileID = pdb_file_id,
+                        ProjectID = project_id,
+                        Notes = notes,
+                    ))
+            tsession.commit()
+            tsession.close()
+        except Exception, e:
+            tsession.rollback()
+            tsession.close()
+            raise
+        return record
+
+
+    @general_data_entry
+    def add_user_dataset(self, user_id, text_id, description):
+        dt = datetime.datetime.now()
+        tsession = self.get_session(new_session = True)
+        try:
+            user_record = tsession.query(dbmodel.User).filter(dbmodel.User.ID == user_id).one()
+        except:
+            raise Exception('Could not retrieve a record for user "{0}".'.format(user_id))
+
+        user_data_set = get_or_create_in_transaction(tsession, dbmodel.UserDataSet, dict(
+                TextID = text_id,
+                UserID = user_id,
+                Description = description,
+                DatasetType = self._get_prediction_dataset_type(),
+                FirstCreated = dt,
+                LastModified = dt,
+            ), missing_columns = ['ID'], variable_columns = ['FirstCreated', 'LastModified'])
+        tsession.commit()
+        tsession.close()
+        return user_data_set
+
+
+
+
     ################################################################################################
     ## Private API layer
     ## These are helper functions used internally by the class but which are not intended for export
@@ -2267,6 +2310,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             forced_mime_type = forced_mime_type or 'chemical/x-pdb'
 
         if file_content_id == None:
+            assert(file_content != None)
             file_content_id = self._add_file_content(file_content, db_cursor = db_cursor, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
 
         # Link the file contents to the prediction
@@ -2298,7 +2342,9 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
         return file_content_id
 
+
     def _add_residue_map_to_prediction(self, prediction_id, residue_mapping):
+        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
         assert(type(residue_mapping) == type(self.__dict__))
         json_content = json.dumps(residue_mapping, sort_keys=True) # sorting helps to quotient the file content space over identical data
         self._add_prediction_file(prediction_id, json_content, 'residue_mapping.json', 'RosettaPDBMapping', 'Rosetta<->PDB residue mapping', 'Input', forced_mime_type = "application/json")
@@ -2309,6 +2355,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     def _add_stripped_pdb_to_prediction(self, prediction_id):
+        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
         pdb_file_id, chains = self.get_pdb_chains_for_prediction(prediction_id)
         pdb_content = self._strip_pdb(pdb_file_id, chains)
         filename = '%s_%s' % (pdb_file_id, ''.join(sorted(chains)))
@@ -2316,11 +2363,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     def _add_resfile_to_prediction(self, prediction_id):
+        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
         resfile_content = self.create_resfile(prediction_id)
         self._add_prediction_file(prediction_id, resfile_content, 'mutations.resfile', 'Resfile', 'Resfile', 'Input', rm_trailing_line_whitespace = True)
 
 
     def _add_mutfile_to_prediction(self, prediction_id):
+        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
         mutfile_content = self.create_mutfile(prediction_id)
         self._add_prediction_file(prediction_id, mutfile_content, 'mutations.mutfile', 'Mutfile', 'Mutfile', 'Input', rm_trailing_line_whitespace = True)
 

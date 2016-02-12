@@ -313,13 +313,39 @@ class PDBLigandFile(DeclarativeBase):
 class PDBIon(DeclarativeBase):
     __tablename__ = 'PDBIon'
 
-    PDBFileID = Column(String(10), nullable=False, primary_key=True)
-    Chain = Column(String(1), nullable=False, primary_key=True)
+    PDBFileID = Column(String(10), ForeignKey('PDBChain.PDBFileID'), nullable=False, primary_key=True)
+    Chain = Column(String(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
     SeqID = Column(String(5), nullable=False, primary_key=True)
     PDBIonCode = Column(String(3), nullable=False)
-    IonID = Column(Integer, nullable=False)
-    ParamsFileContentID = Column(Integer, nullable=True)
+    IonID = Column(Integer, ForeignKey('Ion.ID'), nullable=False)
+    ParamsFileContentID = Column(Integer, ForeignKey('FileContent.ID'), nullable=True)
     Element = Column(String(2), nullable=False)
+
+
+class PDB2PDBChainMap(DeclarativeBase):
+    __tablename__ = 'PDB2PDBChainMap'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PDBFileID1 = Column(String(10), nullable=False)
+    Chain1 = Column(String(1), nullable=False)
+    PDBFileID2 = Column(String(10), nullable=False)
+    Chain2 = Column(String(1), nullable=False)
+    SequenceIdentity = Column(DOUBLE, nullable=False)
+
+
+class Project(DeclarativeBase):
+    __tablename__ = 'Project'
+
+    ID = Column(Unicode(64, collation='utf8_unicode_ci'), nullable=False, primary_key=True)
+    Description = Column(Text(collation='utf8_unicode_ci'), nullable=True)
+
+
+class ProjectPDBFile(DeclarativeBase):
+    __tablename__ = 'ProjectPDBFile'
+
+    PDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=False, primary_key=True)
+    ProjectID = Column(Unicode(64, collation='utf8_unicode_ci'), ForeignKey('Project.ID'), nullable=False, primary_key=True)
+    Notes = Column(Text)
 
 
 #########################################
@@ -466,16 +492,17 @@ class PPIPDBSet(DeclarativeBase):
     partner_chains = relationship('PPIPDBPartnerChain', viewonly=True, primaryjoin="and_(PPIPDBSet.PPComplexID==PPIPDBPartnerChain.PPComplexID, PPIPDBSet.SetNumber==PPIPDBPartnerChain.SetNumber)", order_by="PPIPDBPartnerChain.Side, PPIPDBPartnerChain.ChainIndex")
 
     def __repr__(self):
-        d = dict(L = '', R = '')
         pdb_ids = set([pc.PDBFileID for pc in self.partner_chains])
         if len(pdb_ids) == 1:
+            d = dict(L = '', R = '')
             for pc in self.partner_chains:
                 d[pc.Side] += pc.Chain
-            return '{0}|{1}'.format(d['L'], d['R'])
+            return '#{0} {1}|{2}'.format(self.SetNumber, d['L'], d['R'])
         else:
+            d = dict(L = [], R = [])
             for pc in self.partner_chains:
-                d[pc.Side] += '{0} {1}'.format(pc.PDBFileID, pc.Chain)
-            return '{0}|{1}'.format(','.join(d['L']), ','.join(d['R']))
+                d[pc.Side].append('{0} {1}'.format(pc.PDBFileID, pc.Chain))
+            return '#{0} {1}|{2}'.format(self.SetNumber, ','.join(d['L']), ','.join(d['R']))
 
 
 class PPIPDBPartnerChain(DeclarativeBase):
@@ -878,7 +905,7 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['UserDataSet'])
+    generate_sqlalchemy_definition(['PDB2PDBChainMap'])
 
     #generate_sqlalchemy_definition(['AminoAcid'])
     sys.exit(0)

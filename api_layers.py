@@ -140,10 +140,17 @@ def sanity_check(func):
     return func
 
 
-def ppi_data_entry(func):
+def general_data_entry(func):
     func._helptype = 'Data entry'
     func._layer = 7
     func._layer_order = 0
+    return func
+
+
+def ppi_data_entry(func):
+    func._helptype = 'PPI Data entry'
+    func._layer = 7
+    func._layer_order = 1
     return func
 
 

@@ -77,13 +77,14 @@ from klab.bio.pfam import Pfam
 from klab.bio.dssp import MonomerDSSP, ComplexDSSP, MissingAtomException
 from klab.bio.ligand import Ligand, PDBLigand, LigandMap
 from klab.bio.pdbtm import PDBTM
+from klab.bio.clustalo import PDBChainSequenceAligner
 from klab.db.sqlalchemy_interface import get_single_record_from_query, get_or_create_in_transaction
 from klab.bio import rcsb
 from klab.general.strutil import remove_trailing_line_whitespace
 from klab.hash.md5 import get_hexdigest
 
 from db_schema import test_schema_against_database_instance
-from db_schema import PDBFile, PDBChain, PDBMolecule, PDBMoleculeChain, PDBResidue, LigandDescriptor, LigandIdentifier, LigandSynonym, LigandPrice, LigandReference, PDBLigand, PDBLigandFile, PDBIon, FileContent
+from db_schema import PDBFile, PDBChain, PDBMolecule, PDBMoleculeChain, PDBResidue, LigandDescriptor, LigandIdentifier, LigandSynonym, LigandPrice, LigandReference, PDBLigand, PDBLigandFile, PDBIon, FileContent, PDB2PDBChainMap
 from db_schema import Ligand as DBLigand
 from db_schema import Ion as DBIon
 from db_schema import User as DBUser
@@ -349,6 +350,7 @@ class DataImportInterface(object):
                     tsession.close()
         if not hit_starting_pdb:
             raise Exception('We never hit the starting PDB "{0}".'.format(start_at))
+
 
     #################################
     #                               #
@@ -639,7 +641,7 @@ class DataImportInterface(object):
         return contents
 
 
-    def add_pdb_from_rcsb(self, pdb_id, previously_added = set(), update_sections = set(), trust_database_content = False, ligand_params_file_paths = {}):
+    def add_pdb_from_rcsb(self, pdb_id, previously_added = set(), update_sections = set(), trust_database_content = False, ligand_params_file_paths = {}, debug = False):
         '''NOTE: This API is used to create and analysis predictions or retrieve information from the database.
                  This function adds new raw data to the database and does not seem to belong here. It should be moved into
                  an admin API instead.
@@ -663,6 +665,7 @@ class DataImportInterface(object):
         assert(len(pdb_id) == 4)
         pdb_id = pdb_id.upper()
 
+        # RCSB files should be a straightforward case so we will use a new session and commit all changes
         tsession = self.get_session(new_session = True)
         try:
             pdb_object = None
@@ -705,7 +708,11 @@ class DataImportInterface(object):
             previously_added.add(pdb_id)
 
             print('Success.\n')
-            tsession.commit()
+            if debug:
+                print('Debug call - rolling back the transaction.\n')
+                tsession.rollback()
+            else:
+                tsession.commit()
             tsession.close()
         except:
             colortext.error('Failure.')
@@ -723,7 +730,7 @@ class DataImportInterface(object):
             raise Exception('No ATOM chains were found in the PDB file.')
         foundRes = pdb_object.CheckForPresenceOf(["CSE", "MSE"])
         if foundRes:
-            colortext.error("The PDB %s contains residues which could affect computation (%s)." % (pdb_id, join(foundRes, ", ")))
+            colortext.error("The PDB %s contains residues which could affect computation (%s)." % (pdb_id, ', '.join(foundRes, )))
             if "CSE" in foundRes:
                 colortext.error("The PDB %s contains CSE. Check." % pdb_id)
             if "MSE" in foundRes:
@@ -765,9 +772,16 @@ class DataImportInterface(object):
         db_record_object.BFactorDeviation = overall_bfactors['stddev']
 
 
+    def is_session_utf(self, tsession):
+        return str(tsession.bind.url).lower().find('utf') != -1
+
+
     def get_pdb_object(self, database_pdb_id, tsession = None):
         '''Create a PDB object from content in the database.'''
+        if tsession:
+            assert(not(self.is_session_utf(tsession)))
         tsession = tsession or self.get_session()
+        assert(not(self.is_session_utf(tsession)))
         db_record = get_single_record_from_query(tsession.query(PDBFile).filter(PDBFile.ID == database_pdb_id))
         assert(db_record)
         return PDB(db_record.Content, parse_ligands = True)
@@ -1029,17 +1043,19 @@ class DataImportInterface(object):
         if dssp_monomer_d:
             for chain_id, mapping in dssp_monomer_d:
                 if pdb_object.chain_types[chain_id] == 'Protein' or pdb_object.chain_types[chain_id] == 'Protein skeleton':
-                   for residue_id, residue_details in sorted(mapping.iteritems()):
-                        chain_residue_id = chain_id + residue_id
-                        assert(chain_residue_id in parsed_residues)
-                        monomeric_records[chain_residue_id] = residue_details
+                    for residue_id, residue_details in sorted(mapping.iteritems()):
+                        if residue_details['3LC'] != 'UNK': # todo: should we handle these residues?
+                            chain_residue_id = chain_id + residue_id
+                            assert(chain_residue_id in parsed_residues)
+                            monomeric_records[chain_residue_id] = residue_details
         if dssp_complex_d:
             for chain_id, mapping in dssp_complex_d:
                 if pdb_object.chain_types[chain_id] == 'Protein' or pdb_object.chain_types[chain_id] == 'Protein skeleton':
                     for residue_id, residue_details in sorted(mapping.iteritems()):
-                        chain_residue_id = chain_id + residue_id
-                        assert(chain_residue_id in parsed_residues)
-                        complex_records[chain_residue_id] = residue_details
+                        if residue_details['3LC'] != 'UNK': # todo: should we handle these residues?
+                            chain_residue_id = chain_id + residue_id
+                            assert(chain_residue_id in parsed_residues)
+                            complex_records[chain_residue_id] = residue_details
 
         # Read existing data from the database
         existing_residues = {}
@@ -1393,69 +1409,165 @@ class DataImportInterface(object):
                 ))
 
 
-    def add_designed_pdb_file(self, designed_pdb_filepath, design_pdb_id, original_pdb_id,
-                              file_source, description, user_id,
-                              chain_mapping = {}, ligand_mapping = {}, previously_added = set(),
-                              ligand_params_file_paths = {},
-                              resolution = None, techniques = None, transmembrane = None,
-                              publication = None,
-                              trust_database_content = False,
-                              update_sections = set()):
-        '''Wrapper for add_designed_pdb.'''
-        return self.add_designed_pdb(self, PDB.from_filepath(designed_pdb_filepath), design_pdb_id, original_pdb_id,
-                                     file_source, description, user_id,
-                                     chain_mapping = chain_mapping, ligand_mapping = ligand_mapping, previously_added = previously_added,
-                                     ligand_params_file_paths = ligand_params_file_paths,
-                                     resolution = resolution, techniques = techniques, transmembrane = transmembrane,
-                                     publication = publication,
-                                     trust_database_content = trust_database_content,
-                                     update_sections = update_sections)
+    def add_designed_pdb(self, structural_details,
+                           allow_missing_params_files = False,
+                           minimum_sequence_identity = 95.0,
+                           previously_added = set(),
+                           trust_database_content = False,
+                           update_sections = set(),
+                           tsession = None,
+                           debug = True):
+        '''
 
+        :param structural_details: A dict fitting the defined structure (see below).
+        :param allow_missing_params_files: If the PDB file contains ligands with no associated params files in structural_details
+                                           then the function will return with a message. If this option is set to True
+                                           then the file will be added but the ligand is not guaranteed to be kept
+                                           by the protocol (this depends on the version of Rosetta - versions from February
+                                           2016 onwards should have better ligand support).
+        :param minimum_sequence_identity:  For non-RCSB files, we require a chain mapping from chains to the corresponding
+                                           RCSB chains. Clustal is run to ensure that the sequence identity is at least this
+                                           value.
+        :param previously_added:
+        :param trust_database_content:
+        :param update_sections:
+        :param tsession:
+        :param debug: If debug is set to True then the transaction used to insert the structure into the database will be
+                      rolled back and a message stating that the insertion would have been successful is returned in the
+                      return dict.
+        :return:
 
-    def add_designed_pdb(self, designed_pdb_object, design_pdb_id, original_pdb_id,
-                               file_source, description, user_id,
-                               chain_mapping = {}, ligand_mapping = {}, previously_added = set(),
-                               ligand_params_file_paths = {},
-                               resolution = None, techniques = None, transmembrane = None,
-                               publication = None,
-                               trust_database_content = False,
-                               update_sections = set()):
+        One example of the dict structure is as follows:
+
+            dict(
+                # Fields required for all structures. We require non-RCSB structures to be based on RCSB structures at least in this import interface.
+                rcsb_id = '1K5D',
+
+                # Exactly one of these fields must be specified for non-RCSB structures.
+                pdb_object = p,
+                file_path = 'pdbs/1K5D2.pdb',
+
+                # Fields required for non-RCSB structures.
+                db_id = '1K5D_TP0', # must be between 5-10 characters
+                techniques = "PDB_REDO",
+                file_source = "Roger Wilco",
+                user_id = "sierra",
+
+                # Required for non-RCSB structures and optional for RCSB structures
+                description = 'GSP1 complex (RanGAP1) from Tina Perica. This file was taken from PDB_REDO. Removed residues 180-213 from chain A (RAN/GSP1) (the ones wrapping around YRB1).',
+
+                # Optional fields for both non-RCSB structures and optional for RCSB structures
+                transmembrane = None, # None or True or False
+                publication = None, # this should have a corresponding entry (Publication.ID) in the database
+                resolution = None, # should be either None or a floating-point number
+
+                # Exactly one of these fields must be specified for non-RCSB structures.
+                # If identical_chains is passed then it must be set to True and all protein, DNA, and RNA chains in
+                # the input file must have the same chain ID as in the RCSB file.
+                # If chain_mapping is instead passed then the keys must cover all protein, DNA, and RNA chains in the input file.
+                # Since ligands are sometimes reassigned to a new chain e.g. 'X', we do not require a mapping for them in
+                # chain_mapping and we do not consider them in the sanity check for the identical_chains case.
+                # Note: This logic does not currently handle cases where multiple chains in the RCSB file were merged into one
+                #       chain in the input file i.e. chain A in the input file corresponds to chains L and H in the RCSB
+                #       structure.
+                # Clustal is run over the chain mapping to ensure a sequence identity of minimum_sequence_identity% (95% by default).
+                identical_chains = True
+                    # or
+                chain_mapping = dict(
+                    A = 'C', # To help other uses read the input file, it is useful to mention any other choices available i.e. "choice of A, D, G, J." followed by the chain name e.g. "RAN"
+                    C = 'A', # e.g. "choice of C, F, I, L. Ran GTPase activating protein 1"
+                ),
+
+                # Fields required for non-RCSB complexes if there are ligands/ions in the input structure.
+                # First, all ligands and ions will be found in the input structure. Each (non-water) ligand and ion code must be
+                # covered in either the ligand_instance_mapping, the ligand_code_mapping, or the unchanged_ligand_codes mapping
+                # In practice, you will probably one want to use ligand_code_mapping, unchanged_ligand_codes, and unchanged_ion_codes
+                # as it is rare for ion codes to be changed.
+                # LigandMap is defined in klab.bio.ligand.
+                # The three types of mapping are:
+
+                # 1. detailed mappings - one mapping per instance. You will probably not want to bother using this format as it can become unwieldy with large numbers of ligands
+                ligand_instance_mapping = LigandMap.from_tuples_dict({ # Input PDB's HET code, residue ID -> RCSB HET code, RCSB residue ID
+                    ('G13', 'X   1 ') : ('GNP', 'A1250 '),
+                }),
+                ion_instance_mapping = LigandMap.from_tuples_dict({ # Input PDB's HET code, residue ID -> RCSB HET code, RCSB residue ID
+                    ('UNX', 'A1249 ') : ('MG', 'A1250 '),
+                }),
+
+                # 2. ligand type mappings - one mapping per ligand code. This is the easiest to specify when there are changes to ligand codes
+                ligand_code_mapping = {
+                    'G13' : 'GNP',
+                )
+                ion_code_mapping = {
+                    'UNX' : 'MG',
+                )
+
+                # 3. white lists - lists of ligand and ion codes which have not changed. Most of your cases will probably fall into this category
+                unchanged_ligand_codes = ['MSE'],
+                unchanged_ion_codes = ['FE2'],
+
+                # Fields currently advised when there are ligands in the structure in order for the protocols to handle
+                # ligands properly. This may be a non-issue in the future; at the time of writing, February 5th 2016,
+                # there was a large push by the Rosetta XRW to address the problem of handling arbitrary ligands so this
+                # problem may be mainly solved.
+                ligand_params_file_paths = {
+                    'G13' : 'temp/pdbs/1K5D2.params'
+                },
+            )
+            '''
+
 
         ################################
-        # Sanity checks and sanitization
+        # Checks and balances
         ################################
 
-        # todo: add ion_mapping (see below)
+        rcsb_id = structural_details['rcsb_id']
+        ligand_params_file_paths = structural_details.get('ligand_params_file_paths', {})
+        assert(isinstance(ligand_params_file_paths, dict))
+        for k, v in ligand_params_file_paths.iteritems():
+            ligand_params_file_paths[k] = os.path.abspath(v)
 
         # Type checks
-        assert(isinstance(designed_pdb_object, PDB))
-        assert(isinstance(design_pdb_id, str) and (5 <= len(design_pdb_id.strip()) <= 10))
-        assert(isinstance(original_pdb_id, str) and (4 == len(original_pdb_id.strip())))
-        assert(isinstance(file_source, str) and (file_source.strip()))
-        assert(isinstance(description, str) and (description.strip()))
-        assert(isinstance(user_id, str) and (user_id.strip()))
-        assert(isinstance(ligand_params_file_paths, dict))
-        assert(isinstance(chain_mapping, dict) and chain_mapping)
-        assert(isinstance(ligand_mapping, LigandMap) and ligand_mapping)
-        assert(resolution == None or isinstance(resolution, float))
-        if not (techniques != None and isinstance(techniques, str)):
+        assert((isinstance(rcsb_id, str) or isinstance(rcsb_id, unicode)) and (4 == len(rcsb_id.strip())))
+        rcsb_id = str(rcsb_id.strip())
+
+        # Adding an RCSB structure - cascade into add_pdb_from_rcsb
+        if not('file_path' in structural_details or 'pdb_object' in structural_details):
+
+            # Read the RCSB PDB
+            rcsb_pdb_object = self.get_pdb_object(rcsb_id)
+
+            # Params files
+            assert(len(set(ligand_params_file_paths.keys()).difference(rcsb_pdb_object.get_ligand_codes())) == 0)
+
+            return self.add_pdb_from_rcsb(rcsb_id, previously_added = previously_added, trust_database_content = trust_database_content,
+                                            update_sections = update_sections, ligand_params_file_paths = ligand_params_file_paths, debug = debug)
+
+        # The remainder of this function adds a designed structure to the database
+        assert('project_name' in structural_details) # todo: add a ProjectPDBFile record. We should require that all new PDB files are associated with a project.
+
+        # Required fields
+        pdb2pdb_chain_maps = []
+        design_pdb_id = structural_details['db_id']
+        techniques = structural_details['techniques']
+        assert((isinstance(design_pdb_id, str) or isinstance(design_pdb_id, unicode)) and (5 <= len(design_pdb_id.strip()) <= 10))
+        design_pdb_id = str(design_pdb_id.strip())
+        techniques = (techniques or '').strip() or None
+        if (techniques == None) or not(isinstance(techniques, str) or isinstance(techniques, unicode)):
             raise colortext.Exception('The technique for generating the PDB file must be specified e.g. "Rosetta model" or "PDB_REDO structure" or "Manual edit".')
-        assert(transmembrane == None or isinstance(transmembrane, bool))
-        design_pdb_id = design_pdb_id.strip()
-        original_pdb_id = original_pdb_id.strip()
+        if 'description' not in structural_details:
+             raise colortext.Exception('A description is required for non-RCSB files. This should include any details on the structure preparation.')
+        if 'file_source' not in structural_details:
+             raise colortext.Exception('''A file_source is required for non-RCSB files. This should describe where the file came from e.g. "PDB REDO", "Rosetta", or the creator's name e.g. "Jon Snow".''')
+        if 'user_id' not in structural_details:
+             raise colortext.Exception('A user_id is required for non-RCSB files. This should correspond to a record in the User table.')
+        file_source, description, user_id = structural_details['file_source'], structural_details['description'] , structural_details['user_id']
+        assert((isinstance(file_source, str) or isinstance(file_source, unicode)) and (file_source.strip()))
+        assert((isinstance(description, str) or isinstance(description, unicode)) and (description.strip()))
+        assert((isinstance(user_id, str) or isinstance(user_id, unicode)) and (user_id.strip()))
         file_source = file_source.strip()
         description = description.strip()
-        user_id = user_id.strip()
-        techniques = (techniques or '').strip() or None
-
-        # Chain consistency checks
-        # todo: regardless of chain_mapping being specified, run clustal and assert that the sequence for chain c in design_pdb_id and chain_mapping.get(c, c) in original_pdb_id matches >90%
-
-        # todo: add ion mapping support - this seems less important as it is probably less likely that users will rename ion codes
-
-        # Publication checks
-        # todo: if publication, assert that the publication record exists
-        assert(not publication)
+        user_id = str(user_id.strip())
 
         # User checks. Make sure the user has a record in the database
         try:
@@ -1465,42 +1577,165 @@ class DataImportInterface(object):
             raise
         colortext.warning('User: {1} ({0})'.format(user_record.ID, ' '.join([n for n in [user_record.FirstName, user_record.MiddleName, user_record.Surname] if n])))
 
-        # Verify the ligand mapping domain and codomains are valid.
-        #   - verify that the mapping is complete i.e. that all ligands in the design PDB are mapped to ligands in the original PDB
-        #   - verify that the mapping is injective (necessary?)
-        ligand_residue_ids = set()
-        for chain_id, ligand_map in designed_pdb_object.ligands.iteritems():
-            for ligand_residue_id, l in ligand_map.iteritems():
-                full_residue_id = chain_id + ligand_residue_id
-                assert((len(full_residue_id) == 6) and (full_residue_id not in ligand_residue_ids))
-                ligand_residue_ids.add(full_residue_id)
-        if not ligand_mapping.is_injective():
-            raise colortext.Exception('Error: The ligand mapping\n{0}\nis not injective i.e. each ligand residue in the designed PDB file must be mapped to a unique RCSB ligand residue in the RCSB PDB file.'.format(str(ligand_mapping)))
-        if not ligand_mapping.is_complete(ligand_residue_ids):
-            raise colortext.Exception('Error: The ligand mapping\n{0}\nis not complete i.e. there are ligands in the designed PDB file which are not mapped to ligands in the RCSB PDB file.'.format(str(ligand_mapping)))
+        # Optional fields
+        resolution = structural_details.get('resolution')
+        assert(resolution == None or isinstance(resolution, float))
+        transmembrane = structural_details.get('transmembrane')
+        assert(transmembrane == None or isinstance(transmembrane, bool))
 
+        # Publication checks
+        # todo: if publication, assert that the publication record exists
+        publication = structural_details.get('publication')
+        assert(publication == None) #todo: handle
 
-        ################################
-        # Data entry
-        ################################
+        # Read the input PDB
+        designed_pdb_object = None
+        if structural_details.get('pdb_object'):
+            if structural_details.get('file_path'):
+                raise colortext.Exception('Only one of pdb_object and file_path should be specified, not both.')
+            designed_pdb_object = structural_details.get('pdb_object')
+        else:
+            if not structural_details.get('file_path'):
+                raise colortext.Exception('Exactly one of pdb_object or file_path must be specified.')
+            pdb_file_path = os.path.abspath(structural_details['file_path'])
+            if not os.path.exists(pdb_file_path):
+                raise colortext.Exception('Could not locate the file "{0}".'.format(pdb_file_path))
+            designed_pdb_object = PDB(read_file(pdb_file_path))
 
+        # Read the chain IDs
+        all_chain_ids, main_chain_ids = [], []
+        for k, v in sorted(designed_pdb_object.chain_types.iteritems()):
+            all_chain_ids.append(k)
+            if v != 'Unknown' and v != 'Solution' and v != 'Ligand':
+                main_chain_ids.append(k)
 
-        # Add the original PDB file to the database
-        colortext.message('Adding designed PDB file {0} based off {1}.'.format(design_pdb_id, original_pdb_id))
+        # Check the chain mapping
+        chain_mapping, chain_mapping_keys = {}, set()
+        if 'identical_chains' in structural_details:
+            # Create a partial chain mapping (ignoring ligand chains which may have a corresponding match)
+            assert('chain_mapping' not in structural_details)
+            assert(structural_details['identical_chains'] == True)
+            for c in main_chain_ids:
+                chain_mapping[c] = c
+                chain_mapping_keys.add(c)
+        else:
+            # Check that the chain mapping domain is a complete mapping over the main chain IDs ( main_chain_ids <= chain_mapping.keys() <= all_chain_ids where "<=" is non-strict subset of)
+            assert('chain_mapping' in structural_details)
+            chain_mapping = structural_details['chain_mapping']
+            assert(isinstance(chain_mapping, dict) and chain_mapping)
+            chain_mapping_keys = set(chain_mapping.keys())
+            assert(len(chain_mapping_keys.intersection(set(main_chain_ids))) == len(main_chain_ids)) # main_chain_ids is a subset of chain_mapping_keys
+            assert(len(set(all_chain_ids).intersection(chain_mapping_keys)) == len(chain_mapping_keys)) # chain_mapping_keys is a subset of all_chain_ids
+        unmapped_chains = sorted(set(all_chain_ids).difference(chain_mapping_keys))
+
+        # Add the RCSB structure to the database and then use that object to run Clustal
         colortext.pcyan('Adding the original PDB file using a separate transaction.')
-        self.add_pdb_from_rcsb(original_pdb_id, previously_added = previously_added, trust_database_content = True)
-        rcsb_db_record_object = get_single_record_from_query(self.get_session().query(PDBFile).filter(PDBFile.ID == original_pdb_id))
+        self.add_pdb_from_rcsb(rcsb_id, previously_added = previously_added, trust_database_content = True, ligand_params_file_paths = {})
 
-        # Check to make sure that the set of ions is a subset of those in the original PDB
-        # todo: Ideally, we should pass an ion mapping like for the ligand mapping. However, this may be annoying for users
-        #       to have to specify. Instead, we could check to make sure that the mapping ion_code -> atom_type matches in
-        #       both structures which would be a more specific check than the assertion below. This would disallow renaming
-        #       of ions but this seems a reasonable trade-off.
-        rcsb_pdb_object = self.get_pdb_object(original_pdb_id)
-        assert(len(set(designed_pdb_object.get_ion_codes()).difference(set(rcsb_pdb_object.get_ion_codes()))) == 0)
-
-        tsession = self.get_session(new_session = True)
+        # Now that we have added the RCSB structure, create a new session which will be aware of that structure
+        tsession = tsession or self.get_session(new_session = True)
         try:
+            attempts = 0
+            rcsb_object = None
+            while (not rcsb_object) and (attempts < 10):
+                # Hacky but there seems to be a race condition here between closing the previous transaction in add_pdb_from_rcsb and creating the new transaction (tsession) above
+                try:
+                    rcsb_object = self.get_pdb_object(rcsb_id, tsession = tsession)
+                except Exception, e:
+                    colortext.warning(str(e))
+                    colortext.warning(traceback.format_exc())
+                    attempts += 1
+                    time.sleep(1)
+            if not rcsb_object:
+                raise colortext.Exception('Race condition detected. Try the import again.')
+
+            # Run Clustal to check whether the chain mapping is correct
+            rcsb_db_record_object = get_single_record_from_query(tsession.query(PDBFile).filter(PDBFile.ID == rcsb_id))
+            design_sequences = None
+
+            if designed_pdb_object.seqres_sequences:
+                design_sequences = designed_pdb_object.seqres_sequences
+            else:
+                design_sequences = designed_pdb_object.atom_sequences
+            pcsa = PDBChainSequenceAligner()
+            for chain_id, sequence in sorted(rcsb_object.seqres_sequences.iteritems()):
+                pcsa.add(rcsb_id, chain_id, str(sequence))
+            for chain_id, sequence in sorted(design_sequences.iteritems()):
+                pcsa.add(design_pdb_id, chain_id, str(sequence))
+            output, best_matches = pcsa.align(ignore_bad_chains = True)
+            for dc, rc in sorted(chain_mapping.iteritems()):
+                # todo: this mapping is untested on ligand chains. We could do: for all c in unmapped_chains, see if the 3-letter sequences match and, if so, and add those
+                k1 = '{0}_{1}'.format(design_pdb_id, dc)
+                k2 = '{0}_{1}'.format(rcsb_id, rc)
+                assert(k1 in best_matches and k2 in best_matches[k1])
+                assert(k2 in best_matches and k1 in best_matches[k2])
+
+                sequence_identity = best_matches[k1][k2]
+                pdb2pdb_chain_maps.append(dict(
+                    PDBFileID1 = design_pdb_id,
+                    Chain1 = dc,
+                    PDBFileID2 = rcsb_id,
+                    Chain2 = rc,
+                    SequenceIdentity = sequence_identity,
+                ))
+                if sequence_identity < minimum_sequence_identity:
+                    raise colortext.Exception('The chain mapping is defined as {0}, chain {1} -> {2}, chain {3} but the sequence identity for these chains is only {4}%.'.format(design_pdb_id, dc, rcsb_id, rc, sequence_identity))
+
+                sequence_identity = best_matches[k2][k1]
+                pdb2pdb_chain_maps.append(dict(
+                    PDBFileID1 = rcsb_id,
+                    Chain1 = rc,
+                    PDBFileID2 = design_pdb_id,
+                    Chain2 = dc,
+                    SequenceIdentity = sequence_identity,
+                ))
+                if sequence_identity < minimum_sequence_identity:
+                    raise colortext.Exception('The chain mapping is defined as {0}, chain {1} -> {2}, chain {3} but the sequence identity for these chains is only {4}%.'.format(rcsb_id, rc, design_pdb_id, dc, sequence_identity))
+
+            # Make sure that no params files were specified that do not fit the PDB file
+            ligands_not_present = set(ligand_params_file_paths.keys()).difference(designed_pdb_object.get_ligand_codes())
+            if len(ligands_not_present) > 0:
+                raise colortext.Exception('Params files were specified for ligands which do not exist in the PDB file: "{0}".'.format('", "'.join(ligands_not_present)))
+
+            # Sanity-check the ligand mapping for consistency
+            ligand_code_map = {}
+            if 'ligand_instance_mapping' in structural_details:
+                for k, v in structural_details['ligand_instance_mapping'].code_map.iteritems():
+                    assert(ligand_code_map.get(k) == None or ligand_code_map[k] == v)
+                    ligand_code_map[k] = v
+            if 'ligand_code_mapping' in structural_details:
+                for k, v in structural_details['ligand_code_mapping'].iteritems():
+                    assert(ligand_code_map.get(k) == None or ligand_code_map[k] == v)
+                    ligand_code_map[k] = v
+            if 'unchanged_ligand_codes' in structural_details:
+                for k in structural_details['unchanged_ligand_codes']:
+                    assert(ligand_code_map.get(k) == None or ligand_code_map[k] == k)
+                    ligand_code_map[k] = k
+
+            # Sanity-check the ligand mapping for completeness
+            ligand_mapping = LigandMap.from_code_map(ligand_code_map)
+            assert(isinstance(ligand_mapping, LigandMap) and ligand_mapping)
+            if sorted(ligand_code_map.keys()) != sorted(designed_pdb_object.get_ligand_codes()):
+                raise colortext.Exception('Incomplete mapping or unexpected entries: The ligand mapping contains mappings for "{0}" but the PDB file contains ligand codes "{1}".'.format('", "'.join(sorted(ligand_code_map.keys())), '", "'.join(sorted(designed_pdb_object.get_ligand_codes()))))
+
+            # todo: currently unhandled
+            # todo: add ion mapping support - this seems less important as it is probably less likely that users will rename ion codes
+            assert('ion_instance_mapping' not in structural_details and 'ion_code_mapping' not in structural_details)
+            # Check to make sure that the set of ions is a subset of those in the original PDB
+            # todo: Ideally, we should pass an ion mapping like for the ligand mapping. However, this may be annoying for users
+            #       to have to specify. Instead, we could check to make sure that the mapping ion_code -> atom_type matches in
+            #       both structures which would be a more specific check than the assertion below. This would disallow renaming
+            #       of ions but this seems a reasonable trade-off.
+            assert(len(set(designed_pdb_object.get_ion_codes()).difference(set(rcsb_object.get_ion_codes()))) == 0)
+
+
+            ################################
+            # Data entry
+            ################################
+
+
+            # Add the original PDB file to the database
+            colortext.message('Adding designed PDB file {0} based off {1}.'.format(design_pdb_id, rcsb_id))
             db_record_object = get_single_record_from_query(tsession.query(PDBFile).filter(PDBFile.ID == design_pdb_id))
             is_new_record = db_record_object == None
             if not is_new_record:
@@ -1519,9 +1754,8 @@ class DataImportInterface(object):
                     Techniques = techniques,
                     UserID = user_record.ID,
                     Notes = description,
-                    DerivedFrom = original_pdb_id,
+                    DerivedFrom = rcsb_id,
                 ))
-                contents = self._retrieve_pdb_contents(design_pdb_id)
                 update_sections = set() # add all related data
 
             # Fill in the FASTA, Resolution, and b-factor fields of a PDBFile record.
@@ -1530,7 +1764,10 @@ class DataImportInterface(object):
             self._add_pdb_file_information(db_record_object, designed_pdb_object, design_pdb_id, is_new_record, is_rcsb_pdb = False)
 
             # We copy the transmembrane classification (assuming that the designed protein keeps the same characteristic)
-            db_record_object.Transmembrane = rcsb_db_record_object.Transmembrane
+            if transmembrane == None:
+                db_record_object.Transmembrane = rcsb_db_record_object.Transmembrane
+            else:
+                db_record_object.Transmembrane = transmembrane
 
             # Add a new PDBFile record
             if is_new_record:
@@ -1542,10 +1779,19 @@ class DataImportInterface(object):
             # add all other data
             self.add_pdb_data(tsession, design_pdb_id, update_sections = set(), ligand_mapping = ligand_mapping, chain_mapping = chain_mapping, ligand_params_file_paths = ligand_params_file_paths)
 
+            # add the designed PDB -> RCSB PDB chain mapping
+            print('Creating the chain mapping')
+            for pdb2pdb_chain_map in pdb2pdb_chain_maps:
+                pdb2pdb_chain_map = get_or_create_in_transaction(tsession, PDB2PDBChainMap, pdb2pdb_chain_map, missing_columns = ['ID'])
+
             previously_added.add(design_pdb_id)
 
             print('Success.\n')
-            tsession.commit()
+            if debug:
+                print('Debug call - rolling back the transaction.\n')
+                tsession.rollback()
+            else:
+                tsession.commit()
             tsession.close()
         except:
             colortext.error('Failure.')
