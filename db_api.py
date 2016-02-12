@@ -129,7 +129,7 @@ class ddG(object):
         self.cached_score_method_details = None
 
         # File cache - LIFO order
-        self.file_content_buffer_size = file_content_buffer_size or 100
+        self.file_content_buffer_size = file_content_buffer_size or 600
         self.file_content_cache = {}
         self.file_content_buffer = []
         self.file_content_cache_hits = 0
