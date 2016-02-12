@@ -1042,7 +1042,7 @@ class BindingAffinityDDGInterface(ddG):
                 raise Exception('This case contains an MSE residue which may (or may not) cause an issue.')
                 # It looks like MSE (and CSE?) may now be handled - https://www.rosettacommons.org/content/pdb-files-rosetta-format
         except Exception, e:
-            colortext.error('%s: %s, chains %s' % (str(e), str(stripped_p.pdb_id), str(pdb_chains_to_keep)))
+            colortext.error('%s: %s, chains %s' % (str(e), stripped_p.pdb_id or pdb_file_id, str(pdb_chains_to_keep)))
 
         # Assert that there are no empty sequences
         assert(sorted(stripped_p.atom_sequences.keys()) == sorted(pdb_chains_to_keep))

@@ -532,7 +532,7 @@ class DataImportInterface(object):
                 db_cursor.execute(sql, params)
             else:
                 self.DDG_db.insertDictIfNew('FileContent', d, ['Content'], locked = False)
-            existing_filecontent_id = self.get_file_id(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
+            existing_filecontent_id = self.get_file_id_using_old_interface(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
 
         assert(existing_filecontent_id != None)
         return existing_filecontent_id
