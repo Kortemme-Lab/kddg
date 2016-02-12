@@ -1160,6 +1160,11 @@ class BindingAffinityDDGInterface(ddG):
             self._add_prediction_file(prediction_id, rosetta_to_atom_residue_map, 'rosetta2pdb.resmap.json', 'RosettaPDBMapping', 'Rosetta residue->PDB residue map', 'Input', db_cursor = cur, forced_mime_type = "application/json")
             self._add_prediction_file(prediction_id, atom_to_rosetta_residue_map, 'pdb2rosetta.resmap.json', 'RosettaPDBMapping', 'PDB residue->Rosetta residue map', 'Input', db_cursor = cur, forced_mime_type = "application/json")
 
+            # todo: move this to db_api.py - see _add_stripped_pdb_to_prediction, _add_resfile_to_prediction, etc.
+            for params_file_record in self.DDG_db.execute_select('SELECT PDBLigandCode, ParamsFileContentID FROM PDBLigandFile WHERE PDBFileID=%s', parameters=(pdb_file_id,)):
+                ligand_code = params_file_record['PDBLigandCode']
+                self._add_prediction_file(prediction_id, None, '{0}.params'.format(ligand_code), 'Params', '{0} params file'.format(ligand_code), 'Input', db_cursor = cur, rm_trailing_line_whitespace = False, forced_mime_type = 'text/plain', file_content_id = params_file_record['ParamsFileContentID'])
+
         if protocol_id:
             qry = 'SELECT * FROM %s WHERE PredictionSet=%%s AND UserPPDataSetExperimentID=%%s AND ProtocolID=%%s' % self._get_prediction_table()
             existing_record = self.DDG_db.execute_select(qry, parameters=(prediction_set_id, user_dataset_experiment_id, protocol_id))

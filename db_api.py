@@ -2310,6 +2310,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             forced_mime_type = forced_mime_type or 'chemical/x-pdb'
 
         if file_content_id == None:
+            assert(file_content != None)
             file_content_id = self._add_file_content(file_content, db_cursor = db_cursor, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
 
         # Link the file contents to the prediction
@@ -2341,7 +2342,9 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
         return file_content_id
 
+
     def _add_residue_map_to_prediction(self, prediction_id, residue_mapping):
+        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
         assert(type(residue_mapping) == type(self.__dict__))
         json_content = json.dumps(residue_mapping, sort_keys=True) # sorting helps to quotient the file content space over identical data
         self._add_prediction_file(prediction_id, json_content, 'residue_mapping.json', 'RosettaPDBMapping', 'Rosetta<->PDB residue mapping', 'Input', forced_mime_type = "application/json")
@@ -2352,6 +2355,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     def _add_stripped_pdb_to_prediction(self, prediction_id):
+        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
         pdb_file_id, chains = self.get_pdb_chains_for_prediction(prediction_id)
         pdb_content = self._strip_pdb(pdb_file_id, chains)
         filename = '%s_%s' % (pdb_file_id, ''.join(sorted(chains)))
@@ -2359,11 +2363,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     def _add_resfile_to_prediction(self, prediction_id):
+        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
         resfile_content = self.create_resfile(prediction_id)
         self._add_prediction_file(prediction_id, resfile_content, 'mutations.resfile', 'Resfile', 'Resfile', 'Input', rm_trailing_line_whitespace = True)
 
 
     def _add_mutfile_to_prediction(self, prediction_id):
+        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
         mutfile_content = self.create_mutfile(prediction_id)
         self._add_prediction_file(prediction_id, mutfile_content, 'mutations.mutfile', 'Mutfile', 'Mutfile', 'Input', rm_trailing_line_whitespace = True)
 
