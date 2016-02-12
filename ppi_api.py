@@ -1956,7 +1956,6 @@ class BindingAffinityDDGInterface(ddG):
                     Warnings = complex_details['Warnings'],
                 ), missing_columns = ['ID'])
 
-
             # Search for an existing PDB set. Read the current definitions, treating them as bags then sorting lexically
             pdb_sets = {}
             for pschain in tsession.query(dbmodel.PPIPDBPartnerChain).filter(dbmodel.PPIPDBPartnerChain.PPComplexID == pp_complex.ID):
@@ -2030,3 +2029,143 @@ class BindingAffinityDDGInterface(ddG):
             tsession.rollback()
             tsession.close()
             raise
+
+
+    @ppi_data_entry
+    def add_user_dataset_case(self, tsession, user_dataset_case, user_dataset_name_to_id_map = {}):
+        '''Add a user dataset case to the database using a defined dict structure.
+
+        :param tsession: A transaction session. This must be created and passed into this function as user datasets should
+                         be added in one transaction.
+        :param user_dataset_case: A single case for the user dataset matching the structure defined below.
+        :param user_dataset_name_to_id_map: Used to cache the mapping from user dataset names to their integer IDs
+        :return: On success, the UserDataSetExperiment object is returned.
+
+
+        user_dataset_case should be structured as in the following example:
+
+            dict(
+
+                # These records are used to create a PPMutagenesis record and the associated mutagenesis details
+
+                Mutagenesis = dict(
+                    RecognizableString = 'TinaGSP_32',
+                    PPComplexID = -1,
+                ),
+
+                Mutations = [
+                    # There is one dict per mutation
+                    dict(
+                        MutagenesisMutation = dict(
+                            # PPMutagenesisID will be filled in when the PPMutagenesis record is created.
+                            RecordKey = 'A D123E', # chain_id, wildtype_aa, residue_id.strip(), mutant_aa
+                            ProteinID = None, # todo
+                            ResidueIndex = None, # todo
+                            WildTypeAA = 'D',
+                            MutantAA = 'E',
+                        ),
+                        MutagenesisPDBMutation = dict(
+                            # PPMutagenesisID and PPMutagenesisMutationID will be filled in when the PPMutagenesisMutation record is created.
+                            # PPComplexID is taken from the PPMutagenesis section. WildTypeAA and MutantAA are taken from the PPMutagenesisMutation section.
+                            SetNumber = -1,
+                            PDBFileID = '1A2K_TP0',
+                            Chain = 'A',
+                            ResidueID = ' 123 ',
+                        ),
+                    ),
+                ],
+
+                # This field is used to create the UserPPDataSetExperiment record. All other fields can be derived from the above.
+                # Note: We use the human-readable label here. The database ID is retrieved using e.g. ppi_api.get_defined_user_datasets()[<UserDataSetTextID>]['ID']
+                UserDataSetTextID = 'RAN-GSP',
+            )
+        '''
+
+        udc = user_dataset_case
+
+        # Extract the PDB file and complex set number
+        pdb_file_id = set([m['MutagenesisPDBMutation']['PDBFileID'] for m in udc['Mutations']])
+        assert(len(pdb_file_id) == 1)
+        pdb_file_id = pdb_file_id.pop()
+        set_number = set([m['MutagenesisPDBMutation']['SetNumber'] for m in udc['Mutations']])
+        assert(len(set_number) == 1)
+        set_number = set_number.pop()
+
+        # 1. Create the mutagenesis record
+        pp_mutagenesis = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesis, dict(
+                    PPComplexID = udc['Mutagenesis']['PPComplexID'],
+                    SKEMPI_KEY = udc['Mutagenesis']['RecognizableString'],
+                ), missing_columns = ['ID'])
+
+        # 2. Create the PPMutagenesisMutation and PPMutagenesisPDBMutation records
+        for m in udc['Mutations']:
+
+            # 2a. Create the PPMutagenesisMutation record
+            mmut = m['MutagenesisMutation']
+            mmut['PPMutagenesisID'] = pp_mutagenesis.ID
+
+            # Sanity check existing records
+            existing_record = tsession.query(dbmodel.PPMutagenesisMutation).filter(and_(
+                    dbmodel.PPMutagenesisMutation.PPMutagenesisID == mmut['PPMutagenesisID'], dbmodel.PPMutagenesisMutation.RecordKey == mmut['RecordKey']))
+            if existing_record.count() > 0:
+                existing_record = existing_record.one()
+                assert(existing_record.MutantAA == mmut['MutantAA'])
+                assert(existing_record.WildTypeAA == mmut['WildTypeAA'])
+
+            # Add the new record
+            pp_mutagenesis_mutation = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesisMutation, mmut, missing_columns = ['ID'])
+
+            # 2b. Create the PPMutagenesisPDBMutation record
+            pmut = m['MutagenesisPDBMutation']
+            pmut['PPMutagenesisID'] = pp_mutagenesis.ID
+            pmut['PPMutagenesisMutationID'] = pp_mutagenesis_mutation.ID
+            pmut['PPComplexID'] = pp_mutagenesis.PPComplexID
+            pmut['WildTypeAA'] = pp_mutagenesis_mutation.WildTypeAA
+            pmut['MutantAA'] = pp_mutagenesis_mutation.MutantAA
+            pmut['ResidueID'] = PDB.ResidueID2String(pmut['ResidueID']) # handle stripped strings
+
+            # Sanity check existing records
+            existing_record = tsession.query(dbmodel.PPMutagenesisPDBMutation).filter(and_(
+                    dbmodel.PPMutagenesisPDBMutation.PPMutagenesisMutationID == pmut['PPMutagenesisMutationID'],
+                    dbmodel.PPMutagenesisPDBMutation.PDBFileID == pdb_file_id,
+                    dbmodel.PPMutagenesisPDBMutation.SetNumber == set_number,
+                    dbmodel.PPMutagenesisPDBMutation.Chain == pmut['Chain'],
+                    dbmodel.PPMutagenesisPDBMutation.ResidueID == pmut['ResidueID'],
+            ))
+            if existing_record.count() > 0:
+                existing_record = existing_record.one()
+                assert(existing_record.PPMutagenesisID == pmut['PPMutagenesisID'])
+                assert(existing_record.PPComplexID == pmut['PPComplexID'])
+                assert(existing_record.WildTypeAA == pmut['WildTypeAA'])
+                assert(existing_record.MutantAA == pmut['MutantAA'])
+
+            # Add the new record
+            pp_mutagenesis_pdb_mutation = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesisPDBMutation, pmut, missing_columns = ['ID'])
+
+        # 3. Create the UserPPDataSetExperiment record
+        user_dataset_name = udc['UserDataSetTextID']
+        if not user_dataset_name_to_id_map.get(user_dataset_name):
+            user_dataset_name_to_id_map[user_dataset_name] = tsession.query(dbmodel.UserDataSet).filter(dbmodel.UserDataSet.TextID == user_dataset_name).one().ID
+        user_dataset_id = user_dataset_name_to_id_map[user_dataset_name]
+
+        new_record = True
+        if tsession.query(dbmodel.UserPPDataSetExperiment).filter(and_(
+                dbmodel.UserPPDataSetExperiment.UserDataSetID == user_dataset_id,
+                dbmodel.UserPPDataSetExperiment.PPMutagenesisID == pp_mutagenesis.ID,
+                dbmodel.UserPPDataSetExperiment.PDBFileID == pdb_file_id,
+                dbmodel.UserPPDataSetExperiment.PPComplexID == pp_mutagenesis.PPComplexID,
+                dbmodel.UserPPDataSetExperiment.SetNumber == set_number)).count() > 0:
+            new_record = False
+        user_dataset_experiment = get_or_create_in_transaction(tsession, dbmodel.UserPPDataSetExperiment, dict(
+                UserDataSetID = user_dataset_id,
+                PPMutagenesisID = pp_mutagenesis.ID,
+                PDBFileID = pdb_file_id,
+                PPComplexID = pp_mutagenesis.PPComplexID,
+                SetNumber = set_number,
+                IsComplex = True,
+            ), missing_columns = ['ID'])
+        if new_record:
+            colortext.wgreen('.')
+        else:
+            colortext.wcyan('.')
+
