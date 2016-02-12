@@ -128,6 +128,11 @@ class ddG(object):
         # Caching dictionaries
         self.cached_score_method_details = None
 
+        # File cache - LIFO order
+        self.file_content_buffer_size = 100
+        self.file_content_cache = {}
+        self.file_content_buffer = []
+
         # Create an instance of the import API
         try:
             self.importer = DataImportInterface.get_interface_with_config_file()
@@ -915,6 +920,42 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
+    def get_file_from_cache(self, file_content_id):
+
+        # Sanity check
+        assert(len(self.file_content_cache) == len(self.file_content_buffer))
+        assert(sorted(self.file_content_cache.keys()) == sorted(self.file_content_buffer))
+
+        if file_content_id not in self.file_content_cache:
+            file_content = self.get_session().query(self.FileContent).filter(self.FileContent.ID == file_content_id).one()
+            record = row_to_dict(file_content)
+
+            pprint.pprint(record)
+            sys.exit(0)
+
+            # Add the file content to the API cache
+            self.file_content_buffer.append(file_content_id)
+            self.file_content_cache[file_content_id] = record
+
+            print('buffer size', len(self.file_content_buffer))
+            num_records_to_remove = max(len(self.file_content_buffer) - self.file_content_buffer_size, 0)
+            print('num_records_to_remove', num_records_to_remove)
+            if num_records_to_remove > 0:
+                for file_content_id in self.file_content_buffer[:num_records_to_remove]:
+                    del file_content_cache[file_content_id]
+                self.file_content_buffer = self.file_content_buffer[num_records_to_remove:]
+                assert(len(self.file_content_buffer) == len(self.file_content_buffer_size))
+
+                assert(len(self.file_content_cache) == len(self.file_content_buffer))
+                assert(sorted(self.file_content_cache.keys()) == sorted(self.file_content_buffer))
+
+        # Promote the most recently active files to the start of the buffer
+        file_content_buffer.remove(file_content_id)
+        file_content_buffer.append(file_content_id)
+
+        return self.file_content_cache[file_content_id]
+
+
     @informational_job
     def get_job_files(self, prediction_id, truncate_content = None, set_pdb_occupancy_one = True):
         '''Returns a dict mapping the stages (e.g. 'input', 'output', 'analysis') of a job with the files associated with
@@ -925,6 +966,11 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         assert(truncate_content == None or (isinstance(truncate_content, int) and truncate_content >= 0))
         job_files = {}
         prediction_record = self.get_session().query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
+
+        #self.get_file_from_cache(file_content_id)
+
+
+
         for pf in prediction_record.files:
             r = row_to_dict(pf)
             if truncate_content != 0:
