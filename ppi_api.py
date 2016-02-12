@@ -1407,7 +1407,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
-    def analyze(self, prediction_set_ids, score_method_id,
+    def analyze(self, prediction_set_ids, score_method_ids,
             experimental_data_exists = True,
             analysis_set_ids = [],
             prediction_set_series_names = {}, prediction_set_descriptions = {}, prediction_set_credits = {}, prediction_set_colors = {}, prediction_set_alphas = {},
@@ -1417,7 +1417,7 @@ class BindingAffinityDDGInterface(ddG):
             include_derived_mutations = False,
             expectn = 50,
             use_single_reported_value = False,
-            take_lowest = 3,
+            take_lowests = [3],
             burial_cutoff = 0.25,
             stability_classication_experimental_cutoff = 1.0,
             stability_classication_predicted_cutoff = 1.0,
@@ -1463,7 +1463,8 @@ class BindingAffinityDDGInterface(ddG):
            report_analysis  : Whether or not to print analysis to stdout.
            silent = False   : Whether or not anything should be printed to stdout (True is useful for webserver interaction).
         '''
-        assert(take_lowest > 0 and (int(take_lowest) == take_lowest))
+        for take_lowest in take_lowests:
+            assert(take_lowest > 0 and (int(take_lowest) == take_lowest))
         assert(0 <= burial_cutoff <= 2.0)
         assert(stability_classication_experimental_cutoff > 0)
         assert(stability_classication_predicted_cutoff > 0)
@@ -1504,6 +1505,8 @@ class BindingAffinityDDGInterface(ddG):
                 #todo: hack. this currently seems to expect all datapoints to be present. handle the case when we are missing data e.g. prediction set "ZEMu run 1"
                 analysis_sets_to_run = ['ZEMu'] # ['BeAtMuSiC', 'SKEMPI', 'ZEMu']
 
+            if len(analysis_sets_to_run) > 1:
+                raise Exception("Didn't expect this")
             for analysis_set_id in analysis_sets_to_run:
                 colortext.message(analysis_set_id)
 
