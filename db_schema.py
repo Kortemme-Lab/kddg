@@ -313,12 +313,12 @@ class PDBLigandFile(DeclarativeBase):
 class PDBIon(DeclarativeBase):
     __tablename__ = 'PDBIon'
 
-    PDBFileID = Column(String(10), nullable=False, primary_key=True)
-    Chain = Column(String(1), nullable=False, primary_key=True)
+    PDBFileID = Column(String(10), ForeignKey('PDBChain.PDBFileID'), nullable=False, primary_key=True)
+    Chain = Column(String(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
     SeqID = Column(String(5), nullable=False, primary_key=True)
     PDBIonCode = Column(String(3), nullable=False)
-    IonID = Column(Integer, nullable=False)
-    ParamsFileContentID = Column(Integer, nullable=True)
+    IonID = Column(Integer, ForeignKey('Ion.ID'), nullable=False)
+    ParamsFileContentID = Column(Integer, ForeignKey('FileContent.ID'), nullable=True)
     Element = Column(String(2), nullable=False)
 
 
@@ -331,6 +331,21 @@ class PDB2PDBChainMap(DeclarativeBase):
     PDBFileID2 = Column(String(10), nullable=False)
     Chain2 = Column(String(1), nullable=False)
     SequenceIdentity = Column(DOUBLE, nullable=False)
+
+
+class Project(DeclarativeBase):
+    __tablename__ = 'Project'
+
+    ID = Column(Unicode(64, collation='utf8_unicode_ci'), nullable=False, primary_key=True)
+    Description = Column(Text(collation='utf8_unicode_ci'), nullable=True)
+
+
+class ProjectPDBFile(DeclarativeBase):
+    __tablename__ = 'ProjectPDBFile'
+
+    PDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=False, primary_key=True)
+    ProjectID = Column(Unicode(64, collation='utf8_unicode_ci'), ForeignKey('Project.ID'), nullable=False, primary_key=True)
+    Notes = Column(Text)
 
 
 #########################################
