@@ -78,7 +78,7 @@ from klab.bio.dssp import MonomerDSSP, ComplexDSSP, MissingAtomException
 from klab.bio.ligand import Ligand, PDBLigand, LigandMap
 from klab.bio.pdbtm import PDBTM
 from klab.bio.clustalo import PDBChainSequenceAligner
-from klab.db.sqlalchemy_interface import get_single_record_from_query, get_or_create_in_transaction
+from klab.db.sqlalchemy_interface import get_single_record_from_query, get_or_create_in_transaction, row_to_dict
 from klab.bio import rcsb
 from klab.general.strutil import remove_trailing_line_whitespace
 from klab.hash.md5 import get_hexdigest
@@ -97,6 +97,19 @@ try:
 except ImportError:
     colortext.error('Failed to import magic package. This failure will prevent you from being able to import new file content into the database.')
     pass
+
+
+#################################
+#                               #
+#  Utility functions            #
+#                               #
+#################################
+
+
+def json_dumps(j):
+    '''All json.dumps calls should use this for consistency.'''
+    return json.dumps(j, sort_keys=True, indent = 4)
+
 
 
 class DataImportInterface(object):
@@ -123,7 +136,7 @@ class DataImportInterface(object):
     ##################
 
 
-    def __init__(self, passwd, connect_string, connect_string_utf, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, cache_dir = None, echo_sql = False, port = 3306):
+    def __init__(self, passwd, connect_string, connect_string_utf, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, cache_dir = None, echo_sql = False, port = 3306, file_content_buffer_size = None):
         '''
         :param passwd:
         :param connect_string:
@@ -161,6 +174,14 @@ class DataImportInterface(object):
         self.get_session(utf = False)
         self.get_session(utf = True)
 
+        # File cache - circular buffer-ish with head promotion on access
+        self.file_content_buffer_size = file_content_buffer_size or 800 # based on some benchmarking using Tina's GSP run, 800 seems a reasonable size (and was more than enough for that run)
+        self.file_content_cache = {}
+        self.file_content_buffer = []
+        self.file_content_cache_hits = 0
+        self.file_content_cache_misses = 0
+        assert(isinstance(self.file_content_buffer_size, int))
+
         self.rosetta_scripts_path = rosetta_scripts_path
         self.rosetta_database_path = rosetta_database_path
 
@@ -188,6 +209,7 @@ class DataImportInterface(object):
         connection_string = None
         connection_string_key = 'sqlalchemy.{0}.url'.format(database)
         connection_string_key_utf = 'sqlalchemy.{0}.url.utf'.format(database)
+        file_content_buffer_size = None
         with open(my_cnf_path, 'r') as f:
             parsing_config_section = False
             for line in f:
@@ -206,6 +228,8 @@ class DataImportInterface(object):
                             password = val
                         elif key == 'cache_dir':
                             cache_dir = val
+                        elif key == 'file_content_buffer_size':
+                            file_content_buffer_size = int(val)
                         elif key == 'host':
                             host = val
                         elif key == 'port':
@@ -220,7 +244,7 @@ class DataImportInterface(object):
         if not user or not password or not host or not connection_string or not connect_string_utf:
             raise Exception("Couldn't find host(%s), username(%s), password, or connection string in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
 
-        return cls(password, connection_string, connect_string_utf, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, cache_dir = cache_dir, echo_sql = echo_sql, port = port)
+        return cls(password, connection_string, connect_string_utf, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, cache_dir = cache_dir, echo_sql = echo_sql, port = port, file_content_buffer_size = file_content_buffer_size)
 
 
     def __del__(self):
@@ -421,6 +445,7 @@ class DataImportInterface(object):
     ###########################################################################################
 
 
+    @informational_file
     def get_file_id(self, content, tsession = None, hexdigest = None):
         '''Searches the database to see whether the FileContent already exists. The search uses the digest and filesize as
            heuristics to speed up the search. If a file has the same hex digest and file size then we do a straight comparison
@@ -428,37 +453,16 @@ class DataImportInterface(object):
            If the FileContent exists, the value of the ID field is returned else None is returned.
            '''
         tsession = tsession or self.get_session()
-        existing_filecontent_id = None
-        hexdigest = hexdigest or get_hexdigest(content)
-        filesize = len(content)
-        for r in tsession.query(FileContent).filter(and_(FileContent.MD5HexDigest == hexdigest, FileContent.Filesize == filesize)):
-            if r.Content == content:
-                assert(existing_filecontent_id == None) # content uniqueness check
-                existing_filecontent_id = r.ID
-        return existing_filecontent_id
-
-
-    @informational_file
-    def get_file_id_using_old_interface(self, content, db_cursor = None, hexdigest = None):
-        '''Searches the database to see whether the FileContent already exists. The search uses the digest and filesize as
-           heuristics to speed up the search. If a file has the same hex digest and file size then we do a straight comparison
-           of the contents.
-           If the FileContent exists, the value of the ID field is returned else None is returned.
-           '''
-        # @todo: This function is deprecated. Use get_file_id instead.
 
         existing_filecontent_id = None
         hexdigest = hexdigest or get_hexdigest(content)
         filesize = len(content)
-        if db_cursor:
-            db_cursor.execute('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', (hexdigest, filesize))
-            results = db_cursor.fetchall()
-        else:
-            results = self.DDG_db.execute_select('SELECT * FROM FileContent WHERE MD5HexDigest=%s AND Filesize=%s', parameters=(hexdigest, filesize))
-        for r in results:
-            if r['Content'] == content:
+
+        for r in tsession.execute('SELECT ID FROM FileContent WHERE MD5HexDigest=:hd AND Filesize=:fsz', dict(hd = hexdigest, fsz = filesize)):
+            if self.get_file_content_from_cache(r['ID']) == content:
                 assert(existing_filecontent_id == None) # content uniqueness check
                 existing_filecontent_id = r['ID']
+
         return existing_filecontent_id
 
 
@@ -467,6 +471,7 @@ class DataImportInterface(object):
            a new record if necessary, and returns the associated FileContent.ID value.'''
 
         tsession = tsession or self.get_session()
+
         if rm_trailing_line_whitespace:
             file_content = remove_trailing_line_whitespace(file_content)
 
@@ -485,57 +490,63 @@ class DataImportInterface(object):
                 mime_type = magic.from_buffer(file_content, mime = True)
 
             # Create the database record
-            file_content_record = get_or_create_in_transaction(tsession, FileContent, dict(
+            # Note: We have already searched the file cache and database for uniqueness so we do NOT call get_or_create_in_transaction here.
+            file_content_record = FileContent(**dict(
                 Content = file_content,
                 MIMEType = mime_type,
                 Filesize = len(file_content),
                 MD5HexDigest = hexdigest
-            ), missing_columns = ['ID'])
+            ))
+            tsession.add(file_content_record)
+            tsession.flush()
             existing_filecontent_id = file_content_record.ID
 
         assert(existing_filecontent_id != None)
         return existing_filecontent_id
 
 
-    def _add_file_content_using_old_interface(self, file_content, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
-        '''Takes file content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
-           a new record if necessary, and returns the associated FileContent.ID value.'''
+    def get_file_content_cache_stats(self):
+        '''Returns basic statistics on the file content cache access.'''
+        return dict(
+            size = self.file_content_buffer_size,
+            hits = self.file_content_cache_hits,
+            misses = self.file_content_cache_misses
+        )
 
-        # todo: This function is deprecated. Use _add_file_content instead.
 
-        if rm_trailing_line_whitespace:
-            file_content = remove_trailing_line_whitespace(file_content)
+    def get_file_content_from_cache(self, file_content_id):
 
-        # Check to see whether the file has been uploaded before
-        hexdigest = get_hexdigest(file_content)
-        existing_filecontent_id = self.get_file_id_using_old_interface(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
+        # Sanity check
+        assert(len(self.file_content_cache) == len(self.file_content_buffer))
+        assert(sorted(self.file_content_cache.keys()) == sorted(self.file_content_buffer))
 
-        # Create the FileContent record if the file is a new file
-        if existing_filecontent_id == None:
+        if file_content_id not in self.file_content_cache:
+            self.file_content_cache_misses += 1
 
-            # Determing the MIME type
-            mime_type = forced_mime_type
-            if not mime_type:
-                # Note: in case the wrong mime-types are being returned, try saving to file first and then calling magic.from_file.
-                # See commit c62883b58649bd813bf022f7d1193abb06f1676d for the code. This used to be necessary for some odd reason.
-                mime_type = magic.from_buffer(file_content, mime = True)
+            file_content = self.get_session().query(FileContent).filter(FileContent.ID == file_content_id).one()
+            record = row_to_dict(file_content)
 
-            # Create the database record
-            d = dict(
-                Content = file_content,
-                MIMEType = mime_type,
-                Filesize = len(file_content),
-                MD5HexDigest = hexdigest
-            )
-            if db_cursor:
-                sql, params, record_exists = self.DDG_db.create_insert_dict_string('FileContent', d, ['Content'])
-                db_cursor.execute(sql, params)
-            else:
-                self.DDG_db.insertDictIfNew('FileContent', d, ['Content'], locked = False)
-            existing_filecontent_id = self.get_file_id_using_old_interface(file_content, db_cursor = db_cursor, hexdigest = hexdigest)
+            # Add the file content to the API cache
+            self.file_content_buffer.append(file_content_id)
+            self.file_content_cache[file_content_id] = record['Content']
 
-        assert(existing_filecontent_id != None)
-        return existing_filecontent_id
+            num_records_to_remove = max(len(self.file_content_buffer) - self.file_content_buffer_size, 0)
+            if num_records_to_remove > 0:
+                for stored_file_content_id in self.file_content_buffer[:num_records_to_remove]:
+                    del self.file_content_cache[stored_file_content_id]
+                self.file_content_buffer = self.file_content_buffer[num_records_to_remove:]
+                assert(len(self.file_content_buffer) == self.file_content_buffer_size)
+
+                assert(len(self.file_content_cache) == len(self.file_content_buffer))
+                assert(sorted(self.file_content_cache.keys()) == sorted(self.file_content_buffer))
+        else:
+            self.file_content_cache_hits += 1
+
+        # Promote the most recently active files to the start of the buffer
+        self.file_content_buffer.remove(file_content_id)
+        self.file_content_buffer.append(file_content_id)
+
+        return self.file_content_cache[file_content_id]
 
 
     #################################
