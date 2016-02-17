@@ -804,6 +804,7 @@ class BindingAffinityDDGInterface(ddG):
 
            Returns False if no predictions were added to the run else return True if all predictions (and there were some) were added to the run.'''
 
+        # For test runs, this number of predictions will be created
         short_run_limit = 100
 
         # Create a new session
