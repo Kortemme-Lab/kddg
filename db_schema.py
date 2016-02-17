@@ -666,6 +666,13 @@ class UserPPDataSetExperiment(DeclarativeBase):
         return 'UserPPDataSetExperiment #{0} ({1}). Complex = {2}, Partners = {3}. Mutations: {4}'.format(self.ID, self.user_dataset.TextID, self.complex, self.ppi_pdb_set, mutations or 'N/A')
 
 
+class UserPPDataSetExperimentTag(DeclarativeBase):
+    __tablename__ = 'UserPPDataSetExperimentTag'
+
+    UserPPDataSetExperimentID = Column(Integer, nullable=False, primary_key=True)
+    Tag = Column(String(64), nullable=False, primary_key=True)
+
+
 #######################################################
 #                                                     #
 #  Protocol tables                                    #
@@ -905,7 +912,7 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['PDB2PDBChainMap'])
+    generate_sqlalchemy_definition(['UserPPDataSetExperimentTag'])
 
     #generate_sqlalchemy_definition(['AminoAcid'])
     sys.exit(0)
