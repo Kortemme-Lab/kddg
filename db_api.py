@@ -58,11 +58,12 @@ from klab.stats.misc import get_xy_dataset_statistics
 from klab.general.strutil import remove_trailing_line_whitespace
 from klab.hash.md5 import get_hexdigest
 from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
-from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction
+from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction, get_single_record_from_query
+from klab.rosetta.input_files import Mutfile, Resfile
 
 import score
 import ddgdbapi
-from import_api import DataImportInterface
+from import_api import DataImportInterface, json_dumps
 import db_schema as dbmodel
 
 
@@ -107,7 +108,7 @@ class ddG(object):
 
     GET_JOB_FN_CALL_COUNTER_MAX = 10
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
         if passwd:
             passwd = passwd.strip()
         self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
@@ -127,14 +128,6 @@ class ddG(object):
 
         # Caching dictionaries
         self.cached_score_method_details = None
-
-        # File cache - LIFO order
-        self.file_content_buffer_size = file_content_buffer_size or 600
-        self.file_content_cache = {}
-        self.file_content_buffer = []
-        self.file_content_cache_hits = 0
-        self.file_content_cache_misses = 0
-        assert(isinstance(self.file_content_buffer_size, int))
 
         # Create an instance of the import API
         try:
@@ -810,7 +803,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @informational_pdb
-    def get_chains_for_mutatagenesis(self, mutagenesis_id, pdb_file_id, pdb_set_number, complex_id = None):
+    def get_chains_for_mutatagenesis(self, mutagenesis_id, pdb_file_id, pdb_set_number, complex_id = None, tsession = None):
         '''Returns the PDB chains used in the mutagenesis.
            Note: At present, monomeric data e.g. protein stability does not have the notion of complex in our database
            but this abstraction is planned so that multiple choices of PDB file and chain can be easily represented.'''
@@ -926,46 +919,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     @informational_misc
     def get_file_content_cache_stats(self):
         '''Returns basic statistics on the file content cache access.'''
-        return dict(
-            size = self.file_content_buffer_size,
-            hits = self.file_content_cache_hits,
-            misses = self.file_content_cache_misses
-        )
-
-
-    def _get_file_content_from_cache(self, file_content_id):
-
-        # Sanity check
-        assert(len(self.file_content_cache) == len(self.file_content_buffer))
-        assert(sorted(self.file_content_cache.keys()) == sorted(self.file_content_buffer))
-
-        if file_content_id not in self.file_content_cache:
-            self.file_content_cache_misses += 1
-
-            file_content = self.get_session().query(dbmodel.FileContent).filter(dbmodel.FileContent.ID == file_content_id).one()
-            record = row_to_dict(file_content)
-
-            # Add the file content to the API cache
-            self.file_content_buffer.append(file_content_id)
-            self.file_content_cache[file_content_id] = record['Content']
-
-            num_records_to_remove = max(len(self.file_content_buffer) - self.file_content_buffer_size, 0)
-            if num_records_to_remove > 0:
-                for stored_file_content_id in self.file_content_buffer[:num_records_to_remove]:
-                    del self.file_content_cache[stored_file_content_id]
-                self.file_content_buffer = self.file_content_buffer[num_records_to_remove:]
-                assert(len(self.file_content_buffer) == self.file_content_buffer_size)
-
-                assert(len(self.file_content_cache) == len(self.file_content_buffer))
-                assert(sorted(self.file_content_cache.keys()) == sorted(self.file_content_buffer))
-        else:
-            self.file_content_cache_hits += 1
-
-        # Promote the most recently active files to the start of the buffer
-        self.file_content_buffer.remove(file_content_id)
-        self.file_content_buffer.append(file_content_id)
-
-        return self.file_content_cache[file_content_id]
+        return self.importer.get_file_content_cache_stats()
 
 
     @informational_job
@@ -985,7 +939,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 r['MIMEType'] = fcontent.MIMEType
                 r['Filesize'] = fcontent.Filesize
                 r['MD5HexDigest'] = fcontent.MD5HexDigest
-                file_content = self._get_file_content_from_cache(fcontent.ID)
+                file_content = self.importer.get_file_content_from_cache(fcontent.ID)
                 if set_pdb_occupancy_one and pf.Filetype == 'PDB': # Set all occupancies to 1
                     pdb = PDB(file_content.split("\n"))
                     pdb.fillUnoccupied()
@@ -1044,34 +998,49 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @informational_job
-    def get_defined_user_datasets(self):
+    def get_defined_user_datasets(self, tsession = None):
         '''Return a dict detailing the defined UserDataSets, their tagged subsets (if any), and the mutagenesis counts
           (i.e. the number of prediction cases) of both the user datasets and the associated tagged subsets .'''
+
+        tsession = tsession or self.get_session(new_session = True)
+
         d = {}
-        user_datasets = self.DDG_db.execute_select('SELECT * FROM UserDataSet WHERE DatasetType=%s', parameters=(self._get_prediction_dataset_type(),))
+        user_datasets = tsession.query(dbmodel.UserDataSet).filter(dbmodel.UserDataSet.DatasetType == self._get_prediction_dataset_type())
+
         for uds in user_datasets:
-            qry = 'SELECT COUNT(ID) AS MutagenesisCount FROM %s WHERE UserDataSetID=%%s' % self._get_user_dataset_experiment_table()
-            uds['MutagenesisCount'] = self.DDG_db.execute_select(qry, parameters=(uds['ID'],))[0]['MutagenesisCount']
+            uds = row_to_dict(uds)
+            q = tsession.query(func.count(self._get_sqa_user_dataset_experiment_table().ID).label('MutagenesisCount')).filter(self._get_sqa_user_dataset_experiment_table().UserDataSetID == uds['ID']).one()
+            uds['MutagenesisCount'] = q[0]
             d[uds['TextID']] = uds
 
             subsets = {}
             if self._get_user_dataset_experiment_tag_table():
-                qry = 'SELECT Tag, COUNT(Tag) AS MutagenesisCount FROM %s INNER JOIN %s ON %sID=%s.ID WHERE UserDataSetID=%%s GROUP BY Tag' % (self._get_user_dataset_experiment_tag_table(), self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table())
-                for tagged_subset in self.DDG_db.execute_select(qry, parameters=(uds['ID'],)):
-                    subsets[tagged_subset['Tag']] = dict(MutagenesisCount = tagged_subset['MutagenesisCount'])
+
+                for tagged_subset in tsession.query(
+                    self._get_sqa_user_dataset_experiment_tag_table().Tag, func.count(self._get_sqa_user_dataset_experiment_tag_table().Tag).label('MutagenesisCount')).filter(and_(
+                        self._get_sqa_user_dataset_experiment_table().ID == self._get_sqa_user_dataset_experiment_tag_table_udsid(),
+                        self._get_sqa_user_dataset_experiment_table().UserDataSetID == uds['ID'])).group_by(self._get_sqa_user_dataset_experiment_tag_table().Tag):
+                    subsets[tagged_subset[0]] = dict(MutagenesisCount = tagged_subset[1])
             uds['Subsets'] = subsets
         return d
 
 
     @informational_job
-    def get_user_dataset_experiment_ids(self, user_dataset_name, tagged_subset = None):
+    def get_user_dataset_experiments(self, tsession, user_dataset_name, tagged_subset = None):
         '''Returns a list of UserDataSet experiment records for the given user dataset.'''
+
+        udse = self._get_sqa_user_dataset_experiment_table()
+        udse_tag = self._get_sqa_user_dataset_experiment_tag_table()
         if tagged_subset:
-            qry = 'SELECT %s.* FROM %s INNER JOIN %s ON %sID=%s.ID INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%%s AND Tag=%%s' % (self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_tag_table(), self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table())
-            return self.DDG_db.execute_select(qry, parameters=(user_dataset_name, tagged_subset))
+            return tsession.query(udse).filter(and_(
+                udse.ID == self._get_sqa_user_dataset_experiment_tag_table_udsid(),
+                udse.UserDataSetID == dbmodel.UserDataSet.ID,
+                dbmodel.UserDataSet.TextID == user_dataset_name,
+                udse.Tag == tagged_subset))
         else:
-            qry = 'SELECT %s.* FROM %s INNER JOIN UserDataSet ON UserDataSetID=UserDataSet.ID WHERE UserDataSet.TextID=%%s' % (self._get_user_dataset_experiment_table(), self._get_user_dataset_experiment_table())
-            return self.DDG_db.execute_select(qry, parameters=(user_dataset_name,))
+            return tsession.query(udse).filter(and_(
+                udse.UserDataSetID == dbmodel.UserDataSet.ID,
+                dbmodel.UserDataSet.TextID == user_dataset_name))
 
 
     @informational_job
@@ -1089,7 +1058,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     @informational_job
     def export_dataset_to_json(self, dataset_id):
         '''Returns the dataset information in JSON format.'''
-        return json.dumps(self._export_dataset(dataset_id))
+        return json_dumps(self._export_dataset(dataset_id))
 
 
     @informational_job
@@ -1308,20 +1277,23 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
-    def _add_prediction_run_preconditions(self, prediction_set_id, user_dataset_name, tagged_subset):
-        '''Check to make sure that the prediction set, user dataset, and optional tagged subset make sense for this API.'''
-        qry = 'SELECT %s FROM PredictionSet WHERE ID=%%s' % (self._get_prediction_type())
-        prediction_set = self.DDG_db.execute_select(qry, parameters=(prediction_set_id,))
+    def _add_prediction_run_preconditions(self, tsession, prediction_set_id, user_dataset_name, tagged_subset):
+        '''Check to make sure that the prediction set, user dataset, and optional tagged subset make sense for this API.
+           Returns the set of allowed_user_datasets.
+        '''
+
+        prediction_set = get_single_record_from_query(tsession.query(dbmodel.PredictionSet).filter(dbmodel.PredictionSet.ID == prediction_set_id))
         if not prediction_set:
             raise colortext.Exception('The prediction set "%s" does not exist in the database.' % prediction_set_id)
-        elif prediction_set[0][self._get_prediction_type()] != 1:
+        elif getattr(prediction_set, self._get_prediction_type()) != 1:
             raise colortext.Exception('The prediction set "%s" is not the correct type ("%s") for this API.' % (prediction_set_id, self._get_prediction_type()))
 
-        allowed_user_datasets = self.get_defined_user_datasets()
+        allowed_user_datasets = self.get_defined_user_datasets(tsession)
         if user_dataset_name not in allowed_user_datasets:
             raise colortext.Exception('The user dataset "%s" does not exist in the database.' % user_dataset_name)
         if tagged_subset and tagged_subset not in allowed_user_datasets[user_dataset_name]['Subsets']:
             raise colortext.Exception('The tagged subset "%s" of user dataset "%s" does not exist in the database.' % (tagged_subset, user_dataset_name))
+        return allowed_user_datasets
 
 
     @job_creator
@@ -1368,6 +1340,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def create_resfile(self, prediction_id):
         '''This function returns the resfile content for the prediction. It is usually not called directly by the user but
            is available for convenience and debugging.'''
+        # todo: is this being used?
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
@@ -1375,6 +1348,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def create_mutfile(self, prediction_id):
         '''This function returns the mutfile content for the prediction. It is usually not called directly by the user but
            is available for convenience and debugging.'''
+        # todo: is this being used?
         raise Exception('This function needs to be implemented by subclasses of the API.')
 
 
@@ -2314,20 +2288,6 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     ###########################################################################################
-    ## File management layer
-    ##
-    ## This part of the API is responsible for file content abstraction
-    ###########################################################################################
-
-
-    def _add_file_content(self, content, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None):
-        '''Takes file content (and an option to remove trailing whitespace from lines e.g. to normalize PDB files), adds
-           a new record if necessary, and returns the associated FileContent.ID value.'''
-        # @todo: this should be replaced with a call to importer._add_file_content
-        return self.importer._add_file_content_using_old_interface(content, db_cursor = db_cursor, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
-
-
-    ###########################################################################################
     ## Prediction layer
     ##
     ## This part of the API is responsible for inserting prediction jobs in the database via
@@ -2365,10 +2325,11 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     # Prediction setup interface
 
 
-    def _add_prediction_file(self, prediction_id, file_content, filename, filetype, filerole, stage, db_cursor = None, rm_trailing_line_whitespace = False, forced_mime_type = None, file_content_id = None):
+    def _add_prediction_file(self, tsession, prediction_id, file_content, filename, filetype, filerole, stage, rm_trailing_line_whitespace = False, forced_mime_type = None, file_content_id = None):
         '''This function adds file content to the database and then creates a record associating that content with a prediction.
-           If db_cursor is passed then we call that directly. This is crucial for transactions as many of the database functions
-           create new cursors which commit changes so transactions do not work properly.'''
+           This call must be made within an existing session (tsession). This is crucial for many of the database functions
+           as they rely on transactions rolling back on failure.'''
+
         prediction_table = self._get_prediction_table()
 
         # Add the file contents to the database
@@ -2377,67 +2338,82 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
         if file_content_id == None:
             assert(file_content != None)
-            file_content_id = self._add_file_content(file_content, db_cursor = db_cursor, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
+            file_content_id = self.importer._add_file_content(file_content, tsession = tsession, rm_trailing_line_whitespace = rm_trailing_line_whitespace, forced_mime_type = forced_mime_type)
 
         # Link the file contents to the prediction
-        d = dict(
+        prediction_file_record = dict(
             FileContentID = file_content_id,
             Filename = filename,
             Filetype = filetype,
             FileRole = filerole,
             Stage = stage,
         )
+        prediction_id_field, db_table = None, None
         if prediction_table == 'Prediction':
-            d['PredictionID'] = prediction_id
-            if db_cursor:
-                # Note: When less tired, add select statement here to see if info already in database
-                sql, params, record_exists = self.DDG_db.create_insert_dict_string('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'])
-                db_cursor.execute(sql, params)
-            else:
-                print 'magic d', d
-                self.DDG_db.insertDictIfNew('PredictionFile', d, ['PredictionID', 'FileRole', 'Stage'], locked = False)
+            prediction_id_field = 'PredictionID'
+            db_table = dbmodel.PredictionFile
         elif prediction_table == 'PredictionPPI':
-            d['PredictionPPIID'] = prediction_id
-            if db_cursor:
-                sql, params, record_exists = self.DDG_db.create_insert_dict_string('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'])
-                db_cursor.execute(sql, params)
-            else:
-                self.DDG_db.insertDictIfNew('PredictionPPIFile', d, ['PredictionPPIID', 'FileRole', 'Stage'], locked = False)
+            prediction_id_field = 'PredictionPPIID'
+            db_table = dbmodel.PredictionPPIFile
         else:
             raise('Invalid table "%s" passed.' % prediction_table)
+        prediction_file_record[prediction_id_field] = prediction_id
+
+        # Create the database record
+        # Note: We have already searched the file cache and database for uniqueness so we do NOT call get_or_create_in_transaction
+        #       here. This turns out to be a huge time saver since get_or_create_in_transaction will, in this case,
+        #       look up the FileContent.Content field which is an expensive operation.
+        existing_records = [r for r in tsession.execute('SELECT * FROM {0} WHERE {1}=:{1} AND FileContentID=:FileContentID AND Filename=:Filename AND Filetype=:Filetype AND FileRole=:FileRole AND Stage=:Stage'.format(prediction_table + 'File', prediction_id_field), prediction_file_record)]
+        if existing_records:
+            assert(len(existing_records) == 1)
+        else:
+            prediction_file_record =  db_table(**prediction_file_record)
+            tsession.add(prediction_file_record)
+            tsession.flush()
 
         return file_content_id
-
-
-    def _add_residue_map_to_prediction(self, prediction_id, residue_mapping):
-        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
-        assert(type(residue_mapping) == type(self.__dict__))
-        json_content = json.dumps(residue_mapping, sort_keys=True) # sorting helps to quotient the file content space over identical data
-        self._add_prediction_file(prediction_id, json_content, 'residue_mapping.json', 'RosettaPDBMapping', 'Rosetta<->PDB residue mapping', 'Input', forced_mime_type = "application/json")
 
 
     def _strip_pdb(self, pdb_file_id, chains):
         raise Exception('assert that chains exist in PDBChain table. reads PDB content from the database. call PDB class functions to strip to chains.')
 
 
+    def _add_residue_map_json_to_prediction(self, tsession, prediction_id, residue_mapping_json, map_type):
+        assert(isinstance(residue_mapping_json, str))
+        assert(isinstance(json.loads(residue_mapping_json), dict))
+        if map_type == 'Rosetta residue->PDB residue map':
+            filename = 'rosetta2pdb.resmap.json'
+        elif map_type == 'PDB residue->Rosetta residue map':
+            filename = 'pdb2rosetta.resmap.json'
+        else:
+            raise colortext.Exception('Unexpected map type "{0}".'.format(map_type))
+        return self._add_prediction_file(tsession, prediction_id, residue_mapping_json, filename, 'RosettaPDBMapping', map_type, 'Input', rm_trailing_line_whitespace = True, forced_mime_type = "application/json")
+
+
     def _add_stripped_pdb_to_prediction(self, prediction_id):
         # todo: this is not being called (and should be) - see _add_job in ppi_api.py
+        raise Exception('reimplement')
         pdb_file_id, chains = self.get_pdb_chains_for_prediction(prediction_id)
         pdb_content = self._strip_pdb(pdb_file_id, chains)
         filename = '%s_%s' % (pdb_file_id, ''.join(sorted(chains)))
-        self._add_prediction_file(prediction_id, pdb_content, filename, 'PDB', 'StrippedPDB', 'Input', rm_trailing_line_whitespace = True, forced_mime_type = 'chemical/x-pdb')
+        return self._add_prediction_file(tsession, prediction_id, pdb_content, filename, 'PDB', 'StrippedPDB', 'Input', rm_trailing_line_whitespace = True, forced_mime_type = 'chemical/x-pdb')
 
 
-    def _add_resfile_to_prediction(self, prediction_id):
-        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
-        resfile_content = self.create_resfile(prediction_id)
-        self._add_prediction_file(prediction_id, resfile_content, 'mutations.resfile', 'Resfile', 'Resfile', 'Input', rm_trailing_line_whitespace = True)
+    def _add_resfile_to_prediction(self, tsession, prediction_id, mutations, resfile_name):
+        rf = Resfile.from_mutageneses(mutations)
+        return self._add_prediction_file(tsession, prediction_id, str(rf), resfile_name, 'Resfile', 'Resfile', 'Input', rm_trailing_line_whitespace = True, forced_mime_type = 'text/plain')
 
 
-    def _add_mutfile_to_prediction(self, prediction_id):
-        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
-        mutfile_content = self.create_mutfile(prediction_id)
-        self._add_prediction_file(prediction_id, mutfile_content, 'mutations.mutfile', 'Mutfile', 'Mutfile', 'Input', rm_trailing_line_whitespace = True)
+    def _add_mutfile_to_prediction(self, tsession, prediction_id, rosetta_mutations, mutfile_name):
+        mf = Mutfile.from_mutagenesis(rosetta_mutations)
+        return self._add_prediction_file(tsession, prediction_id, str(mf), mutfile_name, 'Mutfile', 'Mutfile', 'Input', rm_trailing_line_whitespace = True, forced_mime_type = 'text/plain')
+
+
+    def _add_ligand_params_files_to_prediction(self, tsession, prediction_id, pdb_file_id):
+        for params_file_record in tsession.query(dbmodel.PDBLigandFile).filter(dbmodel.PDBLigandFile.PDBFileID == pdb_file_id):
+            ligand_code = params_file_record.PDBLigandCode
+            self._add_prediction_file(tsession, prediction_id, None, '{0}.params'.format(ligand_code), 'Params', '{0} params file'.format(ligand_code), 'Input', rm_trailing_line_whitespace = False, forced_mime_type = 'text/plain', file_content_id = params_file_record.ParamsFileContentID)
+        return None
 
 
     def _create_resfile_from_pdb_mutations(self, stripped_pdb, pdb_mutations):
