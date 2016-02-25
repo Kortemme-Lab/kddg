@@ -1512,7 +1512,10 @@ class BindingAffinityDDGInterface(ddG):
                             'score_method' : {
                                 'short_name' : score_method_details['MethodName'],
                                 'long_name' : '%s - %s' % (score_method_details['MethodType'], score_method_details['Authors']),
-                            }
+                            },
+                            'prediction_set_id' : {
+                                'short_name' : prediction_set_id,
+                            },
                         },
                         prediction_set_series_name = prediction_set_series_names.get(prediction_set_id),
                         prediction_set_description = prediction_set_descriptions.get(prediction_set_id),
@@ -1558,6 +1561,7 @@ class BindingAffinityDDGInterface(ddG):
         else:
             if output_directory or not output_directory_root:
                 raise Exception("Multiple benchmark run objects will be analyzed and output created; this requires setting output_directory_root instead of output_directory")
+
             BindingAffinityBenchmarkRun.analyze_multiple(
                 benchmark_runs,
                 analysis_sets = analysis_sets_to_run,
