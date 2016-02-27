@@ -102,8 +102,8 @@ class BindingAffinityDDGInterface(ddG):
     '''This is the internal API class that should be NOT used to interface with the database.'''
 
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
-        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
+        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port, file_content_buffer_size = file_content_buffer_size)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
 
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
@@ -1523,6 +1523,7 @@ class BindingAffinityDDGInterface(ddG):
             debug = False,
             restrict_to = set(),
             remove_cases = set(),
+            call_analysis = True,
             ):
         '''Runs the analyses for the specified PredictionSets and cross-analyzes the sets against each other if appropriate.
 
@@ -1600,6 +1601,7 @@ class BindingAffinityDDGInterface(ddG):
                         prediction_set_description = prediction_set_descriptions.get(prediction_set_id),
                         prediction_set_color = prediction_set_colors.get(prediction_set_id),
                         prediction_set_alpha = prediction_set_alphas.get(prediction_set_id),
+                        prediction_set_credit = prediction_set_credits[prediction_set_id],
                         use_existing_benchmark_data = use_existing_benchmark_data,
                         include_derived_mutations = include_derived_mutations,
                         use_single_reported_value = use_single_reported_value,
@@ -1629,41 +1631,26 @@ class BindingAffinityDDGInterface(ddG):
             #todo: hack. this currently seems to expect all datapoints to be present. handle the case when we are missing data e.g. prediction set "ZEMu run 1"
             analysis_sets_to_run = ['ZEMu'] # ['BeAtMuSiC', 'SKEMPI', 'ZEMu']
 
-        if len(benchmark_runs) == 1 and len(analysis_sets_to_run) == 1:
-            if output_directory_root:
-                # Create output directory inside output_directory_root
-                output_directory = os.path.join(output_directory_root, '%s-%s-%s_n-%d_topx-%d_score_method_%d-analysis_%s' % (time.strftime("%y%m%d"), getpass.getuser(), prediction_set_id, expectn, take_lowest, score_method_id, analysis_set_id))
+        if call_analysis:
+            if len(benchmark_runs) == 1 and len(analysis_sets_to_run) == 1:
+                if output_directory_root:
+                    # Create output directory inside output_directory_root
+                    output_directory = os.path.join(output_directory_root, '%s-%s-%s_n-%d_topx-%d_score_method_%d-analysis_%s' % (time.strftime("%y%m%d"), getpass.getuser(), prediction_set_id, expectn, take_lowest, score_method_id, analysis_set_id))
 
-            colortext.message(analysis_set_id)
+                colortext.message(analysis_set_id)
 
-            benchmark_run.full_analysis(analysis_set_id, output_directory)
+                benchmark_run.full_analysis(analysis_set_id, output_directory)
+            else:
+                if output_directory or not output_directory_root:
+                    raise Exception("Multiple benchmark run objects will be analyzed and output created; this requires setting output_directory_root instead of output_directory")
+
+                BindingAffinityBenchmarkRun.analyze_multiple(
+                    benchmark_runs,
+                    analysis_sets = analysis_sets_to_run,
+                    analysis_directory = output_directory_root,
+                )
         else:
-            if output_directory or not output_directory_root:
-                raise Exception("Multiple benchmark run objects will be analyzed and output created; this requires setting output_directory_root instead of output_directory")
-
-            BindingAffinityBenchmarkRun.analyze_multiple(
-                benchmark_runs,
-                analysis_sets = analysis_sets_to_run,
-                analysis_directory = output_directory_root,
-            )
-
-        return
-                # recreate_graphs
-                # analysis_directory = output_directory
-
-                # colors, alpha, and default series name and descriptions are taken from PredictionSet records
-                # The order (if p1 before p2 then p1 will be on the X-axis in comparative plots) in comparative analysis plots is determined by the order in PredictionSets
-                # assert PredictionSet for PredictionSet in PredictionSets is in the database
-
-                # calls get_analysis_dataframe(options) over all PredictionSets
-                # if output_directory is set, save files
-                # think about how to handle this in-memory. Maybe return a dict like:
-                    #"run_analyis" -> benchmark_name -> {analysis_type -> object}
-                    #"comparative_analysis" -> (benchmark_name_1, benchmark_name_2) -> {analysis_type -> object}
-                # comparative analysis
-                #   only compare dataframes with the exact same points
-                #   allow cutoffs, take_lowest to differ but report if they do so
-
+            return (benchmark_runs, analysis_sets_to_run)
 
 
     ################################################################################################
@@ -1687,6 +1674,7 @@ class BindingAffinityDDGInterface(ddG):
     def _get_sqa_user_dataset_experiment_table(self): return dbmodel.UserPPDataSetExperiment
     def _get_sqa_user_dataset_experiment_tag_table(self): return dbmodel.UserPPDataSetExperimentTag
     def _get_sqa_user_dataset_experiment_tag_table_udsid(self): return dbmodel.UserPPDataSetExperimentTag.UserPPDataSetExperimentID
+    def _get_sqa_predictions_user_dataset_experiment_id(self, p): return p.UserPPDataSetExperimentID
     def _get_sqa_prediction_type(self): return dbmodel.PredictionSet.BindingAffinity
 
     prediction_table = 'PredictionPPI'

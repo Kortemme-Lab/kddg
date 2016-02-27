@@ -52,7 +52,7 @@ def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf
         passwd = passwd, username = username, hostname = hostname,
         rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path,
         port = port,
-        file_content_buffer_size = file_content_buffer_size
+        file_content_buffer_size = file_content_buffer_size,
     )
 
 class DDGMonomerInterface(BindingAffinityDDGInterface):
