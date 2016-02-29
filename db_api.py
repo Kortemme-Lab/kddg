@@ -108,7 +108,7 @@ class ddG(object):
 
     GET_JOB_FN_CALL_COUNTER_MAX = 10
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
         if passwd:
             passwd = passwd.strip()
         self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
@@ -1105,7 +1105,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @informational_job
-    def get_prediction_set_case_details(self, prediction_set_id, retrieve_references = True, include_experimental_data = True):
+    def get_prediction_set_case_details(self, prediction_set_id, retrieve_references = True, include_experimental_data = True, prediction_table_rows_cache = None):
         '''Returns a dict containing the case information for prediction cases in the prediction set with a structure
            expected by the analysis class.'''
 
@@ -1118,7 +1118,10 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
         prediction_cases = {}
         for prediction_id in prediction_ids:
-            prediction_cases[prediction_id] = self.get_predictions_experimental_details(prediction_id, userdatset_experiment_ids_to_subset_ddgs, include_experimental_data = include_experimental_data)
+            UserDataSetExperimentID = self._get_sqa_predictions_user_dataset_experiment_id(prediction_table_rows_cache[prediction_id])
+            experimental_details = self.get_predictions_experimental_details(prediction_id, userdatset_experiment_ids_to_subset_ddgs, include_experimental_data = include_experimental_data)
+            experimental_details['PredictionID'] = prediction_id
+            prediction_cases[UserDataSetExperimentID] = experimental_details
 
         references = {}
         if retrieve_references:
@@ -1767,6 +1770,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def get_analysis_dataframe(self, prediction_set_id,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
+            additional_join_parameters = {},
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
@@ -1807,7 +1811,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         prediction_data = {}
         # Add memory and runtime
         if prediction_table_rows_cache != None:
-            prediction = prediction_table_rows_cache.get(prediction_id)
+            prediction = prediction_table_rows_cache[prediction_id]
+            prediction_data['UserDataSetExperimentID'] = self._get_sqa_predictions_user_dataset_experiment_id(prediction)
             prediction_data['RunTime'] = float(prediction.DDGTime)
             prediction_data['MaxMemory'] = float(prediction.maxvmem)
         else:
@@ -1825,6 +1830,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             prediction_set_id = None,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
+            additional_join_parameters = {},
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
@@ -1864,13 +1870,19 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 mem_zip.seek(0)
                 hdf_store_blob = gzip.GzipFile(fileobj = mem_zip, mode='rb').read()
 
+        if not(use_existing_benchmark_data and hdf_store_blob):
+            # Create this cache if we're going to end up using it in if statements below
+            prediction_table_rows_cache = self._get_prediction_set_prediction_table_rows(prediction_set_id)
+        else:
+            prediction_table_rows_cache = None
+
         # This dict is similar to dataset_cases in the benchmark capture (dataset.json)
         prediction_set_case_details = None
         prediction_ids = []
         if not(use_existing_benchmark_data and hdf_store_blob):
             print('Retrieving the associated experimental data for the user dataset.')
-            prediction_set_case_details = self.get_prediction_set_case_details(prediction_set_id, retrieve_references = True, include_experimental_data = experimental_data_exists)
-            prediction_ids = prediction_set_case_details['Data'].keys()
+            prediction_set_case_details = self.get_prediction_set_case_details(prediction_set_id, retrieve_references = True, include_experimental_data = experimental_data_exists, prediction_table_rows_cache = prediction_table_rows_cache)
+            UserDataSetExperimentIDs = prediction_set_case_details['Data'].keys()
             prediction_set_case_details = prediction_set_case_details['Data']
 
         analysis_data = {}
@@ -1882,11 +1894,14 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 print('Computing the TopX values for each prediction case; skipping missing data without attempting to extract.')
             num_predictions_in_prediction_set = len(prediction_ids)
             failed_cases = set()
-            prediction_table_rows_cache = self._get_prediction_set_prediction_table_rows(prediction_set_id)
             ## get_job_description(self, prediction_id)
-            for prediction_id in prediction_ids:
+            for UserDataSetExperimentID in UserDataSetExperimentIDs:
                 try:
-                    analysis_data[prediction_id] = self.get_prediction_data(prediction_id, score_method_id, ddg_analysis_type, top_x = take_lowest, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory, dataframe_type = dataframe_type, prediction_table_rows_cache = prediction_table_rows_cache)
+                    prediction_id = prediction_set_case_details[UserDataSetExperimentID]['PredictionID']
+                    prediction_id_data = self.get_prediction_data(prediction_id, score_method_id, ddg_analysis_type, top_x = take_lowest, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory, dataframe_type = dataframe_type, prediction_table_rows_cache = prediction_table_rows_cache)
+                    analysis_data[UserDataSetExperimentID] = prediction_id_data
+                    del analysis_data[UserDataSetExperimentID]['UserDataSetExperimentID']
+                    analysis_data[UserDataSetExperimentID]['PredictionID'] = prediction_id
                 except FatalException, e:
                     raise
                 except PartialDataException, e:
@@ -1928,6 +1943,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 prediction_set_case_details,
                 analysis_data,
                 contains_experimental_data = experimental_data_exists,
+                additional_join_parameters = additional_join_parameters,
                 store_data_on_disk = False,
                 benchmark_run_directory = None,
                 use_single_reported_value = use_single_reported_value,

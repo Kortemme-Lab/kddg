@@ -102,8 +102,8 @@ class BindingAffinityDDGInterface(ddG):
     '''This is the internal API class that should be NOT used to interface with the database.'''
 
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
-        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
+        super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port, file_content_buffer_size = file_content_buffer_size)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
 
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
@@ -1468,6 +1468,7 @@ class BindingAffinityDDGInterface(ddG):
     def get_analysis_dataframe(self, prediction_set_id,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
+            additional_join_parameters = {},
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
@@ -1523,6 +1524,7 @@ class BindingAffinityDDGInterface(ddG):
             debug = False,
             restrict_to = set(),
             remove_cases = set(),
+            call_analysis = True,
             ):
         '''Runs the analyses for the specified PredictionSets and cross-analyzes the sets against each other if appropriate.
 
@@ -1572,22 +1574,35 @@ class BindingAffinityDDGInterface(ddG):
         if output_directory != None:
             assert( output_directory_root == None )
 
+        benchmark_runs = []
+
         for prediction_set_id in prediction_set_ids:
             if len(prediction_set_ids) > 1:
-                print 'Processing prediction set: %s' % prediction_set_id
+                print 'Generating benchmark run for prediction set: %s' % prediction_set_id
             for score_method_id in score_method_ids:
                 if len(score_method_ids) > 1:
-                    print 'Processing score method ID: %d' % score_method_id
+                    print 'Generating benchmark run for score method ID: %d' % score_method_id
+                score_method_details = self.get_score_method_details( score_method_id = score_method_id )
                 for take_lowest in take_lowests:
                     if len(take_lowests) > 1:
-                        print 'Processing take_lowest (TopX): %d' % take_lowest
+                        print 'Generating benchmark run for take_lowest (TopX): %d' % take_lowest
 
                     benchmark_run = self.get_analysis_dataframe(prediction_set_id,
                         experimental_data_exists = experimental_data_exists,
+                        additional_join_parameters = {
+                            'score_method' : {
+                                'short_name' : score_method_details['MethodName'],
+                                'long_name' : '%s - %s' % (score_method_details['MethodType'], score_method_details['Authors']),
+                            },
+                            'prediction_set_id' : {
+                                'short_name' : prediction_set_id,
+                            },
+                        },
                         prediction_set_series_name = prediction_set_series_names.get(prediction_set_id),
                         prediction_set_description = prediction_set_descriptions.get(prediction_set_id),
                         prediction_set_color = prediction_set_colors.get(prediction_set_id),
                         prediction_set_alpha = prediction_set_alphas.get(prediction_set_id),
+                        prediction_set_credit = prediction_set_credits[prediction_set_id],
                         use_existing_benchmark_data = use_existing_benchmark_data,
                         include_derived_mutations = include_derived_mutations,
                         use_single_reported_value = use_single_reported_value,
@@ -1610,46 +1625,33 @@ class BindingAffinityDDGInterface(ddG):
                     analysis_sets_to_run = benchmark_run.scalar_adjustments.keys()
                     if analysis_set_ids:
                         analysis_sets_to_run = set(analysis_sets_to_run).intersection(set(analysis_set_ids))
-                    analysis_sets_to_run = sorted(analysis_sets_to_run)
-                    if experimental_data_exists:
-                        #todo: hack. this currently seems to expect all datapoints to be present. handle the case when we are missing data e.g. prediction set "ZEMu run 1"
-                        analysis_sets_to_run = ['ZEMu'] # ['BeAtMuSiC', 'SKEMPI', 'ZEMu']
+                    benchmark_runs.append(benchmark_run)
 
-                    for analysis_set_id in analysis_sets_to_run:
-                        if output_directory_root:
-                            # Create output directory inside output_directory_root
-                            output_directory = os.path.join(output_directory_root, '%s-%s-%s_n-%d_topx-%d_score_method_%d-analysis_%s' % (time.strftime("%y%m%d"), getpass.getuser(), prediction_set_id, expectn, take_lowest, score_method_id, analysis_set_id))
+        analysis_sets_to_run = sorted(analysis_sets_to_run)
+        if experimental_data_exists:
+            #todo: hack. this currently seems to expect all datapoints to be present. handle the case when we are missing data e.g. prediction set "ZEMu run 1"
+            analysis_sets_to_run = ['ZEMu'] # ['BeAtMuSiC', 'SKEMPI', 'ZEMu']
 
-                        colortext.message(analysis_set_id)
+        if call_analysis:
+            if len(benchmark_runs) == 1 and len(analysis_sets_to_run) == 1:
+                if output_directory_root:
+                    # Create output directory inside output_directory_root
+                    output_directory = os.path.join(output_directory_root, '%s-%s-%s_n-%d_topx-%d_score_method_%d-analysis_%s' % (time.strftime("%y%m%d"), getpass.getuser(), prediction_set_id, expectn, take_lowest, score_method_id, analysis_set_id))
 
-                        benchmark_run.calculate_metrics(analysis_set = analysis_set_id, analysis_directory = output_directory)
-                        benchmark_run.write_dataframe_to_csv(os.path.join(output_directory, 'data.csv'))
-                        benchmark_run.plot(analysis_set = analysis_set_id, analysis_directory = output_directory, matplotlib_plots = generate_matplotlib_plots)
+                colortext.message(analysis_set_id)
 
-                        self.output_score_method_information(
-                            score_method_id, output_directory,
-                            analysis_set_id = analysis_set_id,
-                            take_lowest = take_lowest,
-                            expectn = expectn,
-                        )
+                benchmark_run.full_analysis(analysis_set_id, output_directory)
+            else:
+                if output_directory or not output_directory_root:
+                    raise Exception("Multiple benchmark run objects will be analyzed and output created; this requires setting output_directory_root instead of output_directory")
 
-                        return benchmark_run
-                # recreate_graphs
-                # analysis_directory = output_directory
-
-                # colors, alpha, and default series name and descriptions are taken from PredictionSet records
-                # The order (if p1 before p2 then p1 will be on the X-axis in comparative plots) in comparative analysis plots is determined by the order in PredictionSets
-                # assert PredictionSet for PredictionSet in PredictionSets is in the database
-
-                # calls get_analysis_dataframe(options) over all PredictionSets
-                # if output_directory is set, save files
-                # think about how to handle this in-memory. Maybe return a dict like:
-                    #"run_analyis" -> benchmark_name -> {analysis_type -> object}
-                    #"comparative_analysis" -> (benchmark_name_1, benchmark_name_2) -> {analysis_type -> object}
-                # comparative analysis
-                #   only compare dataframes with the exact same points
-                #   allow cutoffs, take_lowest to differ but report if they do so
-
+                BindingAffinityBenchmarkRun.analyze_multiple(
+                    benchmark_runs,
+                    analysis_sets = analysis_sets_to_run,
+                    analysis_directory = output_directory_root,
+                )
+        else:
+            return (benchmark_runs, analysis_sets_to_run)
 
 
     ################################################################################################
@@ -1673,6 +1675,7 @@ class BindingAffinityDDGInterface(ddG):
     def _get_sqa_user_dataset_experiment_table(self): return dbmodel.UserPPDataSetExperiment
     def _get_sqa_user_dataset_experiment_tag_table(self): return dbmodel.UserPPDataSetExperimentTag
     def _get_sqa_user_dataset_experiment_tag_table_udsid(self): return dbmodel.UserPPDataSetExperimentTag.UserPPDataSetExperimentID
+    def _get_sqa_predictions_user_dataset_experiment_id(self, p): return p.UserPPDataSetExperimentID
     def _get_sqa_prediction_type(self): return dbmodel.PredictionSet.BindingAffinity
 
     prediction_table = 'PredictionPPI'
