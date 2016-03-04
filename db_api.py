@@ -1036,7 +1036,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 udse.ID == self._get_sqa_user_dataset_experiment_tag_table_udsid(),
                 udse.UserDataSetID == dbmodel.UserDataSet.ID,
                 dbmodel.UserDataSet.TextID == user_dataset_name,
-                udse.Tag == tagged_subset))
+                udse_tag.Tag == tagged_subset))
         else:
             return tsession.query(udse).filter(and_(
                 udse.UserDataSetID == dbmodel.UserDataSet.ID,
