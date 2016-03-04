@@ -18,7 +18,9 @@ import sys
 import copy
 import json
 import zipfile
+import re
 import traceback
+import StringIO
 import gzip
 import shutil
 import sqlite3
@@ -35,7 +37,7 @@ from klab.bio.pdb import PDB
 from klab.bio.basics import ChainMutation
 from klab.fs.fsio import read_file, write_temp_file
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
-from klab.bio.alignment import ScaffoldModelChainMapper
+from klab.bio.alignment import ScaffoldModelChainMapper, DecoyChainMapper
 from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction, get_single_record_from_query
 
 import db_schema as dbmodel
@@ -1307,6 +1309,7 @@ class BindingAffinityDDGInterface(ddG):
     @analysis_api
     def determine_best_pair(self, prediction_id, score_method_id, expectn = None, returnn = 1):
         '''This returns the best wildtype/mutant pair for a prediction given a scoring method. NOTE: Consider generalising this to the n best pairs.'''
+        # todo: rewrite to use determine_best_pairs
         scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
         mutant_complexes = []
         wildtype_complexes = []
@@ -1320,6 +1323,55 @@ class BindingAffinityDDGInterface(ddG):
         if wildtype_complexes and mutant_complexes:
             return wildtype_complexes[0][1], mutant_complexes[0][1]
         return None, None
+
+
+    @analysis_api
+    def determine_best_pairs(self, prediction_id, score_method_id = None, expectn = None, top_x = 3):
+        '''This returns the top_x lowest-scoring wildtype/mutants for a prediction given a scoring method.
+           The results are returned as a dict:
+               "wildtype" -> list(tuple(score, structure_id))
+               "mutant" -> list(tuple(score, structure_id))
+           If no scoring method is supplied then the first (i.e. random) top_x structures are returned (with scores set
+           to zero) as we have no method of scoring or discerning them.
+        .'''
+
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn)
+        if score_method_id != None:
+            assert(isinstance(top_x, int) and top_x > 0)
+            scores = scores.get(score_method_id)
+            mutant_complexes = []
+            wildtype_complexes = []
+            for structure_id, scores in scores.iteritems():
+                if scores.get('MutantComplex'):
+                    mutant_complexes.append((scores['MutantComplex']['total'], structure_id))
+                if scores.get('WildTypeComplex'):
+                    wildtype_complexes.append((scores['WildTypeComplex']['total'], structure_id))
+            wildtype_complexes = sorted(wildtype_complexes)[:top_x]
+            mutant_complexes = sorted(mutant_complexes)[:top_x]
+        else:
+            wt_structure_ids = set()
+            mut_structure_ids = set()
+            for score_method_id, scores in scores.iteritems():
+                for structure_id, scores in scores.iteritems():
+                    if scores.get('WildTypeComplex'):
+                        wt_structure_ids.add(structure_id)
+                    if scores.get('MutantComplex'):
+                        mut_structure_ids.add(structure_id)
+            wildtype_complexes = [(0, i) for i in sorted(wt_structure_ids)]
+            mutant_complexes = [(0, i) for i in sorted(mut_structure_ids)]
+            if top_x != None:
+                # If no score method is specified then we cannot choose the top X so we arbitrarily choose X structures
+                assert(isinstance(top_x, int) and top_x > 0)
+                wildtype_complexes = wildtype_complexes[:top_x]
+                mutant_complexes = mutant_complexes[:top_x]
+
+        # Truncate so that we have an equal number of both types
+        max_len = min(len(wildtype_complexes), len(mutant_complexes))
+        wildtype_complexes, mutant_complexes = wildtype_complexes[:max_len], mutant_complexes[:max_len]
+
+        if wildtype_complexes and mutant_complexes:
+            return {'wildtype' : wildtype_complexes, 'mutant' : mutant_complexes}
+        return {}
 
 
     def get_pubs_job_archive(self, *args, **kw):
@@ -1381,6 +1433,83 @@ class BindingAffinityDDGInterface(ddG):
         except Exception, e:
             zipped_content.close()
             raise Exception(str(e))
+
+
+    @app_pymol
+    def create_full_pymol_session_in_memory(self, prediction_id, score_method_id = None, top_x = 3, mutation_string = None, settings = {}, pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol', wt_chain_seed = None, mutant_chain_seed = None):
+
+        wt_chain_seed = wt_chain_seed or 'blue'
+        mutant_chain_seed = mutant_chain_seed or 'yellow'
+
+        best_pairs = self.determine_best_pairs(prediction_id, score_method_id = score_method_id, expectn = None, top_x = top_x)
+
+        # Retrieve and unzip results
+        archive = self.get_job_data(prediction_id)
+        zipped_content = zipfile.ZipFile(BytesIO(archive), 'r', zipfile.ZIP_DEFLATED)
+
+        try:
+            file_paths = {'wildtype' : {}, 'mutant' : {}}
+
+            # Get the name of the files from the zip
+            zip_filenames = set([os.path.split(filepath)[1] for filepath in zipped_content.namelist()])
+
+            # Retrieve the input structure
+            input_pdb_contents = None
+            try:
+                file_content_id = self.get_session().query(dbmodel.PredictionPPIFile).filter(and_(dbmodel.PredictionPPIFile.PredictionPPIID == prediction_id, dbmodel.PredictionPPIFile.FileRole == 'StrippedPDB')).one().FileContentID
+                input_pdb_contents = self.importer.get_file_content_from_cache(file_content_id)
+            except Exception, e:
+                # Report the error but continue
+                colortext.error(str(e))
+                colortext.error(traceback.format_exc())
+
+            # Find all wildtype structures
+            for p in best_pairs['wildtype']:
+                structure_id = p[1]
+                expected_filename = 'repacked_wt_round_{0}.pdb.gz'.format(structure_id)
+                if expected_filename in zip_filenames:
+                    file_paths['wildtype'][structure_id] = expected_filename
+
+            # Find all mutant structures
+            mutant_ids = [p[1] for p in best_pairs['mutant']]
+            for filename in zip_filenames:
+                if filename.startswith('mut_'):
+                    mtch = re.match('^mut_(.*?)_round_(\d+).pdb.*$', filename)
+                    if mtch:
+                        structure_id = int(mtch.group(2))
+                        if structure_id in mutant_ids:
+                            if not mutation_string:
+                                mutation_string = mtch.group(1)
+                            file_paths['mutant'][structure_id] = filename
+
+            PyMOL_session = None
+            file_list = zipped_content.namelist()
+
+            # If both files exist in the zip, extract their contents in memory and create a PyMOL session pair (PSE, script)
+            chain_mapper = DecoyChainMapper()
+
+            for stypep in [('wildtype', 'wt', wt_chain_seed, 'white'), ('mutant', mutation_string or 'mutant', mutant_chain_seed, 'red')]:
+                stype = stypep[0]
+                prefix = stypep[1].replace(' ', '_')
+                for structure_id, filename in file_paths[stype].iteritems():
+                    if filename in file_list:
+                        if filename.endswith('.gz'):
+                            wildtype_pdb_stream = StringIO.StringIO(zipped_content.open(filename, 'r').read())
+                            wildtype_pdb = gzip.GzipFile(fileobj=wildtype_pdb_stream).read()
+                        else:
+                            wildtype_pdb = zipped_content.open(filename, 'r').read()
+                        pdb_object = PDB(wildtype_pdb)
+                        chain_mapper.add(pdb_object, '{0}_n{1}'.format(prefix, structure_id), chain_seed_color = stypep[2], backbone_color = stypep[2], sidechain_color = stypep[3])
+            if input_pdb_contents:
+                chain_mapper.add(PDB(input_pdb_contents), 'input', backbone_color = 'grey50', sidechain_color = 'grey50')
+            zipped_content.close()
+
+            PyMOL_session = chain_mapper.generate_pymol_session(settings = settings, pymol_executable = pymol_executable)
+            return PyMOL_session
+
+        except Exception, e:
+            zipped_content.close()
+            raise Exception('{0}\n{1}'.format(str(e), traceback.format_exc()))
 
 
     def _get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = False, root_directory = None, dataframe_type = "Binding affinity", prediction_data = {}):
