@@ -85,7 +85,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         first_task_count = 0
         dir_count = 1
         rescore_args_keys = sorted( self.rescore_args.keys() )
-
+        
         while first_task_count + 1 < len(rescore_args_keys):
             settings = parse_settings.get_dict()
             job_name = '%s-%d' % (passed_job_name, dir_count) or '%s-%s_rescore_ddg_monomer-%d' % (time.strftime("%y%m%d"), getpass.getuser(), dir_count)
@@ -178,7 +178,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
 
         if ddg_output_path not in self.rescore_args:
             self.rescore_args[ddg_output_path] = []
-
+            
         for round_num in structs_with_both_rounds:
             wt_pdb, mutant_pdb = structs_with_both_rounds[round_num]
             self.rescore_args[ddg_output_path].append([
@@ -329,7 +329,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
 
         ### Find all prediction_ids that need to have updated states
         self.update_prediction_id_status(prediction_set_id, root_directory)
-
+        
         ### Find all prediction_ids with partial score data and remove this data
 
         ### Find all prediction_ids with missing scores and setup rescoring or rescore on the fly
@@ -461,7 +461,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                         os.path.abspath(wt_pdb),
                         self.rosetta_scripts_path,
                         chains_to_move,
-                        **kwargs
+                        **kwargs 
                     ) )
 
                 kwargs = {
@@ -482,7 +482,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                         os.path.abspath(mutant_pdb),
                         self.rosetta_scripts_path,
                         chains_to_move,
-                        **kwargs
+                        **kwargs 
                     ) )
 
             if use_multiprocessing:
@@ -519,37 +519,8 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 shutil.rmtree( os.path.dirname(mut_output_db3) )
         return scores
 
-    # Helper functins for ddg_monomer and rosetta_scripts APIs
-    ### TMP - added back in from git history but not being used
-    def get_structs_with_some_scores(self, expect_n = 6, verbose = True, prediction_id_field = None, prediction_structure_scores_table = None):
-        prediction_id_field = prediction_id_field or self.prediction_table + 'ID'
-        prediction_structure_scores_table = prediction_structure_scores_table or self.prediction_table + 'StructureScore'
-
-        prediction_ids_and_structs_score_count = {}
-        if verbose:
-            print 'Running database query to find out which predictions need to be loaded'
-        print prediction_id_field
-        sys.exit(0)
-        for row in self.DDG_db.execute_select("SELECT %s, ScoreType, StructureID FROM %s WHERE ScoreType IN ('WildTypeLPartner', 'WildTypeRPartner', 'WildTypeComplex', 'MutantLPartner', 'MutantRPartner', 'MutantComplex')" % (prediction_id_field, prediction_structure_scores_table)):
-            prediction_id = long(row[prediction_id_field])
-            score_type = row['ScoreType']
-            structure_id = int(row['StructureID'])
-            if (prediction_id, structure_id) not in prediction_ids_and_structs_score_count:
-                prediction_ids_and_structs_score_count[(prediction_id, structure_id)] = 0
-            prediction_ids_and_structs_score_count[(prediction_id, structure_id)] += 1
-        structs_with_some_scores = set()
-        for prediction_id, structure_id in prediction_ids_and_structs_score_count:
-            if prediction_ids_and_structs_score_count[(prediction_id, structure_id)] > 0:
-                structs_with_some_scores.add( (prediction_id, structure_id) )
-                if verbose and expect_n and prediction_ids_and_structs_score_count[(prediction_id, structure_id)] != expect_n:
-                    print 'Missing data:', prediction_id, structure_id, prediction_ids_and_structs_score_count[(prediction_id, structure_id)]
-        # print structs_with_some_scores
-        sys.exit(1)
-        return structs_with_some_scores
-
     def add_scores_from_cluster_rescore(self, output_dirs, prediction_structure_scores_table, prediction_id_field, score_method_id):
-        structs_with_some_scores = set() # TMP self.get_structs_with_some_scores()
-        print output_dirs
+        structs_with_some_scores = self.get_structs_with_some_scores()
 
         if isinstance(output_dirs, basestring):
             output_dirs = [output_dirs]
@@ -564,7 +535,6 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
             with open(job_dict_path, 'r') as f:
                 job_dict = pickle.load(f)
 
-            print job_dict
             for task_name in job_dict:
                 prediction_id, round_num, struct_type = split_task_name_path(task_name)
                 if struct_type == 'wt':
@@ -576,8 +546,6 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 mut_task_dir = os.path.join(output_dir, mut_task_name)
                 wt_db3_file = os.path.join(wt_task_dir, 'output.db3.gz')
                 mut_db3_file = os.path.join(mut_task_dir, 'output.db3.gz')
-                print wt_db3_file, mut_db3_file
-                sys.exit(0)
                 if os.path.isfile(wt_db3_file) and os.path.isfile(mut_db3_file):
                     available_db3_files[(prediction_id, round_num)] = (mut_db3_file, wt_db3_file)
                     available_db3_files_set.add( (prediction_id, round_num) )
@@ -620,7 +588,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 self.master_scores_list = []
             #### self.store_scores(None, prediction_id, scores_list, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field) # Save each score one at a time
             r.increment_report()
-
+            
         for prediction_id, round_num in db3_files_to_process:
             empty_score_dict = self.get_score_dict(prediction_id=prediction_id, score_method_id=score_method_id, structure_id=round_num, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
             mut_output_db3, wt_output_db3 = available_db3_files[(prediction_id, round_num)]
