@@ -1767,6 +1767,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @analysis_api
+    def get_existing_analysis(self, prediction_set_id):
+        '''Returns the summary statistics for all existing dataframes in the database.
+           Unlike get_analysis_dataframe, this function does not create any dataframes.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
+
+
+    @analysis_api
     def get_analysis_dataframe(self, prediction_set_id,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,

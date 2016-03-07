@@ -39,6 +39,7 @@ from klab.fs.fsio import read_file, write_temp_file
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 from klab.bio.alignment import ScaffoldModelChainMapper, DecoyChainMapper
 from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction, get_single_record_from_query
+from klab.stats.misc import get_xy_dataset_statistics_pandas
 
 import db_schema as dbmodel
 from api_layers import *
@@ -1625,6 +1626,84 @@ class BindingAffinityDDGInterface(ddG):
         parameters = copy.copy(locals())
         del parameters['self']
         return super(BindingAffinityDDGInterface, self)._get_analysis_dataframe(BindingAffinityBenchmarkRun, **parameters)
+
+
+    @analysis_api
+    def get_existing_analysis(self, prediction_set_id = None, analysis_dataframe_id = None, return_dataframe = True):
+        '''Returns a list of the summary statistics for any existing dataframes in the database.
+           Each item in the list is a dict corresponding to a dataframe. These dicts are structured as e.g.
+
+            {
+                'AnalysisDataFrameID': 185L,
+                'analysis_sets': ['SKEMPI', 'BeAtMuSiC', 'ZEMu'],
+                'analysis_type': 'DDG_Top3',
+                'analysis_type_description': '...',
+                'dataframe': <pandas dataframe>,
+                'scalar_adjustments': {
+                    'BeAtMuSiC': 2.383437079488905,
+                    'SKEMPI': 2.206268329703589,
+                    'ZEMu': 2.2046199780552374
+                },
+                'stats': {
+                    'BeAtMuSiC': {
+                        'MAE': nan,
+                        'fraction_correct': 0.7308900523560209,
+                        'fraction_correct_fuzzy_linear': 0.74128683025321573,
+                        'gamma_CC': 0.4047074501135616,
+                        'ks_2samp': (0.24269480519480513, 2.9466866316296972e-32),
+                        'kstestx': (nan, nan),
+                        'kstesty': (nan, nan),
+                        'normaltestx': (nan, nan),
+                        'normaltesty': (nan, nan),
+                        'pearsonr': (nan, 1.0),
+                        'spearmanr': (0.41841534629950339, 2.1365219255798831e-53)
+                    },
+                    'SKEMPI': {...},
+                    'ZEMu': {...},
+                }
+            }
+        '''
+        if analysis_dataframe_id == None:
+            # Get a valid PredictionSet record if one exists
+            assert(prediction_set_id != None)
+            try:
+                prediction_set = self.get_session().query(dbmodel.PredictionSet).filter(and_(dbmodel.PredictionSet.ID == prediction_set_id, dbmodel.PredictionSet.BindingAffinity == 1)).one()
+            except:
+                return None
+            dataframes = self.get_session().query(dbmodel.AnalysisDataFrame).filter(and_(dbmodel.AnalysisDataFrame.PredictionSet == prediction_set_id, dbmodel.AnalysisDataFrame.DataFrameType == 'Binding affinity')).order_by(dbmodel.AnalysisDataFrame.ScoreMethodID, dbmodel.AnalysisDataFrame.TopX, dbmodel.AnalysisDataFrame.StabilityClassicationExperimentalCutoff, dbmodel.AnalysisDataFrame.StabilityClassicationPredictedCutoff)
+        else:
+            try:
+                dataframe = self.get_session().query(dbmodel.AnalysisDataFrame).filter(dbmodel.AnalysisDataFrame.ID == analysis_dataframe_id).one()
+                assert(dataframe.DataFrameType == 'Binding affinity')
+                dataframes = [dataframe]
+            except Exception, e:
+                colortext.error(str(e))
+                colortext.error(traceback.format_exc())
+                return None
+
+        analysis_results = []
+        dataframes = [dfr for dfr in dataframes]
+        for dfr in dataframes:
+            # The dict to return
+            dfi = dfr.get_dataframe_info()
+            dfi['stats'] = {}
+
+            # Compute the stats per analysis set
+            df = dfi['dataframe']
+            for analysis_set in dfi['analysis_sets']:
+                dfi['stats'][analysis_set] = get_xy_dataset_statistics_pandas(
+                    df,
+                    BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Experimental', analysis_set),
+                    BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Predicted_adj', analysis_set),
+                    fcorrect_x_cutoff = float(dfr.StabilityClassicationExperimentalCutoff),
+                    fcorrect_y_cutoff = float(dfr.StabilityClassicationPredictedCutoff),
+                    ignore_null_values = True)
+            if not return_dataframe:
+                # May be useful if we are keeping a lot of these in memory and the dataframe is not useful
+                dfi['dataframe'] = None
+            analysis_results.append(dfi)
+
+        return analysis_results
 
 
     @analysis_api
