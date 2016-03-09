@@ -386,6 +386,7 @@ class Publication(DeclarativeBase):
     authors = relationship('PublicationAuthor', viewonly=True, primaryjoin="PublicationAuthor.PublicationID==Publication.ID", order_by="PublicationAuthor.AuthorOrder")
 
     def get_authors(self):
+        '''Warning: This function should be called via a UTF-friendly session/cursor as the strings are stored as unicode in the database.'''
         athrs = []
         if self.authors:
             for a in self.authors:
