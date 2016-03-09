@@ -389,9 +389,9 @@ class Publication(DeclarativeBase):
         athrs = []
         if self.authors:
             for a in self.authors:
-                initials = ''.join([n[0] for n in ('{0} {1}'.format(a.FirstName or '', a.MiddleNames or '')).strip().split()])
+                initials = u''.join([n[0] for n in (u'{0} {1}'.format(a.FirstName or u'', a.MiddleNames or u'')).strip().split()])
                 if initials:
-                    athrs.append('{0} {1}'.format(a.Surname, initials))
+                    athrs.append(u'{0} {1}'.format(a.Surname, initials))
                 else:
                     athrs.append(a.Surname)
         return ', '.join(athrs)
