@@ -108,6 +108,7 @@ class BindingAffinityDDGInterface(ddG):
     def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
         super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port, file_content_buffer_size = file_content_buffer_size)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
+        self.unfinished_prediction_ids_cache = {}
 
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
         '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
@@ -132,7 +133,12 @@ class BindingAffinityDDGInterface(ddG):
     def get_unfinished_prediction_ids(self, prediction_set_id):
         '''Returns a set of all prediction_ids that have Status != "done"
         '''
-        return [r.ID for r in self.get_session().query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status != 'done'))]
+        if prediction_set_id in self.unfinished_prediction_ids_cache:
+            return self.unfinished_prediction_ids_cache[prediction_set_id]
+        else:
+            unfinished_ids = [r.ID for r in self.get_session().query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status != 'done'))]
+            self.unfinished_prediction_ids_cache[prediction_set_id] = unfinished_ids
+            return unfinished_ids
 
 
     def get_prediction_ids_without_scores(self, prediction_set_id, score_method_id = None):
