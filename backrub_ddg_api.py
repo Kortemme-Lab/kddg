@@ -13,6 +13,7 @@ import cPickle as pickle
 import copy
 import zipfile
 import datetime
+import numpy as np
 
 from sqlalchemy import and_, update
 from sqlalchemy.orm import load_only, Load
@@ -36,6 +37,7 @@ DeclarativeBase = dbmodel.DeclarativeBase
 
 # Constants for cluster runs
 output_db3 = 'output.db3'
+date_format_string = '%Y-%m-%d %H:%M:%S'
 setup_run_with_multiprocessing = True
 
 def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
@@ -64,6 +66,7 @@ class BackrubDDGInterface(DDGMonomerInterface):
             file_content_buffer_size = file_content_buffer_size
         )
         self.structs_with_all_scores = set()
+        self.prediction_id_status_cache = {}
 
     def add_scores_from_cluster_rescore(self, output_dirs, prediction_structure_scores_table, prediction_id_field, score_method_id):
 
@@ -113,7 +116,8 @@ class BackrubDDGInterface(DDGMonomerInterface):
                 if os.path.isdir( minimize_dir ):
                     log_files = [f for f in os.listdir(minimize_dir) if '.o' in f and f.endswith('.%d' % task_id)]
                     if len( log_files ) == 0:
-                        print 'Missing log file in:', minimize_dir
+                        pass
+                        # print 'Missing log file in:', minimize_dir
                     elif len( log_files ) == 1:
                         log_file = log_files[0]
                         prediction_set_id = log_file[:log_file.find('_run.py')] # Remove past _run.py
@@ -133,6 +137,8 @@ class BackrubDDGInterface(DDGMonomerInterface):
             self.update_prediction_id_status(prediction_set_id, output_log_file, prediction_id, round_num)
             r.increment_report()
         r.done()
+
+        self.finalize_update_prediction_id_status()
 
         r = Reporter('parsing output db3 files and saving scores in database', entries='scores')
         r.set_total_count( len(db3_files_to_process) )
@@ -179,10 +185,8 @@ class BackrubDDGInterface(DDGMonomerInterface):
             return
 
         # Constants
-        date_format_string = '%Y-%m-%d %H:%M:%S'
         starting_time_string = 'Starting time:'
         ending_time_string = 'Ending time:'
-        tsession = self.importer.session
 
         # Parse output file
         starting_time = None
@@ -216,6 +220,9 @@ class BackrubDDGInterface(DDGMonomerInterface):
             starting_time_dt = datetime.datetime.strptime(starting_time, date_format_string)
             ending_time_dt = datetime.datetime.strptime(ending_time, date_format_string)
             elapsed_time = total_seconds(ending_time_dt - starting_time_dt) / 60.0 # 60 seconds in a minute
+        else:
+            starting_time_dt = None
+            ending_time_dt = None
 
         if len(return_codes) > 0:
             status = 'done'
@@ -223,15 +230,64 @@ class BackrubDDGInterface(DDGMonomerInterface):
                 if return_code != 0:
                     status = 'failed'
 
-        prediction_record = tsession.query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
-        prediction_record.StartDate = starting_time
-        prediction_record.EndDate = ending_time
-        prediction_record.Status = status
-        prediction_record.maxvmem = max_virtual_memory_usage
-        prediction_record.DDGTime = elapsed_time
-        prediction_record.ERRORS = str(return_code)
-        tsession.flush()
-        tsession.commit()
+        if starting_time_dt != None:
+            if prediction_id not in self.prediction_id_status_cache:
+                self.prediction_id_status_cache[prediction_id] = {
+                    'starting_time_dt' : [],
+                    'ending_time_dt' : [],
+                    'status' : [],
+                    'max_virtual_memory_usage' : [],
+                    'elapsed_time' : [],
+                    'return_code' : [],
+                }
+
+            self.prediction_id_status_cache[prediction_id]['starting_time_dt'].append(
+                starting_time_dt
+            )
+            self.prediction_id_status_cache[prediction_id]['ending_time_dt'].append(
+                ending_time_dt
+            )
+            self.prediction_id_status_cache[prediction_id]['status'].append(
+                status
+            )
+            self.prediction_id_status_cache[prediction_id]['max_virtual_memory_usage'].append(
+                max_virtual_memory_usage
+            )
+            self.prediction_id_status_cache[prediction_id]['elapsed_time'].append(
+                elapsed_time
+            )
+            self.prediction_id_status_cache[prediction_id]['return_code'].append(
+                return_code
+            )
+
+
+    def finalize_update_prediction_id_status(self):
+        if len(self.prediction_id_status_cache) == 0:
+            return
+
+        r = Reporter('updating prediction id statii in database', entries='prediction IDs')
+        r.set_total_count( len(self.prediction_id_status_cache) )
+
+        tsession = self.importer.session
+        for prediction_id in self.prediction_id_status_cache:
+            prediction_record = tsession.query(self.PredictionTable).filter(self.PredictionTable.ID == prediction_id).one()
+            cache = self.prediction_id_status_cache[prediction_id]
+            prediction_record.StartDate = datetime.datetime.strftime(min(cache['starting_time_dt']), date_format_string)
+            prediction_record.EndDate = datetime.datetime.strftime(max(cache['ending_time_dt']), date_format_string)
+            if 'failed' in cache['status']:
+                prediction_record.Status = 'failed'
+            else:
+                prediction_record.Status = 'done'
+            prediction_record.maxvmem = max( cache['max_virtual_memory_usage'])
+            prediction_record.DDGTime = np.mean( cache['elapsed_time'] )
+            prediction_record.ERRORS = str( max(cache['return_code']) )
+            tsession.flush()
+            tsession.commit()
+            r.increment_report()
+            print prediction_id
+        r.done()
+        sys.exit(0)
+
 
     def struct_has_all_scores(self, prediction_id, round_num, expect_n = 6, verbose = True, prediction_id_field = None, prediction_structure_scores_table = None):
         if (prediction_id, round_num) in self.structs_with_all_scores:
@@ -257,6 +313,7 @@ class BackrubDDGInterface(DDGMonomerInterface):
         return (prediction_id, round_num) in self.structs_with_all_scores
 
     def zip_prediction_id(self, prediction_id, root_dir, delete_if_exists = False, remove_output_dir = True):
+        return ### TMP - this should be a better check for completeness
         zip_path = '/kortemmelab/shared/DDG/ppijobs/%d.zip' % prediction_id
         ddg_dir = os.path.join(root_dir, str(prediction_id))
         all_files = find_all_files(ddg_dir)
