@@ -1556,9 +1556,29 @@ class BindingAffinityDDGInterface(ddG):
         return self.get_top_x_ddg_total_score(scores, top_x)
 
 
+    def scores_contains_ddg_score(self, scores):
+        for struct_num, score_dict in scores.iteritems():
+            if 'DDG' not in score_dict:
+                return False
+        return True
+
+
     def get_top_x_ddg_total_score(self, scores, top_x):
         if scores == None:
             return None
+
+        if self.scores_contains_ddg_score(scores):
+            try:
+                total_scores = [(scores[struct_num]['DDG']['total'], struct_num) for struct_num in scores]
+                total_scores.sort()
+                top_x_struct_nums = [t[1] for t in total_scores[:top_x]]
+                top_x_score = numpy.average([
+                    scores[struct_num]['DDG']['total']
+                    for struct_num in top_x_struct_nums
+                ])
+                return top_x_score
+            except:
+                raise PartialDataException('The case is missing some data.')
 
         try:
             wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
@@ -1579,12 +1599,19 @@ class BindingAffinityDDGInterface(ddG):
             raise PartialDataException('The case is missing some data.')
 
 
+    def scores_contains_complex_scores(self, scores):
+        for struct_num, score_dict in scores.iteritems():
+            if 'WildTypeComplex' not in score_dict or 'MutantComplex' not in score_dict:
+                return False
+        return True
+
+
     @analysis_api
     def get_top_x_ddg_stability(self, prediction_id, score_method_id, top_x = 3, expectn = None):
         '''Returns the TopX value for the prediction only considering the complex scores. This computation may work as a
            measure of a stability DDG value.'''
         scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
-        if scores == None:
+        if scores == None or not self.scores_contains_complex_scores(scores):
             return None
 
         wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]

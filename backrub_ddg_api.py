@@ -166,12 +166,8 @@ class BackrubDDGInterface(DDGMonomerInterface):
         r.done()
 
         r = Reporter('zipping prediction id output directories', entries='directories')
-        print len_output_dirs
-        print sorted(len_output_dirs.keys())
-        sys.exit(0)
         r.set_total_count( len(len_output_dirs[sorted( len_output_dirs.keys() )[-1]]) )
         for output_dir, prediction_id in len_output_dirs[sorted( len_output_dirs.keys() )[-1]]:
-            print output_dir, prediction_id
             if self.zip_prediction_id(prediction_id, output_dir):
                 r.increment_report()
             else:
@@ -286,7 +282,6 @@ class BackrubDDGInterface(DDGMonomerInterface):
             r.increment_report()
             print prediction_id
         r.done()
-        sys.exit(0)
 
 
     def struct_has_all_scores(self, prediction_id, round_num, expect_n = 6, verbose = True, prediction_id_field = None, prediction_structure_scores_table = None):
@@ -313,7 +308,6 @@ class BackrubDDGInterface(DDGMonomerInterface):
         return (prediction_id, round_num) in self.structs_with_all_scores
 
     def zip_prediction_id(self, prediction_id, root_dir, delete_if_exists = False, remove_output_dir = True):
-        return ### TMP - this should be a better check for completeness
         zip_path = '/kortemmelab/shared/DDG/ppijobs/%d.zip' % prediction_id
         ddg_dir = os.path.join(root_dir, str(prediction_id))
         all_files = find_all_files(ddg_dir)

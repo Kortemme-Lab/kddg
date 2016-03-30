@@ -1820,8 +1820,14 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         if prediction_table_rows_cache != None:
             prediction = prediction_table_rows_cache[prediction_id]
             prediction_data['UserDataSetExperimentID'] = self._get_sqa_predictions_user_dataset_experiment_id(prediction)
-            prediction_data['RunTime'] = float(prediction.DDGTime)
-            prediction_data['MaxMemory'] = float(prediction.maxvmem)
+            if prediction.DDGTime == None:
+                prediction_data['RunTime'] = 0.0
+            else:
+                prediction_data['RunTime'] = float(prediction.DDGTime)
+            if prediction.maxvmem == None:
+                prediction_data['MaxMemory'] = 0.0
+            else:
+                prediction_data['MaxMemory'] = float(prediction.maxvmem)
         else:
             raise Exception("Not implemented. Write a function to get the data only for this prediction_id here")
 
