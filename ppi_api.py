@@ -1578,6 +1578,8 @@ class BindingAffinityDDGInterface(ddG):
                 ])
                 return top_x_score
             except:
+                print scores[struct_num]
+                sys.exit(0)
                 raise PartialDataException('The case is missing some data.')
 
         try:
