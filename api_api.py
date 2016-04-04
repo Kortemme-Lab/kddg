@@ -4,6 +4,9 @@ from db_api import ddG
 import db_schema as dbmodel
 import numpy as np
 import sys
+import os
+from klab.Reporter import Reporter
+import zipfile
 
 DeclarativeBase = dbmodel.DeclarativeBase
 
@@ -95,7 +98,7 @@ class APIInterface(BindingAffinityDDGInterface):
         tsession.commit()
 
     @job_completion
-    def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None):
+    def extract_data(self, prediction_set_id, root_directory = None, force = False, score_method_id = None, expectn = None):
         prediction_ids = self.get_prediction_ids(prediction_set_id)
         prediction_ids_with_data = set( self.run_data.keys() )
         missing_prediction_ids = set( prediction_ids )
@@ -106,6 +109,36 @@ class APIInterface(BindingAffinityDDGInterface):
         for prediction_id in self.run_data:
             self.update_prediction_id_status(prediction_id)
             self.extract_data_for_case(prediction_id, root_directory = root_directory, force = force, score_method_id = score_method_id)
+
+        if expectn and root_directory:
+            output_directories = sorted( [
+                (prediction_id, os.path.join(root_directory, str(prediction_id)) )
+                for prediction_id in self.run_data
+                if os.path.isdir( os.path.join(root_directory, str(prediction_id) ) )
+            ] )
+            if len(output_directories) > 0:
+                r = Reporter( 'zipping/removing output directories', entries = 'directories' )
+                r.set_total_count( len(output_directories) )
+                for prediction_id, output_dir in output_directories:
+                    self.zip_output_files( prediction_id, output_dir, expectn )
+                    r.increment_report()
+                r.done()
+            else:
+                print 'No output directories found to zip/remove'
+
+    def zip_output_files( self, prediction_id, output_dir, expectn):
+        zip_path = '/kortemmelab/shared/DDG/ppijobs/%d.zip' % prediction_id
+        if os.path.isfile(zip_path):
+            return
+        assert( os.path.isdir( output_dir ) )
+        if len( self.run_data[prediction_id]['structIDs'] ) == expectn and self.run_data[prediction_id]['Task return code'] == 0:
+            output_files = [os.path.join(output_dir, f) for f in os.listdir(output_dir)]
+            if len(output_files) > 0:
+                with zipfile.ZipFile(zip_path, 'w') as job_zip:
+                    for f in output_files:
+                        if f.endswith('.pdb') or f == 'rosetta.out' or f == 'score.sc' or '.py.o' in f or '.py.e' in f:
+                            f_path = os.path.join('%d' % prediction_id, os.path.basename(f))
+                            job_zip.write(f, arcname = f_path)
 
     @job_completion
     def parse_prediction_scores(self, prediction_id, score_method_id = None, root_directory = None, prediction_structure_scores_table = None, prediction_id_field = None, verbose = False):
