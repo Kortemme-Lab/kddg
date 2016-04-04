@@ -833,9 +833,6 @@ class BindingAffinityDDGInterface(ddG):
             # Create a cache to speed up job insertion
             pdb_residues_to_rosetta_cache = {}
 
-            #todo import cProfile, pstats, StringIO
-            #todo pr = cProfile.Profile()
-            #todo pr.enable()
             t1 = time.time()
 
             # Run one query over the PredictionSet
@@ -871,12 +868,6 @@ class BindingAffinityDDGInterface(ddG):
 
             t2 = time.time()
             print('Time taken for dry run: {0}s.'.format(t2 - t1))
-            #todo pr.disable()
-            #todo s = StringIO.StringIO()
-            #todo sortby = 'cumulative'
-            #todo ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-            #todo ps.print_stats()
-            #todo print s.getvalue()
 
             if test_only:
                 tsession.rollback()
@@ -891,8 +882,6 @@ class BindingAffinityDDGInterface(ddG):
             showprogress = not(quiet) and num_user_dataset_experiments > 300
             if showprogress: print("|" + ("*" * (int(num_user_dataset_experiments/records_per_dot)-2)) + "|")
 
-            #todo pr = cProfile.Profile()
-            #todo pr.enable()
             t1 = time.time()
             time_to_ignore = 0
 
@@ -928,12 +917,6 @@ class BindingAffinityDDGInterface(ddG):
                 if short_run and count >= short_run_limit: break
             t2 = time.time()
             print('Time taken for actual run: {0}s.'.format(t2 - t1 - time_to_ignore))
-            #todo pr.disable()
-            #todo s = StringIO.StringIO()
-            #todo sortby = 'cumulative'
-            #todo ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-            #todo ps.print_stats()
-            #todo print s.getvalue()
 
             if failed_jobs:
                 colortext.error('Some jobs failed to run:\n%s' % pprint.pformat(failed_jobs))
