@@ -634,7 +634,9 @@ class UserDataSet(DeclarativeBase):
     TextID = Column(String(32), nullable=False)
     UserID = Column(String(64), nullable=True)
     Description = Column(String(512), nullable=True)
-    DatasetType = Column(Enum('Protein stability','Binding affinity'), nullable=True)
+    DatasetType = Column(Enum('Protein stability','Binding affinity'), nullable=False)
+    AnalyzeDDG = Column(TINYINT(1), nullable=False, default=1) # should be set to True if analysis includes DDG values
+    AnalyzeDE = Column(TINYINT(1), nullable=False, default=0) # should be set to True if analysis includes DE (Delta energy e.g. SSM) values
     FirstCreated = Column(DateTime, nullable=True)
     LastModified = Column(DateTime, nullable=True)
 
@@ -912,9 +914,9 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['UserPPDataSetExperimentTag'])
+    generate_sqlalchemy_definition(['PPIDDG', 'UserPPAnalysisSet'])
 
-    #generate_sqlalchemy_definition(['AminoAcid'])
+    #generate_sqlalchemy_definition([''])
     sys.exit(0)
     from ppi_api import get_interface as get_ppi_interface
     ppi_api = get_ppi_interface(read_file(os.path.join('..', 'pw')).strip())
