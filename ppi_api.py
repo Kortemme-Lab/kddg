@@ -18,7 +18,9 @@ import sys
 import copy
 import json
 import zipfile
+import re
 import traceback
+import StringIO
 import gzip
 import shutil
 import sqlite3
@@ -35,8 +37,9 @@ from klab.bio.pdb import PDB
 from klab.bio.basics import ChainMutation
 from klab.fs.fsio import read_file, write_temp_file
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
-from klab.bio.alignment import ScaffoldModelChainMapper
+from klab.bio.alignment import ScaffoldModelChainMapper, DecoyChainMapper
 from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction, get_single_record_from_query
+from klab.stats.misc import get_xy_dataset_statistics_pandas
 
 import db_schema as dbmodel
 from api_layers import *
@@ -105,6 +108,7 @@ class BindingAffinityDDGInterface(ddG):
     def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
         super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port, file_content_buffer_size = file_content_buffer_size)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
+        self.unfinished_prediction_ids_cache = {}
 
     def get_prediction_ids_with_scores(self, prediction_set_id, score_method_id = None):
         '''Returns a set of all prediction_ids that already have an associated score in prediction_set_id
@@ -129,7 +133,12 @@ class BindingAffinityDDGInterface(ddG):
     def get_unfinished_prediction_ids(self, prediction_set_id):
         '''Returns a set of all prediction_ids that have Status != "done"
         '''
-        return [r.ID for r in self.get_session().query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status != 'done'))]
+        if prediction_set_id in self.unfinished_prediction_ids_cache:
+            return self.unfinished_prediction_ids_cache[prediction_set_id]
+        else:
+            unfinished_ids = [r.ID for r in self.get_session().query(self.PredictionTable).filter(and_(self.PredictionTable.PredictionSet == prediction_set_id, self.PredictionTable.Status != 'done'))]
+            self.unfinished_prediction_ids_cache[prediction_set_id] = unfinished_ids
+            return unfinished_ids
 
 
     def get_prediction_ids_without_scores(self, prediction_set_id, score_method_id = None):
@@ -1291,6 +1300,7 @@ class BindingAffinityDDGInterface(ddG):
     @analysis_api
     def determine_best_pair(self, prediction_id, score_method_id, expectn = None, returnn = 1):
         '''This returns the best wildtype/mutant pair for a prediction given a scoring method. NOTE: Consider generalising this to the n best pairs.'''
+        # todo: rewrite to use determine_best_pairs
         scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
         mutant_complexes = []
         wildtype_complexes = []
@@ -1304,6 +1314,55 @@ class BindingAffinityDDGInterface(ddG):
         if wildtype_complexes and mutant_complexes:
             return wildtype_complexes[0][1], mutant_complexes[0][1]
         return None, None
+
+
+    @analysis_api
+    def determine_best_pairs(self, prediction_id, score_method_id = None, expectn = None, top_x = 3):
+        '''This returns the top_x lowest-scoring wildtype/mutants for a prediction given a scoring method.
+           The results are returned as a dict:
+               "wildtype" -> list(tuple(score, structure_id))
+               "mutant" -> list(tuple(score, structure_id))
+           If no scoring method is supplied then the first (i.e. random) top_x structures are returned (with scores set
+           to zero) as we have no method of scoring or discerning them.
+        .'''
+
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn)
+        if score_method_id != None:
+            assert(isinstance(top_x, int) and top_x > 0)
+            scores = scores.get(score_method_id)
+            mutant_complexes = []
+            wildtype_complexes = []
+            for structure_id, scores in scores.iteritems():
+                if scores.get('MutantComplex'):
+                    mutant_complexes.append((scores['MutantComplex']['total'], structure_id))
+                if scores.get('WildTypeComplex'):
+                    wildtype_complexes.append((scores['WildTypeComplex']['total'], structure_id))
+            wildtype_complexes = sorted(wildtype_complexes)[:top_x]
+            mutant_complexes = sorted(mutant_complexes)[:top_x]
+        else:
+            wt_structure_ids = set()
+            mut_structure_ids = set()
+            for score_method_id, scores in scores.iteritems():
+                for structure_id, scores in scores.iteritems():
+                    if scores.get('WildTypeComplex'):
+                        wt_structure_ids.add(structure_id)
+                    if scores.get('MutantComplex'):
+                        mut_structure_ids.add(structure_id)
+            wildtype_complexes = [(0, i) for i in sorted(wt_structure_ids)]
+            mutant_complexes = [(0, i) for i in sorted(mut_structure_ids)]
+            if top_x != None:
+                # If no score method is specified then we cannot choose the top X so we arbitrarily choose X structures
+                assert(isinstance(top_x, int) and top_x > 0)
+                wildtype_complexes = wildtype_complexes[:top_x]
+                mutant_complexes = mutant_complexes[:top_x]
+
+        # Truncate so that we have an equal number of both types
+        max_len = min(len(wildtype_complexes), len(mutant_complexes))
+        wildtype_complexes, mutant_complexes = wildtype_complexes[:max_len], mutant_complexes[:max_len]
+
+        if wildtype_complexes and mutant_complexes:
+            return {'wildtype' : wildtype_complexes, 'mutant' : mutant_complexes}
+        return {}
 
 
     def get_pubs_job_archive(self, *args, **kw):
@@ -1367,6 +1426,83 @@ class BindingAffinityDDGInterface(ddG):
             raise Exception(str(e))
 
 
+    @app_pymol
+    def create_full_pymol_session_in_memory(self, prediction_id, score_method_id = None, top_x = 3, mutation_string = None, settings = {}, pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol', wt_chain_seed = None, mutant_chain_seed = None):
+
+        wt_chain_seed = wt_chain_seed or 'blue'
+        mutant_chain_seed = mutant_chain_seed or 'yellow'
+
+        best_pairs = self.determine_best_pairs(prediction_id, score_method_id = score_method_id, expectn = None, top_x = top_x)
+
+        # Retrieve and unzip results
+        archive = self.get_job_data(prediction_id)
+        zipped_content = zipfile.ZipFile(BytesIO(archive), 'r', zipfile.ZIP_DEFLATED)
+
+        try:
+            file_paths = {'wildtype' : {}, 'mutant' : {}}
+
+            # Get the name of the files from the zip
+            zip_filenames = set([os.path.split(filepath)[1] for filepath in zipped_content.namelist()])
+
+            # Retrieve the input structure
+            input_pdb_contents = None
+            try:
+                file_content_id = self.get_session().query(dbmodel.PredictionPPIFile).filter(and_(dbmodel.PredictionPPIFile.PredictionPPIID == prediction_id, dbmodel.PredictionPPIFile.FileRole == 'StrippedPDB')).one().FileContentID
+                input_pdb_contents = self.importer.get_file_content_from_cache(file_content_id)
+            except Exception, e:
+                # Report the error but continue
+                colortext.error(str(e))
+                colortext.error(traceback.format_exc())
+
+            # Find all wildtype structures
+            for p in best_pairs['wildtype']:
+                structure_id = p[1]
+                expected_filename = 'repacked_wt_round_{0}.pdb.gz'.format(structure_id)
+                if expected_filename in zip_filenames:
+                    file_paths['wildtype'][structure_id] = expected_filename
+
+            # Find all mutant structures
+            mutant_ids = [p[1] for p in best_pairs['mutant']]
+            for filename in zip_filenames:
+                if filename.startswith('mut_'):
+                    mtch = re.match('^mut_(.*?)_round_(\d+).pdb.*$', filename)
+                    if mtch:
+                        structure_id = int(mtch.group(2))
+                        if structure_id in mutant_ids:
+                            if not mutation_string:
+                                mutation_string = mtch.group(1)
+                            file_paths['mutant'][structure_id] = filename
+
+            PyMOL_session = None
+            file_list = zipped_content.namelist()
+
+            # If both files exist in the zip, extract their contents in memory and create a PyMOL session pair (PSE, script)
+            chain_mapper = DecoyChainMapper()
+
+            for stypep in [('wildtype', 'wt', wt_chain_seed, 'white'), ('mutant', mutation_string or 'mutant', mutant_chain_seed, 'red')]:
+                stype = stypep[0]
+                prefix = stypep[1].replace(' ', '_')
+                for structure_id, filename in file_paths[stype].iteritems():
+                    if filename in file_list:
+                        if filename.endswith('.gz'):
+                            wildtype_pdb_stream = StringIO.StringIO(zipped_content.open(filename, 'r').read())
+                            wildtype_pdb = gzip.GzipFile(fileobj=wildtype_pdb_stream).read()
+                        else:
+                            wildtype_pdb = zipped_content.open(filename, 'r').read()
+                        pdb_object = PDB(wildtype_pdb)
+                        chain_mapper.add(pdb_object, '{0}_n{1}'.format(prefix, structure_id), chain_seed_color = stypep[2], backbone_color = stypep[2], sidechain_color = stypep[3])
+            if input_pdb_contents:
+                chain_mapper.add(PDB(input_pdb_contents), 'input', backbone_color = 'grey50', sidechain_color = 'grey50')
+            zipped_content.close()
+
+            PyMOL_session = chain_mapper.generate_pymol_session(settings = settings, pymol_executable = pymol_executable)
+            return PyMOL_session
+
+        except Exception, e:
+            zipped_content.close()
+            raise Exception('{0}\n{1}'.format(str(e), traceback.format_exc()))
+
+
     def _get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = False, root_directory = None, dataframe_type = "Binding affinity", prediction_data = {}):
         try:
             top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
@@ -1404,9 +1540,31 @@ class BindingAffinityDDGInterface(ddG):
         return self.get_top_x_ddg_total_score(scores, top_x)
 
 
+    def scores_contains_ddg_score(self, scores):
+        for struct_num, score_dict in scores.iteritems():
+            if 'DDG' not in score_dict:
+                return False
+        return True
+
+
     def get_top_x_ddg_total_score(self, scores, top_x):
         if scores == None:
             return None
+
+        if self.scores_contains_ddg_score(scores):
+            try:
+                total_scores = [(scores[struct_num]['DDG']['total'], struct_num) for struct_num in scores]
+                total_scores.sort()
+                top_x_struct_nums = [t[1] for t in total_scores[:top_x]]
+                top_x_score = numpy.average([
+                    scores[struct_num]['DDG']['total']
+                    for struct_num in top_x_struct_nums
+                ])
+                return top_x_score
+            except:
+                print scores[struct_num]
+                sys.exit(0)
+                raise PartialDataException('The case is missing some data.')
 
         try:
             wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
@@ -1427,12 +1585,19 @@ class BindingAffinityDDGInterface(ddG):
             raise PartialDataException('The case is missing some data.')
 
 
+    def scores_contains_complex_scores(self, scores):
+        for struct_num, score_dict in scores.iteritems():
+            if 'WildTypeComplex' not in score_dict or 'MutantComplex' not in score_dict:
+                return False
+        return True
+
+
     @analysis_api
     def get_top_x_ddg_stability(self, prediction_id, score_method_id, top_x = 3, expectn = None):
         '''Returns the TopX value for the prediction only considering the complex scores. This computation may work as a
            measure of a stability DDG value.'''
         scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
-        if scores == None:
+        if scores == None or not self.scores_contains_complex_scores(scores):
             return None
 
         wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
@@ -1480,6 +1645,84 @@ class BindingAffinityDDGInterface(ddG):
         parameters = copy.copy(locals())
         del parameters['self']
         return super(BindingAffinityDDGInterface, self)._get_analysis_dataframe(BindingAffinityBenchmarkRun, **parameters)
+
+
+    @analysis_api
+    def get_existing_analysis(self, prediction_set_id = None, analysis_dataframe_id = None, return_dataframe = True):
+        '''Returns a list of the summary statistics for any existing dataframes in the database.
+           Each item in the list is a dict corresponding to a dataframe. These dicts are structured as e.g.
+
+            {
+                'AnalysisDataFrameID': 185L,
+                'analysis_sets': ['SKEMPI', 'BeAtMuSiC', 'ZEMu'],
+                'analysis_type': 'DDG_Top3',
+                'analysis_type_description': '...',
+                'dataframe': <pandas dataframe>,
+                'scalar_adjustments': {
+                    'BeAtMuSiC': 2.383437079488905,
+                    'SKEMPI': 2.206268329703589,
+                    'ZEMu': 2.2046199780552374
+                },
+                'stats': {
+                    'BeAtMuSiC': {
+                        'MAE': nan,
+                        'fraction_correct': 0.7308900523560209,
+                        'fraction_correct_fuzzy_linear': 0.74128683025321573,
+                        'gamma_CC': 0.4047074501135616,
+                        'ks_2samp': (0.24269480519480513, 2.9466866316296972e-32),
+                        'kstestx': (nan, nan),
+                        'kstesty': (nan, nan),
+                        'normaltestx': (nan, nan),
+                        'normaltesty': (nan, nan),
+                        'pearsonr': (nan, 1.0),
+                        'spearmanr': (0.41841534629950339, 2.1365219255798831e-53)
+                    },
+                    'SKEMPI': {...},
+                    'ZEMu': {...},
+                }
+            }
+        '''
+        if analysis_dataframe_id == None:
+            # Get a valid PredictionSet record if one exists
+            assert(prediction_set_id != None)
+            try:
+                prediction_set = self.get_session().query(dbmodel.PredictionSet).filter(and_(dbmodel.PredictionSet.ID == prediction_set_id, dbmodel.PredictionSet.BindingAffinity == 1)).one()
+            except:
+                return None
+            dataframes = self.get_session().query(dbmodel.AnalysisDataFrame).filter(and_(dbmodel.AnalysisDataFrame.PredictionSet == prediction_set_id, dbmodel.AnalysisDataFrame.DataFrameType == 'Binding affinity')).order_by(dbmodel.AnalysisDataFrame.ScoreMethodID, dbmodel.AnalysisDataFrame.TopX, dbmodel.AnalysisDataFrame.StabilityClassicationExperimentalCutoff, dbmodel.AnalysisDataFrame.StabilityClassicationPredictedCutoff)
+        else:
+            try:
+                dataframe = self.get_session().query(dbmodel.AnalysisDataFrame).filter(dbmodel.AnalysisDataFrame.ID == analysis_dataframe_id).one()
+                assert(dataframe.DataFrameType == 'Binding affinity')
+                dataframes = [dataframe]
+            except Exception, e:
+                colortext.error(str(e))
+                colortext.error(traceback.format_exc())
+                return None
+
+        analysis_results = []
+        dataframes = [dfr for dfr in dataframes]
+        for dfr in dataframes:
+            # The dict to return
+            dfi = dfr.get_dataframe_info()
+            dfi['stats'] = {}
+
+            # Compute the stats per analysis set
+            df = dfi['dataframe']
+            for analysis_set in dfi['analysis_sets']:
+                dfi['stats'][analysis_set] = get_xy_dataset_statistics_pandas(
+                    df,
+                    BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Experimental', analysis_set),
+                    BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Predicted_adj', analysis_set),
+                    fcorrect_x_cutoff = float(dfr.StabilityClassicationExperimentalCutoff),
+                    fcorrect_y_cutoff = float(dfr.StabilityClassicationPredictedCutoff),
+                    ignore_null_values = True)
+            if not return_dataframe:
+                # May be useful if we are keeping a lot of these in memory and the dataframe is not useful
+                dfi['dataframe'] = None
+            analysis_results.append(dfi)
+
+        return analysis_results
 
 
     @analysis_api

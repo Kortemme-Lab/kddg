@@ -12,6 +12,10 @@ import sys
 import os
 import inspect
 import pprint
+import StringIO
+import gzip
+import pandas
+import traceback
 
 from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy import inspect as sqlalchemy_inspect
@@ -27,6 +31,7 @@ from sqlalchemy.orm import deferred
 from klab.db.sqlalchemy_interface import MySQLSchemaConverter
 from klab.fs.fsio import read_file
 from klab import colortext
+from klab.fs.fsio import read_file, write_file, write_temp_file
 
 
 DeclarativeBase = declarative_base()
@@ -183,7 +188,7 @@ class PDBFile(DeclarativeBase):
     DerivedFrom = Column(String(4), nullable=True)
 
     # Relationships
-    residues = relationship('Publication', viewonly=True, primaryjoin="PDBFile.Publication==Publication.ID")
+    publication = relationship('Publication', viewonly=True, primaryjoin="PDBFile.Publication==Publication.ID")
 
     def __repr__(self):
         notes = ''
@@ -378,11 +383,25 @@ class Publication(DeclarativeBase):
     DOI = Column(String(64), nullable=True)
     URL = Column(String(128), nullable=True)
 
+    authors = relationship('PublicationAuthor', viewonly=True, primaryjoin="PublicationAuthor.PublicationID==Publication.ID", order_by="PublicationAuthor.AuthorOrder")
+
+    def get_authors(self):
+        '''Warning: This function should be called via a UTF-friendly session/cursor as the strings are stored as unicode in the database.'''
+        athrs = []
+        if self.authors:
+            for a in self.authors:
+                initials = u''.join([n[0] for n in (u'{0} {1}'.format(a.FirstName or u'', a.MiddleNames or u'')).strip().split()])
+                if initials:
+                    athrs.append(u'{0} {1}'.format(a.Surname, initials))
+                else:
+                    athrs.append(a.Surname)
+        return ', '.join(athrs)
+
 
 class PublicationAuthor(DeclarativeBase):
     __tablename__ = 'PublicationAuthor'
 
-    PublicationID = Column(String(64), nullable=False, primary_key=True)
+    PublicationID = Column(String(64), ForeignKey('Publication.ID'), nullable=False, primary_key=True)
     AuthorOrder = Column(Integer, nullable=False, primary_key=True)
     FirstName = Column(Unicode(64), nullable=False)
     MiddleNames = Column(Unicode(64), nullable=True)
@@ -615,10 +634,64 @@ class PPMutagenesisPDBMutation(DeclarativeBase):
 #                                                     #
 #######################################################
 
-'''PPIDDG
+'''
 PPIDataSetDDG
 PPIDataSetDDGSource
 PPIExperimentalMeasurements'''
+
+
+class PPIDDG(DeclarativeBase):
+    __tablename__ = 'PPIDDG'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    SecondaryID = Column(String(32), nullable=False)
+    PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesis.ID'), nullable=False)
+    Publication = Column(String(64), ForeignKey('Publication.ID'), nullable=True)
+    LocationOfValueInPublication = Column(String(96), nullable=True)
+    DuplicateOf = Column(Integer, nullable=True)
+    DDG = Column(DOUBLE, nullable=False)
+    Temperature = Column(DOUBLE, nullable=True)
+    pH = Column(DOUBLE, nullable=True)
+    PublishedDDG = Column(DOUBLE, nullable=True)
+    PublishedUnit = Column(Enum('kcal/mol','kJ/mol','cal/mol'), nullable=True)
+    PublishedError = Column(String(16), nullable=True)
+    DDGWasCheckedAgainstPublication = Column(TINYINT(1), nullable=False, default=0)
+    Kd_wt = Column(DOUBLE, nullable=True)
+    Kd_mut = Column(DOUBLE, nullable=True)
+    Kon_wt = Column(DOUBLE, nullable=True)
+    Kon_mut = Column(DOUBLE, nullable=True)
+    Koff_wt = Column(DOUBLE, nullable=True)
+    Koff_mut = Column(DOUBLE, nullable=True)
+    DH_wt = Column(DOUBLE, nullable=True)
+    DH_mut = Column(DOUBLE, nullable=True)
+    DS_wt = Column(DOUBLE, nullable=True)
+    DS_mut = Column(DOUBLE, nullable=True)
+    NumberOfMeasurements = Column(Integer, nullable=True)
+    Remarks = Column(Text, nullable=True)
+    IsABadEntry = Column(TINYINT(1), nullable=False, default=0)
+    AddedBy = Column(String(64), nullable=False)
+    AddedDate = Column(DateTime, nullable=False)
+    LastModifiedBy = Column(String(64), nullable=False)
+    LastModifiedDate = Column(DateTime, nullable=False)
+
+    publication = relationship('Publication', viewonly=True, primaryjoin="PPIDDG.Publication==Publication.ID")
+
+
+class UserPPAnalysisSet(DeclarativeBase):
+    __tablename__ = 'UserPPAnalysisSet'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    Subset = Column(String(128), nullable=True)
+    Section = Column(String(64), nullable=True)
+    RecordNumber = Column(Integer, nullable=False)
+    UserPPDataSetExperimentID = Column(Integer, ForeignKey('UserPPDataSetExperiment.ID'), nullable=False)
+    PositiveDependentPPIDDGID = Column(Integer, ForeignKey('PPIDDG.ID'), nullable=True)
+    NegativeDependentPPIDDGID = Column(Integer, ForeignKey('PPIDDG.ID'), nullable=True)
+    PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesis.ID'), nullable=False)
+
+    positive_ddg = relationship('PPIDDG', viewonly=True, primaryjoin="PPIDDG.ID==UserPPAnalysisSet.PositiveDependentPPIDDGID")
+    negative_ddg = relationship('PPIDDG', viewonly=True, primaryjoin="PPIDDG.ID==UserPPAnalysisSet.PositiveDependentPPIDDGID")
+
 
 #######################################################
 #                                                     #
@@ -709,6 +782,10 @@ class ScoreMethod(DeclarativeBase):
     Parameters = Column(Unicode(64, collation='utf8_unicode_ci'), nullable=True)
     Authors = Column(Unicode(255, collation='utf8_unicode_ci'), nullable=False)
     Notes = Column(Unicode(512, collation='utf8_unicode_ci'), nullable=True)
+
+    def __repr__(self):
+        sp = self.Parameters or ''
+        return 'Score method #{0}: {1}, {2}{3} ({4})'.format(self.ID, self.MethodName, self.MethodType, sp, self.Authors)
 
 
 #######################################################
@@ -865,6 +942,99 @@ class PredictionPPIStructureScore(DeclarativeBase):
     rama = Column(DOUBLE, nullable=True)
     ref = Column(DOUBLE, nullable=True)
     yhh_planarity = Column(DOUBLE, nullable=True)
+
+
+#######################################################
+#                                                     #
+#  Analysis tables                                    #
+#                                                     #
+#######################################################
+
+
+class AnalysisDataFrame(DeclarativeBase):
+    __tablename__ = 'AnalysisDataFrame'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    PredictionSet = Column(String(48), ForeignKey('PredictionSet.ID'), nullable=False)
+    DataFrameType = Column(Enum('Stability','Binding affinity'), nullable=False, default=u'Binding affinity')
+    ContainsExperimentalData = Column(TINYINT(1), nullable=False, default=1)
+    ScoreMethodID = Column(Integer, ForeignKey('ScoreMethod.ID'), nullable=False)
+    UseSingleReportedValue = Column(TINYINT(1), nullable=True, default=0)
+    TopX = Column(Integer, nullable=False, default=3)
+    BurialCutoff = Column(DOUBLE, nullable=False, default=0.25)
+    StabilityClassicationExperimentalCutoff = Column(DOUBLE, nullable=False, default=1)
+    StabilityClassicationPredictedCutoff = Column(DOUBLE, nullable=False, default=1)
+    IncludesDerivedMutations = Column(TINYINT(1), nullable=False, default=0)
+    DDGAnalysisType = Column(String(16), nullable=True, default=u'DDG_Top3')
+    SeriesName = Column(String(128), nullable=False)
+    SeriesColor = Column(String(6), nullable=False)
+    SeriesAlpha = Column(DOUBLE, nullable=False, default=1)
+    Description = Column(String(256), nullable=False)
+    Credit = Column(String(128), nullable=False)
+    DDGAnalysisTypeDescription = Column(String(256), nullable=False)
+    PandasHDFStore = deferred(Column(LONGBLOB, nullable=False))
+    CreationDate = Column(TIMESTAMP, nullable=False)
+
+    # Relationships
+    score_method = relationship('ScoreMethod', viewonly=True, primaryjoin="ScoreMethod.ID ==AnalysisDataFrame.ScoreMethodID")
+    prediction_set = relationship('PredictionSet', viewonly=True, primaryjoin="PredictionSet.ID ==AnalysisDataFrame.PredictionSet")
+
+
+    def __repr__(self):
+        s = []
+        s.append('Analysis dataframe: {0}, {1} ({2})'.format(self.PredictionSet, self.DataFrameType, self.CreationDate))
+        s.append(str(self.score_method))
+        s.append('TopX: {0}'.format(self.TopX))
+        s.append('Burial cutoff: {0}'.format(self.BurialCutoff))
+        s.append('Experimental cutoff: {0}'.format(self.StabilityClassicationExperimentalCutoff))
+        s.append('Prediction cutoff: {0}'.format(self.StabilityClassicationPredictedCutoff))
+        return '\n'.join(s)
+
+
+    def get_dataframe_info(self):
+        mem_zip = StringIO.StringIO()
+        mem_zip.write(self.PandasHDFStore)
+        mem_zip.seek(0)
+        hdf_store_blob = gzip.GzipFile(fileobj = mem_zip, mode='rb').read()
+
+        try:
+            # read_hdf does not currently (as of pandas.__version__ == 0.17.0) accept stream objects so we write to file
+            #mem_unzipped = StringIO.StringIO()
+            #mem_unzipped.write(hdf_store_blob)
+            #mem_unzipped.seek(0)
+            analysis_pandas_input_filepath = write_temp_file('/tmp', hdf_store_blob, ftype = 'wb')
+
+            df = pandas.read_hdf(analysis_pandas_input_filepath, 'dataframe')
+            store = pandas.HDFStore(analysis_pandas_input_filepath)
+
+            # Defensive programming in case the format changes
+            scalar_adjustments, ddg_analysis_type, ddg_analysis_type_description, analysis_sets = None, None, None, None
+            try: scalar_adjustments = store['scalar_adjustments'].to_dict()
+            except: pass
+            try: ddg_analysis_type = store['ddg_analysis_type'].to_dict()['ddg_analysis_type']
+            except: pass
+            try: ddg_analysis_type_description = store['ddg_analysis_type_description'].to_dict()['ddg_analysis_type_description']
+            except: pass
+            if scalar_adjustments:
+                analysis_sets = scalar_adjustments.keys()
+
+            d = dict(
+                AnalysisDataFrameID = self.ID,
+                dataframe = df,
+                scalar_adjustments = scalar_adjustments,
+                analysis_type = ddg_analysis_type,
+                analysis_type_description = ddg_analysis_type_description,
+                analysis_sets = analysis_sets,
+                score_method_id = self.score_method.ID,
+                prediction_set = self.prediction_set.ID,
+                top_x = self.TopX,
+            )
+            os.remove(analysis_pandas_input_filepath)
+            return d
+        except Exception, e:
+            if os.path.exists(analysis_pandas_input_filepath):
+                os.remove(analysis_pandas_input_filepath)
+            raise Exception('An exception occurred reading the dataframe: {0}\n.{1}'.format(str(e), traceback.format_exc()))
 
 
 ###########################

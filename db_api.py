@@ -1036,7 +1036,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 udse.ID == self._get_sqa_user_dataset_experiment_tag_table_udsid(),
                 udse.UserDataSetID == dbmodel.UserDataSet.ID,
                 dbmodel.UserDataSet.TextID == user_dataset_name,
-                udse.Tag == tagged_subset))
+                udse_tag.Tag == tagged_subset))
         else:
             return tsession.query(udse).filter(and_(
                 udse.UserDataSetID == dbmodel.UserDataSet.ID,
@@ -1767,6 +1767,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @analysis_api
+    def get_existing_analysis(self, prediction_set_id):
+        '''Returns the summary statistics for all existing dataframes in the database.
+           Unlike get_analysis_dataframe, this function does not create any dataframes.'''
+        raise Exception('This function needs to be implemented by subclasses of the API.')
+
+
+    @analysis_api
     def get_analysis_dataframe(self, prediction_set_id,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
@@ -1813,8 +1820,14 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         if prediction_table_rows_cache != None:
             prediction = prediction_table_rows_cache[prediction_id]
             prediction_data['UserDataSetExperimentID'] = self._get_sqa_predictions_user_dataset_experiment_id(prediction)
-            prediction_data['RunTime'] = float(prediction.DDGTime)
-            prediction_data['MaxMemory'] = float(prediction.maxvmem)
+            if prediction.DDGTime == None:
+                prediction_data['RunTime'] = 0.0
+            else:
+                prediction_data['RunTime'] = float(prediction.DDGTime)
+            if prediction.maxvmem == None:
+                prediction_data['MaxMemory'] = 0.0
+            else:
+                prediction_data['MaxMemory'] = float(prediction.maxvmem)
         else:
             raise Exception("Not implemented. Write a function to get the data only for this prediction_id here")
 

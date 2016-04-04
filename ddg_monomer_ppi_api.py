@@ -234,6 +234,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                     elapsed_time = None
                     status = 'active'
                     with open(output_files[0], 'r') as f:
+                        raise Exception("DO NOT PROCEED. Need to change this function to return time per structure, instead of total time. The database now saves times per nstruct (in the PredictionPPI table, at least)")
                         for line in f:
                             if line.startswith(starting_time_string):
                                 starting_time = line[len(starting_time_string):].strip()
