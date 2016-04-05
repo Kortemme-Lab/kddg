@@ -2025,6 +2025,37 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         # The analysis_data variable of DDGBenchmarkManager should be compiled via queries calls to the Prediction*StructureScore table.
 
 
+    def map_prediction_ids(self, first_prediction_set_id, second_prediction_set_id):
+        '''
+        Returns pairs of prediction IDs corresponding to ther same underlying UserDataSet.
+        Useful when input for a prediction run is based on the saved output files of another run.
+        '''
+        first_prediction_set_case_details = self.get_prediction_set_case_details(
+            first_prediction_set_id,
+            retrieve_references = False,
+            include_experimental_data = False,
+            prediction_table_rows_cache = self._get_prediction_set_prediction_table_rows(first_prediction_set_id),
+        )
+        second_prediction_set_case_details = self.get_prediction_set_case_details(
+            second_prediction_set_id,
+            retrieve_references = False,
+            include_experimental_data = False,
+            prediction_table_rows_cache = self._get_prediction_set_prediction_table_rows(second_prediction_set_id),
+        )
+
+        first_UserDataSetExperimentIDs = set( first_prediction_set_case_details['Data'].keys() )
+        second_UserDataSetExperimentIDs = set( second_prediction_set_case_details['Data'].keys() )
+        assert( first_UserDataSetExperimentIDs == second_UserDataSetExperimentIDs )
+
+        return_list = []
+        for UserDataSetExperimentID in first_UserDataSetExperimentIDs:
+            return_list.append( (
+                first_prediction_set_case_details['Data'][UserDataSetExperimentID]['PredictionID'],
+                second_prediction_set_case_details['Data'][UserDataSetExperimentID]['PredictionID'],
+            ) )
+        return sorted( return_list )
+
+
     @analysis_api
     def analyze(self, prediction_set_ids,
             prediction_set_series_names = {}, prediction_set_descriptions = {}, prediction_set_credits = {}, prediction_set_colors = {}, prediction_set_alphas = {},
