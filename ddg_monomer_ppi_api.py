@@ -85,7 +85,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         first_task_count = 0
         dir_count = 1
         rescore_args_keys = sorted( self.rescore_args.keys() )
-        
+
         while first_task_count + 1 < len(rescore_args_keys):
             settings = parse_settings.get_dict()
             job_name = '%s-%d' % (passed_job_name, dir_count) or '%s-%s_rescore_ddg_monomer-%d' % (time.strftime("%y%m%d"), getpass.getuser(), dir_count)
@@ -178,7 +178,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
 
         if ddg_output_path not in self.rescore_args:
             self.rescore_args[ddg_output_path] = []
-            
+
         for round_num in structs_with_both_rounds:
             wt_pdb, mutant_pdb = structs_with_both_rounds[round_num]
             self.rescore_args[ddg_output_path].append([
@@ -232,9 +232,10 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                     return_code = None
                     virtual_memory_usage = None
                     elapsed_time = None
+                    nstruct = None
                     status = 'active'
+                    ddg_iterations_str = '-ddg::iterations '
                     with open(output_files[0], 'r') as f:
-                        raise Exception("DO NOT PROCEED. Need to change this function to return time per structure, instead of total time. The database now saves times per nstruct (in the PredictionPPI table, at least)")
                         for line in f:
                             if line.startswith(starting_time_string):
                                 starting_time = line[len(starting_time_string):].strip()
@@ -247,10 +248,14 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                                 assert( line.endswith('G') )
                                 line = line[:-1]
                                 virtual_memory_usage = float(line.strip().split()[-1].strip())
+                            elif ddg_iterations_str in line:
+                                nstruct = int( line[line.find(ddg_iterations_str)+len(ddg_iterations_str):line.find("'", line.find(ddg_iterations_str)+len(ddg_iterations_str))] )
                     if starting_time and ending_time:
                         starting_time_dt = datetime.datetime.strptime(starting_time, date_format_string)
                         ending_time_dt = datetime.datetime.strptime(ending_time, date_format_string)
-                        elapsed_time = total_seconds(ending_time_dt - starting_time_dt) / 60.0 # 60 seconds in a minute
+                        if nstruct != None:
+                            elapsed_time = total_seconds(ending_time_dt - starting_time_dt) / (60.0 * float(nstruct)) # 60 seconds in a minute, and average time per structure
+
 
                     if return_code != None:
                         if return_code == 0:
@@ -330,7 +335,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
 
         ### Find all prediction_ids that need to have updated states
         self.update_prediction_id_status(prediction_set_id, root_directory)
-        
+
         ### Find all prediction_ids with partial score data and remove this data
 
         ### Find all prediction_ids with missing scores and setup rescoring or rescore on the fly
@@ -409,9 +414,8 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         score_method_details = self.get_score_method_details()[score_method_id]
         method_name = score_method_details['MethodName']
         author = score_method_details['Authors']
+        job_details = self.get_job_details(prediction_id)
         if not chains_to_move:
-            job_details = self.get_job_details(prediction_id)
-            job_details['Files'] = None
             substitution_parameters = json.loads(job_details['JSONParameters'])
             chains_to_move = substitution_parameters['%%chainstomove%%']
 
@@ -424,6 +428,17 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
         else:
             score_fxn = 'interface'
             extra_flags = []
+
+        file_tuples = [] # List of names, contents
+        for file_info in job_details['Files']['Input']:
+            filename = file_info['Filename']
+            if 'params' in filename:
+                params_path = os.path.join('/tmp', filename)
+                if not os.path.isfile(params_path):
+                    with open(params_path, 'w') as f:
+                        f.write( file_info['Content'] )
+                extra_flags.append('-extra_res_fa')
+                extra_flags.append(params_path)
 
         if len(structs_with_both_rounds) > 0:
             if use_multiprocessing and verbose:
@@ -462,7 +477,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                         os.path.abspath(wt_pdb),
                         self.rosetta_scripts_path,
                         chains_to_move,
-                        **kwargs 
+                        **kwargs
                     ) )
 
                 kwargs = {
@@ -483,7 +498,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                         os.path.abspath(mutant_pdb),
                         self.rosetta_scripts_path,
                         chains_to_move,
-                        **kwargs 
+                        **kwargs
                     ) )
 
             if use_multiprocessing:
@@ -589,7 +604,7 @@ class DDGMonomerInterface(BindingAffinityDDGInterface):
                 self.master_scores_list = []
             #### self.store_scores(None, prediction_id, scores_list, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field) # Save each score one at a time
             r.increment_report()
-            
+
         for prediction_id, round_num in db3_files_to_process:
             empty_score_dict = self.get_score_dict(prediction_id=prediction_id, score_method_id=score_method_id, structure_id=round_num, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
             mut_output_db3, wt_output_db3 = available_db3_files[(prediction_id, round_num)]
