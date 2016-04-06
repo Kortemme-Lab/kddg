@@ -692,6 +692,13 @@ class UserPPAnalysisSet(DeclarativeBase):
     positive_ddg = relationship('PPIDDG', viewonly=True, primaryjoin="PPIDDG.ID==UserPPAnalysisSet.PositiveDependentPPIDDGID")
     negative_ddg = relationship('PPIDDG', viewonly=True, primaryjoin="PPIDDG.ID==UserPPAnalysisSet.PositiveDependentPPIDDGID")
 
+#######################################################
+#                                                     #
+#  Datasets                                           #
+#                                                     #
+#######################################################
+
+
 
 #######################################################
 #                                                     #
@@ -1084,7 +1091,7 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['PPIDDG', 'UserPPAnalysisSet'])
+    generate_sqlalchemy_definition(['DataSet', 'DataSetReference'])
 
     #generate_sqlalchemy_definition([''])
     sys.exit(0)
