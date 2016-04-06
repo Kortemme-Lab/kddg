@@ -2097,15 +2097,16 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @ppi_data_entry
-    def find_complex(self, pdb_ids, keywords = [], tsession = None):
+    def find_complex(self, pdb_ids, keywords = [], tsession = None, quiet = True):
         possible_match_ids = []
         for pdb_id in pdb_ids:
             existing_records = self.DDG_db.execute_select('SELECT * FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))
-            #if existing_records:
-            #    colortext.warning('The PDB file {0} exists in the database.'.format(pdb_id))
+            if existing_records and not quiet:
+                colortext.warning('The PDB file {0} exists in the database.'.format(pdb_id))
             complex_ids = self.search_complexes_by_pdb_id(pdb_id)
             if complex_ids:
-                #colortext.warning('The PDB file {0} has associated complexes: {1}'.format(pdb_id, ', '.join(map(str, complex_ids))))
+                if existing_records and not quiet:
+                    colortext.warning('The PDB file {0} has associated complexes: {1}'.format(pdb_id, ', '.join(map(str, complex_ids))))
                 assert(len(complex_ids) == 1)
                 complex_id = complex_ids[0]
                 #colortext.warning('Complex #{0}'.format(complex_id))
@@ -2114,7 +2115,12 @@ class BindingAffinityDDGInterface(ddG):
             assert(type(keywords) == list)
             keywords = set(keywords)
             for keyword in keywords:
-                possible_match_ids.extend(self.get_complex_ids_matching_protein_name(keyword, tsession = tsession))
+
+                hits = self.get_complex_ids_matching_protein_name(keyword, tsession = tsession)
+                if hits:
+                    if not quiet:
+                        colortext.warning('Partial match on "{0}".'.format(keyword))
+                    possible_match_ids.extend(hits)
 
         possible_match_idses = sorted(set(possible_match_ids))
         return [self.get_complex_details(id) for id in possible_match_ids]
