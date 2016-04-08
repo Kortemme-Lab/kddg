@@ -589,6 +589,7 @@ class PPMutagenesis(DeclarativeBase):
     ID = Column(Integer, nullable=False, primary_key=True)
     PPComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=False)
     SKEMPI_KEY = Column(String(256), nullable=True)
+    WildType = Column(TINYINT(1), nullable=False, default=0)
 
     # Relationships
     complex = relationship('PPComplex', viewonly=True, primaryjoin="PPMutagenesis.PPComplexID==PPComplex.ID")
@@ -710,12 +711,21 @@ class PPIDataSetDE(DeclarativeBase):
     DataSetID = Column(String(128), ForeignKey('DataSet.ID'), nullable=False)
     Section = Column(String(64), nullable=False)
     RecordNumber = Column(Integer, nullable=False)
-    PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesis.ID'), nullable=False)
-    PDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=True)
     DE = Column(DOUBLE, nullable=False)
     DEUnit = Column(String(32), nullable=True)
     PublishedError = Column(String(16), nullable=True)
     NumberOfMeasurements = Column(Integer, nullable=True)
+
+    # Identifies the mutagenesis used by the dataset. PPComplexID below is used as additional referential integrity glue
+    PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesisPDBMutation.PPMutagenesisID'), ForeignKey('PPMutagenesis.ID'), nullable=False)
+
+    # Identifies the complex definition used by the dataset
+    PPComplexID = Column(Integer, ForeignKey('PPMutagenesisPDBMutation.PPComplexID'), ForeignKey('PPMutagenesis.PPComplexID'), ForeignKey('PPIPDBSet.PPComplexID'), ForeignKey('PPComplex.ID'), nullable=False)
+    SetNumber = Column(Integer, ForeignKey('PPMutagenesisPDBMutation.SetNumber'), ForeignKey('PPIPDBSet.SetNumber'), nullable=False)
+
+    # The PDB ID used in the publication. This is not used for any joins except to the PDBFile table i.e. we store this data for the purposes of archival or comparison but do not use it
+    PublishedPDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=True)
+
     PossibleError = Column(TINYINT(1), nullable=False)
     Remarks = Column(Text, nullable=True)
     IsABadEntry = Column(TINYINT(1), nullable=False, default=0)
@@ -724,18 +734,25 @@ class PPIDataSetDE(DeclarativeBase):
     LastModifiedBy = Column(String(64), ForeignKey('User.ID'), nullable=False)
     LastModifiedDate = Column(DateTime, nullable=False)
 
-    # CONSTRAINT `PPIDataSetDE_ibfk_6` FOREIGN KEY (`PPMutagenesisID`, `PDBFileID`) REFERENCES `PPMutagenesisPDBMutation` (`PPMutagenesisID`, `PDBFileID`)
+    mutagenesis = relationship('PPMutagenesis', viewonly=True, primaryjoin="and_(PPIDataSetDE.PPMutagenesisID==PPMutagenesis.ID, PPIDataSetDE.PPComplexID==PPMutagenesis.PPComplexID)")
+    ppi_pdb_set = relationship('PPIPDBSet', viewonly=True, primaryjoin="and_(PPIPDBSet.PPComplexID==PPIDataSetDE.PPComplexID, PPIPDBSet.SetNumber==PPIDataSetDE.SetNumber)")
+    pdb_mutations = relationship('PPMutagenesisPDBMutation', viewonly=True, primaryjoin="and_(PPIDataSetDE.PPMutagenesisID==PPMutagenesisPDBMutation.PPMutagenesisID, PPIDataSetDE.PPComplexID==PPMutagenesisPDBMutation.PPComplexID, PPIDataSetDE.SetNumber==PPMutagenesisPDBMutation.SetNumber)")
+    complex = relationship('PPComplex', viewonly=True, primaryjoin="PPIDataSetDE.PPComplexID==PPComplex.ID")
 
 
-class PPIDataSetWildTypeDE(DeclarativeBase):
-    __tablename__ = 'PPIDataSetWildTypeDE'
+class UserPPAnalysisSetDE(DeclarativeBase):
+    __tablename__ = 'UserPPAnalysisSetDE'
 
     ID = Column(Integer, nullable=False, primary_key=True)
-    DataSetID = Column(String(128), ForeignKey('DataSet.ID'), nullable=False)
-    Section = Column(String(64), nullable=False)
+    Subset = Column(String(128), nullable=True)
+    Section = Column(String(64), nullable=True)
     RecordNumber = Column(Integer, nullable=False)
-    PPComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=False)
-    WildTypeDE = Column(DOUBLE, nullable=False)
+    UserPPDataSetExperimentID = Column(Integer, ForeignKey('UserPPDataSetExperiment.ID'), nullable=False)
+    PPIDataSetDEID = Column(Integer, ForeignKey('PPIDataSetDE.ID'), nullable=False)
+    PPMutagenesisID = Column(Integer, ForeignKey('UserPPDataSetExperiment.PPMutagenesisID'), ForeignKey('PPIDataSetDE.PPMutagenesisID'), nullable=False)
+
+    user_pp_dataset_experiment = relationship('UserPPDataSetExperiment', viewonly=True, primaryjoin="and_(UserPPAnalysisSetDE.UserPPDataSetExperimentID==UserPPDataSetExperiment.ID, UserPPAnalysisSetDE.PPMutagenesisID==UserPPDataSetExperiment.PPMutagenesisID)")
+    ppi_dataset_de = relationship('PPIDataSetDE', viewonly=True, primaryjoin="and_(UserPPAnalysisSetDE.PPIDataSetDEID==PPIDataSetDE.ID, UserPPAnalysisSetDE.PPMutagenesisID==PPIDataSetDE.PPMutagenesisID)")
 
 
 #######################################################
@@ -1179,22 +1196,6 @@ class AnalysisDataFrame(DeclarativeBase):
             if os.path.exists(analysis_pandas_input_filepath):
                 os.remove(analysis_pandas_input_filepath)
             raise Exception('An exception occurred reading the dataframe: {0}\n.{1}'.format(str(e), traceback.format_exc()))
-
-
-
-class UserPPAnalysisSetDE(DeclarativeBase):
-    __tablename__ = 'UserPPAnalysisSetDE'
-
-    ID = Column(Integer, nullable=False, primary_key=True)
-    Subset = Column(String(128), nullable=True)
-    Section = Column(String(64), nullable=True)
-    RecordNumber = Column(Integer, nullable=False)
-    UserPPDataSetExperimentID = Column(Integer, ForeignKey('UserPPDataSetExperiment.ID'), nullable=False)
-    PPIDataSetDEID = Column(Integer, ForeignKey('PPIDataSetDE.ID'), nullable=True)
-    PPMutagenesisID = Column(Integer, ForeignKey('UserPPDataSetExperiment.PPMutagenesisID'), ForeignKey('PPIDataSetDE.PPMutagenesisID'), nullable=False)
-
-    user_pp_dataset_experiment = relationship('UserPPDataSetExperiment', viewonly=True, primaryjoin="and_(UserPPAnalysisSetDE.UserPPDataSetExperimentID==UserPPDataSetExperiment.ID, UserPPAnalysisSetDE.PPMutagenesisID==UserPPDataSetExperiment.PPMutagenesisID)")
-    ppi_dataset_de = relationship('PPIDataSetDE', viewonly=True, primaryjoin="and_(UserPPAnalysisSetDE.PPIDataSetDEID==PPIDataSetDE.ID, UserPPAnalysisSetDE.PPMutagenesisID==PPIDataSetDE.PPMutagenesisID)")
 
 
 ###########################
