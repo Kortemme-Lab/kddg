@@ -257,6 +257,8 @@ class PDBMolecule(DeclarativeBase):
 class PDBMoleculeChain(DeclarativeBase):
     __tablename__ = 'PDBMoleculeChain'
 
+    # example of how to specify multiple foreign key relationships on one field (relationships defined below)
+
     PDBFileID = Column(String(10), ForeignKey('PDBMolecule.PDBFileID'), ForeignKey('PDBChain.PDBFileID'), nullable=False, primary_key=True)
     MoleculeID = Column(Integer, ForeignKey('PDBMolecule.MoleculeID'), nullable=False, primary_key=True)
     Chain = Column(String(1), ForeignKey('PDBChain.Chain'), nullable=False, primary_key=True)
@@ -365,7 +367,7 @@ class Publication(DeclarativeBase):
     __tablename__ = 'Publication'
 
     ID = Column(String(64), nullable=False, primary_key=True)
-    DGUnit = Column(Enum('kJ/mol','kcal/mol','cal/mol'), nullable=True)
+    DGUnit = Column(Enum('kJ/mol', 'kcal/mol', 'cal/mol', 'fitness'), nullable=True)
     DDGConvention = Column(Enum('Rosetta','ProTherm','Unknown','Not applicable'), nullable=True)
     Notes = Column(Text, nullable=True)
     DGNotes = Column(Unicode(1024), nullable=True)
@@ -588,6 +590,7 @@ class PPMutagenesis(DeclarativeBase):
     ID = Column(Integer, nullable=False, primary_key=True)
     PPComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=False)
     SKEMPI_KEY = Column(String(256), nullable=True)
+    WildType = Column(TINYINT(1), nullable=False, default=0)
 
     # Relationships
     complex = relationship('PPComplex', viewonly=True, primaryjoin="PPMutagenesis.PPComplexID==PPComplex.ID")
@@ -693,12 +696,131 @@ class UserPPAnalysisSet(DeclarativeBase):
     positive_ddg = relationship('PPIDDG', viewonly=True, primaryjoin="PPIDDG.ID==UserPPAnalysisSet.PositiveDependentPPIDDGID")
     negative_ddg = relationship('PPIDDG', viewonly=True, primaryjoin="PPIDDG.ID==UserPPAnalysisSet.PositiveDependentPPIDDGID")
 
+
+################################################################
+#                                                              #
+#  Protein-protein complex experimental measurements - DeltaE  #
+#                                                              #
+################################################################
+
+
+class PPIDataSetDE(DeclarativeBase):
+    __tablename__ = 'PPIDataSetDE'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    SecondaryID = Column(String(32), nullable=False)
+    DataSetID = Column(String(128), ForeignKey('DataSet.ID'), nullable=False)
+    Section = Column(String(64), nullable=False)
+    RecordNumber = Column(Integer, nullable=False)
+    DE = Column(DOUBLE, nullable=False)
+    DEUnit = Column(String(32), nullable=True)
+    PublishedError = Column(String(16), nullable=True)
+    NumberOfMeasurements = Column(Integer, nullable=True)
+
+    # Identifies the mutagenesis used by the dataset. PPComplexID below is used as additional referential integrity glue
+    PPMutagenesisID = Column(Integer, ForeignKey('PPMutagenesisPDBMutation.PPMutagenesisID'), ForeignKey('PPMutagenesis.ID'), nullable=False)
+
+    # Identifies the complex definition used by the dataset
+    PPComplexID = Column(Integer, ForeignKey('PPMutagenesisPDBMutation.PPComplexID'), ForeignKey('PPMutagenesis.PPComplexID'), ForeignKey('PPIPDBSet.PPComplexID'), ForeignKey('PPComplex.ID'), nullable=False)
+    SetNumber = Column(Integer, ForeignKey('PPMutagenesisPDBMutation.SetNumber'), ForeignKey('PPIPDBSet.SetNumber'), nullable=False)
+
+    # The PDB ID used in the publication. This is not used for any joins except to the PDBFile table i.e. we store this data for the purposes of archival or comparison but do not use it
+    PublishedPDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=True)
+
+    PossibleError = Column(TINYINT(1), nullable=False)
+    Remarks = Column(Text, nullable=True)
+    IsABadEntry = Column(TINYINT(1), nullable=False, default=0)
+    AddedBy = Column(String(64), ForeignKey('User.ID'), nullable=False)
+    AddedDate = Column(DateTime, nullable=False)
+    LastModifiedBy = Column(String(64), ForeignKey('User.ID'), nullable=False)
+    LastModifiedDate = Column(DateTime, nullable=False)
+
+    mutagenesis = relationship('PPMutagenesis', viewonly=True, primaryjoin="and_(PPIDataSetDE.PPMutagenesisID==PPMutagenesis.ID, PPIDataSetDE.PPComplexID==PPMutagenesis.PPComplexID)")
+    ppi_pdb_set = relationship('PPIPDBSet', viewonly=True, primaryjoin="and_(PPIPDBSet.PPComplexID==PPIDataSetDE.PPComplexID, PPIPDBSet.SetNumber==PPIDataSetDE.SetNumber)")
+    pdb_mutations = relationship('PPMutagenesisPDBMutation', viewonly=True, primaryjoin="and_(PPIDataSetDE.PPMutagenesisID==PPMutagenesisPDBMutation.PPMutagenesisID, PPIDataSetDE.PPComplexID==PPMutagenesisPDBMutation.PPComplexID, PPIDataSetDE.SetNumber==PPMutagenesisPDBMutation.SetNumber)")
+    complex = relationship('PPComplex', viewonly=True, primaryjoin="PPIDataSetDE.PPComplexID==PPComplex.ID")
+
+
+class UserPPAnalysisSetDE(DeclarativeBase):
+    __tablename__ = 'UserPPAnalysisSetDE'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    Subset = Column(String(128), nullable=True)
+    Section = Column(String(64), nullable=True)
+    RecordNumber = Column(Integer, nullable=False)
+    UserPPDataSetExperimentID = Column(Integer, ForeignKey('UserPPDataSetExperiment.ID'), nullable=False)
+    PPIDataSetDEID = Column(Integer, ForeignKey('PPIDataSetDE.ID'), nullable=False)
+    PPMutagenesisID = Column(Integer, ForeignKey('UserPPDataSetExperiment.PPMutagenesisID'), ForeignKey('PPIDataSetDE.PPMutagenesisID'), nullable=False)
+
+    user_pp_dataset_experiment = relationship('UserPPDataSetExperiment', viewonly=True, primaryjoin="and_(UserPPAnalysisSetDE.UserPPDataSetExperimentID==UserPPDataSetExperiment.ID, UserPPAnalysisSetDE.PPMutagenesisID==UserPPDataSetExperiment.PPMutagenesisID)")
+    ppi_dataset_de = relationship('PPIDataSetDE', viewonly=True, primaryjoin="and_(UserPPAnalysisSetDE.PPIDataSetDEID==PPIDataSetDE.ID, UserPPAnalysisSetDE.PPMutagenesisID==PPIDataSetDE.PPMutagenesisID)")
+
+
 #######################################################
 #                                                     #
 #  Datasets                                           #
 #                                                     #
 #######################################################
 
+
+class DataSet(DeclarativeBase):
+    __tablename__ = 'DataSet'
+
+    ID = Column(String(128), nullable=False, primary_key=True)
+    ShortID = Column(String(32), nullable=False)
+    UserID = Column(String(64), ForeignKey('User.ID'), nullable=True)
+    Description = Column(String(512), nullable=True)
+    DatasetType = Column(Enum('Protein stability', 'Binding affinity', 'Protein stability and binding affinity'), nullable=False)
+    ContainsStabilityDDG = Column(TINYINT(1), nullable=False, default=0)
+    ContainsBindingAffinityDDG = Column(TINYINT(1), nullable=False, default=0)
+    ContainsBindingAffinityDE = Column(TINYINT(1), nullable=False, default=0)
+    CreationDateStart = Column(DateTime, nullable=True)
+    CreationDateEnd = Column(DateTime, nullable=True)
+    DDGConvention = Column(Enum('Rosetta','ProTherm'), nullable=False)
+
+
+class DataSetCrossmap(DeclarativeBase):
+    __tablename__ = 'DataSetCrossmap'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    FromDataSetID = Column(String(128), ForeignKey('DataSetDDG.DataSetID'), nullable=False)
+    FromSection = Column(String(64), ForeignKey('DataSetDDG.Section'), nullable=False)
+    FromRecordNumber = Column(Integer, ForeignKey('DataSetDDG.RecordNumber'), nullable=False)
+    ToDataSetID = Column(String(128), ForeignKey('DataSetDDG.DataSetID'), nullable=False)
+    ToSection = Column(String(64), ForeignKey('DataSetDDG.Section'), nullable=False)
+    ToRecordNumber = Column(Integer, ForeignKey('DataSetDDG.RecordNumber'), nullable=False)
+
+
+class DataSetDDG(DeclarativeBase):
+    __tablename__ = 'DataSetDDG'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    DataSetID = Column(String(128), ForeignKey('DataSet.ID'), nullable=False)
+    Section = Column(String(64), nullable=False)
+    RecordNumber = Column(Integer, nullable=False)
+    AggregateType = Column(Enum('SingleValue','MeanValue'), nullable=False)
+    PublishedValue = Column(DOUBLE, nullable=False)
+    MutationIsReversed = Column(TINYINT(1), nullable=False)
+    PDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=True)
+    PublishedPDBFileID = Column(String(10), ForeignKey('PDBFile.ID'), nullable=True)
+    PossibleError = Column(TINYINT(1), nullable=False)
+    Remark = Column(Text, nullable=True)
+    CorrectionRemark = Column(Text, nullable=True)
+
+
+class DataSetDDGSource(DeclarativeBase):
+    __tablename__ = 'DataSetDDGSource'
+
+    DataSetDDGID = Column(Integer, ForeignKey('DataSetDDG.ID'), nullable=False, primary_key=True)
+    ExperimentAssayID = Column(Integer, ForeignKey('ExperimentAssayDDG.ExperimentAssayID'), nullable=False, primary_key=True)
+    Type = Column(Enum('Unknown','DDG','DDG_H2O'), ForeignKey('ExperimentAssayDDG.Type'), nullable=False, primary_key=True)
+
+
+class DataSetReference(DeclarativeBase):
+    __tablename__ = 'DataSetReference'
+
+    DataSetID = Column(String(128), ForeignKey('DataSet.ID'), nullable=False, primary_key=True)
+    Publication = Column(String(64), ForeignKey('Publication.ID'), nullable=False, primary_key=True, default=u'')
 
 
 #######################################################
@@ -1126,8 +1248,8 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['DataSet', 'DataSetReference'])
 
+    generate_sqlalchemy_definition(['PPIDataSetDE', 'PPIDataSetWildTypeDE', 'UserPPAnalysisSetDE'])
     #generate_sqlalchemy_definition([''])
     sys.exit(0)
     from ppi_api import get_interface as get_ppi_interface
