@@ -2256,13 +2256,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @general_data_entry
-    def add_dataset(self, long_id, short_id, user_id, description, has_stability_ddg_records, has_binding_affinity_ddg_records, has_binding_affinity_de_records, ddg_convention, dataset_creation_start_date = None, dataset_creation_end_date = None):
+    def add_dataset(self, user_id, long_id, short_id, description, has_stability_ddg_records, has_binding_affinity_ddg_records, has_binding_affinity_de_records, ddg_convention, dataset_creation_start_date = None, dataset_creation_end_date = None):
         '''Adds a UserDataSet record. This is typically called before add_user_dataset_case which adds the user dataset
            experiment records (e.g. UserDataSetExperiment or UserPPDataSetExperiment records).
 
+           :param user_id: User ID for the user adding this dataset to the database.
            :param long_id: This should be a descriptive name e.g. "SSM_Psd95-CRIPT_Rama_10.1038/nature11500" which describes the type of dataset (SSM on the Psd95-CRIPT complex) and includes the DOI of the associated publication.
            :param short_id: A short ID which will be used to refer to the dataset by humans e.g. "Psd95-CRIPT".
-           :param user_id: User ID for the user adding this dataset to the database.
            :param description: A description of the dataset.
            :param has_stability_ddg_records: Does the dataset contain DDG data for monomeric stability assays?
            :param has_binding_affinity_ddg_records: Does the dataset contain DDG data for binding affinity assays?
