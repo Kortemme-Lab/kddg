@@ -692,6 +692,13 @@ class UserPPAnalysisSet(DeclarativeBase):
     positive_ddg = relationship('PPIDDG', viewonly=True, primaryjoin="PPIDDG.ID==UserPPAnalysisSet.PositiveDependentPPIDDGID")
     negative_ddg = relationship('PPIDDG', viewonly=True, primaryjoin="PPIDDG.ID==UserPPAnalysisSet.PositiveDependentPPIDDGID")
 
+#######################################################
+#                                                     #
+#  Datasets                                           #
+#                                                     #
+#######################################################
+
+
 
 #######################################################
 #                                                     #
@@ -815,7 +822,39 @@ class PredictionSet(DeclarativeBase):
     ppi_predictions = relationship('PredictionPPI', viewonly=True, primaryjoin="PredictionSet.ID==PredictionPPI.PredictionSet")
 
 
+class Prediction(DeclarativeBase):
+    __tablename__ = 'Prediction'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    ExperimentID = Column(Integer, nullable=False)
+    UserDataSetExperimentID = Column(Integer, nullable=True)
+    PredictionSet = Column(Unicode(48), nullable=False)
+    ProtocolID = Column(Unicode(256), nullable=False)
+    Cost = Column(DOUBLE, nullable=False, default=0)
+    KeptHETATMLines = Column(TINYINT(1), nullable=True)
+#StrippedPDB = Column(Text, nullable=True)
+#ResidueMapping = Column(Text, nullable=True)
+#InputFiles = Column(Text, nullable=True)
+#Description = Column(Text, nullable=True)
+#ScoreVersion = Column(DOUBLE, nullable=False, default=0.23)
+#ddG = Column(Text, nullable=True)
+#Scores = Column(Text, nullable=True)
+    NumberOfMeasurements = Column(Integer, nullable=False, default=1)
+    EntryDate = Column(TIMESTAMP, nullable=False)
+    cryptID = Column(Unicode(50), nullable=True)
+    StartDate = Column(DateTime, nullable=True)
+    EndDate = Column(DateTime, nullable=True)
+    Status = Column(Enum('queued','active','done','failed','postponed'), nullable=True)
+    Errors = Column(Text, nullable=True)
+    AdminCommand = Column(Unicode(20), nullable=True)
+    ExtraParameters = Column(Text, nullable=False)
+    maxvmem = Column(DOUBLE, nullable=False)
+    DDGTime = Column(DOUBLE, nullable=False)
+#StoreOutput = Column(TINYINT(1), nullable=False, default=0)
+
+
 prediction_ppi_clone_null_fields = ['EntryDate', 'StartDate', 'EndDate', 'Errors', 'AdminCommand', 'maxvmem', 'DDGTime']
+
 
 class PredictionPPI(DeclarativeBase):
     __tablename__ = 'PredictionPPI'
@@ -1084,7 +1123,7 @@ def test_schema_against_database_instance(DDG_db):
 
 
 if __name__ == '__main__':
-    generate_sqlalchemy_definition(['PPIDDG', 'UserPPAnalysisSet'])
+    generate_sqlalchemy_definition(['DataSet', 'DataSetReference'])
 
     #generate_sqlalchemy_definition([''])
     sys.exit(0)
