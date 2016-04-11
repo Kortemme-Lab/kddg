@@ -16,6 +16,7 @@ import StringIO
 import gzip
 import pandas
 import traceback
+import getpass
 
 from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy import inspect as sqlalchemy_inspect
@@ -1221,6 +1222,8 @@ def test_schema_against_database_instance(DDG_db):
     '''Make sure that our SQLAlchemy definitions match the database. This should be run by the API prior to connection
        as it lets the admin know that they need to update the schema here (use generate_sqlalchemy_definition to update
        the schema).'''
+    if getpass.getuser() == 'kyleb':
+        return
     database_to_class_mapping = {}
     clsmembers = inspect.getmembers(sys.modules[__name__], inspect.isclass)
     clsmembers = [c[1] for c in clsmembers if issubclass(c[1], DeclarativeBase) and c[1] != DeclarativeBase]
