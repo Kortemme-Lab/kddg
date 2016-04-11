@@ -34,8 +34,11 @@ def rescore_ddg_monomer_pdb(pdb_path, rosetta_scripts_path, chains_to_move, rose
     for arg in command_line:
         out_str += arg + ' '
 
+    rosetta_env = os.environ.copy()
+    rosetta_env["LD_LIBRARY_PATH"] = '/home/kyleb/intel/bin/compilers_and_libraries_2016.2.181/linux/compiler/lib/intel64'
+
     try:
-        rosetta_output = subprocess.check_output(command_line, cwd=tmp_output_dir)#, stderr=subprocess.STDOUT, stdout=subprocess.STDOUT)
+        rosetta_output = subprocess.check_output(command_line, cwd=tmp_output_dir, env=rosetta_env)#, stderr=subprocess.STDOUT, stdout=subprocess.STDOUT)
     except Exception:
         print 'Rosetta run failed in folder', tmp_output_dir
         print 'Command line:', ' '.join(command_line)
