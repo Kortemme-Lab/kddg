@@ -1,4 +1,5 @@
 #!/usr/bin/python2.4
+
 # encoding: utf-8
 """
 db_schema.py
@@ -1223,6 +1224,7 @@ def test_schema_against_database_instance(DDG_db):
        as it lets the admin know that they need to update the schema here (use generate_sqlalchemy_definition to update
        the schema).'''
     if getpass.getuser() == 'kyleb':
+        colortext.rastaprint('Hello Kyle!')
         return
     database_to_class_mapping = {}
     clsmembers = inspect.getmembers(sys.modules[__name__], inspect.isclass)
