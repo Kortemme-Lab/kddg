@@ -34,7 +34,7 @@ from sqlalchemy import and_, or_, func
 
 from klab import colortext
 from klab.bio.pdb import PDB
-from klab.bio.basics import ChainMutation
+from klab.bio.basics import ChainMutation, residue_type_1to3_map
 from klab.fs.fsio import read_file, write_temp_file
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 from klab.bio.alignment import ScaffoldModelChainMapper, DecoyChainMapper
@@ -2653,10 +2653,15 @@ class BindingAffinityDDGInterface(ddG):
         assert(len(set_number) == 1)
         set_number = set_number.pop()
 
+        is_wildtype = 1
+        if udc['Mutations']:
+            is_wildtype = 0
+
         # 1. Create the mutagenesis record
         pp_mutagenesis = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesis, dict(
                     PPComplexID = udc['Mutagenesis']['PPComplexID'],
                     SKEMPI_KEY = udc['Mutagenesis']['RecognizableString'],
+                    WildType = is_wildtype,
                 ), missing_columns = ['ID'])
 
         # 2. Create the PPMutagenesisMutation and PPMutagenesisPDBMutation records
@@ -2739,7 +2744,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @ppi_data_entry
-    def add_ssm_dataset(self, dataset_short_id, user_dataset_id, complex_id, set_number, mutations_dataframe, chain_id = None, existing_session = None):
+    def add_ssm_dataset(self, dataset_short_id, user_dataset_id, complex_id, set_number, mutations_dataframe, existing_session = None, debug = True):
         '''Import SSM data from an RCSB PDB file. Non-RCSB files are not currently handled. Some data (DataSet and UserDataSet)
            must be set up before calling this function.
 
@@ -2748,7 +2753,7 @@ class BindingAffinityDDGInterface(ddG):
         :param pp_complex_id: The complex ID used in the database (PPComplex.ID). This will be used to add the structure to the database.
         :param set_number: The set_number of the complex used in the database (PPIPDBSet.SetNumber). This is used to determine the choice of chains in predictions.
         :param mutations_dataframe: A pandas dataframe in the intermediate input format described below.
-        :param chain_id: If this is not specified then PDB residue IDs must be prefixed with the chain ID e.g. 'A123B' is residue 123B of chain A (B is an insertion code in this example).
+        :param debug: If True then the transaction is rolled back. This is set to True by default to reduce data-entry errors i.e. you should do a test-run of add_ssm_dataset first and then do a run with debug = False.
         :return: Dict {success : <True/False>, DataSetID : dataset_id, [errors : <list of error strings if failed>]}
 
         This function requires the complex, DataSet, and UserDataSet records to have been created. Those records can be added using
@@ -2766,7 +2771,7 @@ class BindingAffinityDDGInterface(ddG):
             api_response = ppi_api.add_complex(json.loads(read_file('my_complex.json')[path][to][complex_definition])) # The structure of the JSON file is described in the docstring for add_complex
             if not api_response['success']:
                 raise Exception(api_response['error'])
-            pp_complex_id, set_number = api_response['pp_complex_id'], api_response['set_number']
+            pp_complex_id, set_number = api_response['ComplexID'], api_response['SetNumber']
 
             # else if the complex already exists in the database:
             pp_complex_id, set_number = ..., ...
@@ -2783,16 +2788,18 @@ class BindingAffinityDDGInterface(ddG):
             user_dataset = ppi_api.add_de_user_dataset('oconchus', 'SSM-Psd95-CRIPT', '...')
 
             # Finally, import the SSM dataset
-            add_ssm_dataset(dataset.ShortID, user_dataset.ID, pp_complex_id, set_number, mutations_dataframe, chain_id = 'A')
+            add_ssm_dataset(dataset.ShortID, user_dataset.ID, pp_complex_id, set_number, mutations_dataframe)
 
         @todo: write the add_publication function (using the RIS parsing module in klab and the PubMed/DOI downloading modules).
 
         mutations_dataframe should be a complete (either a value or null at all positions in the m x n array) pandas
         dataframe with a standardized structure.
         This simplifies the data import. The dataframe should be indexed/row-indexed by residue type and column-indexed
-        by residue ID. For example, if the input file is a TSV formatted like:
+        by a string chain ID + <underscore> + residue ID without spaces e.g. 'A_311' is residue ' 311 ' of chain A and 'A_312B' is residue ' 312B' of chain A.
+        We include an underscore in the format to reduce confusion for cases where the PDB chain ID is an integer.
+        For example, if the input file is a TSV formatted like:
 
-            Pos/aa	311	312	...
+            Pos/aa	A_311	A_312	...
             A	0.131	-0.42	...
             C	0.413	-0.022	...
             ...
@@ -2806,7 +2813,7 @@ class BindingAffinityDDGInterface(ddG):
         tsession = existing_session or self.get_session(new_session = True, utf = False)
 
         # Sanity checks
-        assert(complex_id != None and pdb_set_number != None)
+        assert(complex_id != None and set_number != None)
         dataset_id = None
         try:
             dataset_id = tsession.query(dbmodel.DataSet).filter(dbmodel.DataSet.ShortID == dataset_short_id).one().ID
@@ -2816,26 +2823,33 @@ class BindingAffinityDDGInterface(ddG):
             tsession.query(dbmodel.UserDataSet).filter(dbmodel.UserDataSet.ID== user_dataset_id).one()
         except:
             raise Exception('No user dataset with TextID "{0}" exists in the database.'.format(user_dataset_id))
-        print(dataset_id, user_dataset_id)
 
         # Retrieve the mapping from chain -> residue ID -> wildtype residue
         pdb_id, complex_chains = self.get_bound_pdb_set_details(complex_id, set_number)
-        colortext.warning(pdb_id)
-        colortext.warning(pprint.pformat(complex_chains))
         chain_wt_residue_by_pos = self.get_pdb_residues_by_pos(pdb_id, strip_res_ids = True)
-        pprint.pprint(chain_wt_residue_by_pos)
+
+        # Sanity checks on column indices
+        chain_ids = set()
+        for v in mutations_dataframe.columns.values:
+            error_msg = 'The column index "{0}" does not have the expected format: <chain>_<residue id> e.g. "A_123".'.format(v)
+            if v.find('_') == -1 or len(v.split('_')) != 2:
+                raise colortext.Exception(error_msg)
+            tokens = v.split('_')
+            chain_id = tokens[0]
+            residue_id = tokens[1]
+            if len(chain_id) != 1 or (not(residue_id.strip().isdigit()) and not(residue_id.strip()[:-1].isdigit())):
+                raise colortext.Exception(error_msg)
+            chain_ids.add(chain_id)
+
+        # Sanity checks on row indices
+        mut_aas = sorted(mutations_dataframe.index)
+        expected_mut_aas = set(residue_type_1to3_map.keys())
+        expected_mut_aas.remove('X')
+        assert(len(expected_mut_aas) == 20)
+        if set(mut_aas).difference(expected_mut_aas):
+            raise colortext.Exception('The row indices contain values which are non canonical residue types: "{0}".'.format('", "'.join(sorted(set(mut_aas).difference(expected_mut_aas)))))
 
         # Extract the data into a list of point mutations, iterating by column/position then row/AA
-        print(mutations_dataframe)
-        print('done')
-        sys.exit(0)
-
-
-        dosomethingwithchainid()
-
-
-        colortext.warning('Adding data for complex #{0}, dataset "{1}", user dataset #{2}'.format(complex_id, dataset_id, user_dataset_id))
-
         # Add a single wildtype PPMutagenesis record (essentially a Complex with no corresponding mutation records)
         # For all single PDB mutations in the list
         #     if not wildtype
@@ -2848,53 +2862,52 @@ class BindingAffinityDDGInterface(ddG):
         # the wildtype sequence has exactly one corresponding DeltaE for each position. There will be exactly one UserPPAnalysisSetDE
         # record per mutant and one wildtype record for each position however all of the wildtype UserPPAnalysisSetDE records
         # will be associated to the sole wildtype UserPPAnalysisSetDE record.
-
+        colortext.warning('Adding data for complex #{0}, dataset "{1}", user dataset #{2}.'.format(complex_id, dataset_id, user_dataset_id))
+        record_number = 0
         mut_aas = list(mutations_dataframe.index)
         res_ids = list(mutations_dataframe.columns.values)
-        created_wildtype_record = False
-
-        record_number = 0
-
         try:
-
-            chain_id = 'A'
-
             # Add a PPMutagenesis record with no mutation records i.e. the wildtype/null 'mutagenesis'
             pp_wt_mutagenesis = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesis, dict(
                 PPComplexID = complex_id,
-                SKEMPI_KEY = 'SSM {0}| WildType'.format(pdb_id),
+                SKEMPI_KEY = 'SSM {0}| WildType'.format(pdb_id), # todo: this format is ambiguous if we start to store multiple SSM datasets with different choices of bound partners. We should ideally check all PPMutagenesisMutation/PPMutagenesisPDBMutation records on the complex for a match. At present (2016), it is unlikely that we will have many SSM datasets for consideration, never mind overlapping sets.
                 WildType = 1,
             ), missing_columns = ['ID',])
             pp_wt_mutagenesis_id = pp_wt_mutagenesis.ID
-
             first_wt_record_number = None
-            for res_id in res_ids:
+            for chain_res_id in res_ids:
 
-                wt_aa = chain_A_wt_residue_by_pos[res_id]
+                tokens = chain_res_id.split('_')
+                assert(len(tokens) == 2)
+                chain_id = tokens[0]
+                assert(len(chain_id) == 1)
+                assert(chain_id in chain_wt_residue_by_pos)
+                res_id = tokens[1]
+                assert(res_id in chain_wt_residue_by_pos[chain_id])
+                wt_aa = chain_wt_residue_by_pos[chain_id][res_id]
                 for mut_aa in mut_aas:
                     record_number += 1
                     if record_number % 10 == 0:
                         colortext.wgreen('.')
                         sys.stdout.flush()
 
-                    pp_mutagenesis_id, skempi_key, analysis_set_record_number = None, None, None
-
                     # Add the PPMutagenesis records for mutant cases
                     if mut_aa == wt_aa:
-                        skempi_key = 'WildType'
+                        ppi_dataset_de_key = 'SSM {0}| WildType'.format(pdb_id)
                         if first_wt_record_number == None:
                             first_wt_record_number = record_number
                         analysis_set_record_number = first_wt_record_number
                         pp_mutagenesis_id = pp_wt_mutagenesis_id
                     else:
-                        skempi_key = 'SSM {0}| {1} {2} {3} {4}'.format(pdb_id, chain_id, wt_aa, res_id, mut_aa) # SKEMPI_KEY is a bad name for a field!,
+                        ppi_dataset_de_key = 'SSM {0}| {1} {2} {3} {4}'.format(pdb_id, chain_id, wt_aa, res_id, mut_aa) # SKEMPI_KEY is a bad name for a field!,
                         analysis_set_record_number = record_number
 
                         # Add a PPMutagenesis record with no mutation records i.e. the wildtype/null 'mutagenesis'
                         pp_mutagenesis = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesis, dict(
                             PPComplexID = complex_id,
                             SKEMPI_KEY = 'SSM {0}| {1} {2} {3} {4}'.format(pdb_id, chain_id, wt_aa, res_id, mut_aa), # SKEMPI_KEY is a bad name for a field!,
-                        ), missing_columns = ['ID', 'WildType'])
+                            WildType = 0,
+                        ), missing_columns = ['ID'])
                         pp_mutagenesis_id = pp_mutagenesis.ID
                         #pprint.pprint(pp_mutagenesis.__dict__)
 
@@ -2923,13 +2936,13 @@ class BindingAffinityDDGInterface(ddG):
                         pp_mutagenesis_pdb_mutation_id = pp_mutagenesis_pdb_mutation.ID
                         #pprint.pprint(pp_mutagenesis_pdb_mutation.__dict__)
 
-                    #add PPIDataSetDE record
+                    # Add a DeltaE measurement record (PPIDataSetDE)
                     ppi_dataset_de = get_or_create_in_transaction(tsession, dbmodel.PPIDataSetDE, dict(
-                        SecondaryID = skempi_key, # optional field
+                        SecondaryID = ppi_dataset_de_key, # optional field
                         DataSetID = dataset_id,
                         Section = 'Supplementary Information II',
                         RecordNumber = record_number,
-                        DE = mutations_dataframe[res_id][mut_aa],
+                        DE = mutations_dataframe[chain_res_id][mut_aa],
                         DEUnit = 'DeltaE (see DataSet.Description)',
                         PublishedError = None,
                         NumberOfMeasurements = None,
@@ -2944,11 +2957,10 @@ class BindingAffinityDDGInterface(ddG):
                         AddedDate = datetime.datetime.now(),
                         LastModifiedBy = 'oconchus',
                         LastModifiedDate = datetime.datetime.now(),
-                    ), missing_columns = ['ID',])
+                    ), missing_columns = ['ID',], variable_columns = ['AddedDate', 'LastModifiedDate'])
                     ppi_dataset_de_id = ppi_dataset_de.ID
-                    #pprint.pprint(ppi_dataset_de.__dict__)
 
-                    #add UserPPDataSetExperiment record
+                    # Add a record (UserPPDataSetExperiment) to be included in the associated prediction run
                     user_pp_dataset_experiment = get_or_create_in_transaction(tsession, dbmodel.UserPPDataSetExperiment, dict(
                         UserDataSetID = user_dataset_id,
                         PPMutagenesisID = pp_mutagenesis_id,
@@ -2958,9 +2970,8 @@ class BindingAffinityDDGInterface(ddG):
                         IsComplex = 1
                     ), missing_columns = ['ID',])
                     user_pp_dataset_experiment_id = user_pp_dataset_experiment.ID
-                    #pprint.pprint(user_pp_dataset_experiment.__dict__)
 
-                    #add UserPPDataSetExperiment record
+                    # dd a record (UserPPAnalysisSetDE) to be used in the analysis, linking the UserPPDataSetExperiment with the DeltaE (PPIDataSetDE) record
                     user_pp_analysis_set_de = get_or_create_in_transaction(tsession, dbmodel.UserPPAnalysisSetDE, dict(
                         Subset = 'Psd95-Cript',
                         Section = 'McLaughlin2012',
@@ -2971,9 +2982,13 @@ class BindingAffinityDDGInterface(ddG):
                     ), missing_columns = ['ID',])
                     user_pp_analysis_set_de_id = user_pp_analysis_set_de.ID
 
-            print(pp_mutagenesis_id, pp_mutagenesis_mutation_id, pp_mutagenesis_pdb_mutation_id, ppi_dataset_de_id, user_pp_dataset_experiment_id, user_pp_analysis_set_de_id,)
-            tsession.commit()
-            tsession.close()
+            if debug:
+                colortext.warning('\nDEBUG MODE IS SET. THE CODE RAN SUCCESSFULLY BUT THE DATASET WILL NOT BE ADDED. RE-RUN THIS FUNCTION WITH debug = False.')
+                tsession.rollback()
+                tsession.close()
+            else:
+                tsession.commit()
+                tsession.close()
         except Exception, e:
             tsession.rollback()
             tsession.close()
