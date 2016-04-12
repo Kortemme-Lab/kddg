@@ -130,7 +130,14 @@ class BackrubDDGInterface(DDGMonomerInterface):
 
         db3_files_to_process = available_db3_files_set
         print 'Found %d scores in db3 files needed to add to database' % len(db3_files_to_process)
+        output_dirs_to_zip = len_output_dirs[sorted( len_output_dirs.keys() )[-1]] # Take only folders with the most structures for zipping
+        self.parse_db3_files_to_process(db3_files_to_process, available_db3_files, output_log_files, score_method_ids, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field, output_dirs_to_zip = output_dirs_to_zip )
 
+    def parse_db3_files_to_process(self, db3_files_to_process, available_db3_files, output_log_files, score_method_id, prediction_structure_scores_table = None, prediction_id_field = None, output_dirs_to_zip = [], use_multiprocessing = True):
+        if not prediction_structure_scores_table:
+            prediction_structure_scores_table = self.prediction_structure_scores_table
+        if not prediction_id_field:
+            prediction_id_field = self.prediction_table + 'ID'
         r = Reporter('parsing output files', entries='output files')
         r.set_total_count( len(output_log_files) )
         for prediction_set_id, output_log_file, prediction_id, round_num in output_log_files:
@@ -142,37 +149,44 @@ class BackrubDDGInterface(DDGMonomerInterface):
 
         r = Reporter('parsing output db3 files and saving scores in database', entries='scores')
         r.set_total_count( len(db3_files_to_process) )
-        p = multiprocessing.Pool(min(multiprocessing.cpu_count(), 16)) # Multiprocessing
-        self.master_scores_list = []
+        if use_multiprocessing:
+            p = multiprocessing.Pool(min(multiprocessing.cpu_count(), 16)) # Multiprocessing
+            self.master_scores_list = []
         def save_scores_helper(return_tuple):
             args, kwargs = return_tuple
             prediction_set_id, prediction_id, scores_list = args
-            self.master_scores_list.extend(scores_list)
-            if len(self.master_scores_list) >= 150: # Save scores in batches
-                self.store_scores_for_many_predictions(None, self.master_scores_list, safe=False, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
-                self.master_scores_list = []
-            #### self.store_scores(None, prediction_id, scores_list, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field) # Save each score one at a time
+            if use_multiprocessing:
+                self.master_scores_list.extend(scores_list)
+                if len(self.master_scores_list) >= 150: # Save scores in batches
+                        self.store_scores_for_many_predictions(None, self.master_scores_list, safe=False, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
+                        self.master_scores_list = []
+            else:
+                self.store_scores(None, prediction_id, scores_list, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field) # Save each score one at a time
             r.increment_report()
 
         for prediction_id, round_num in db3_files_to_process:
             empty_score_dict = self.get_score_dict(prediction_id=prediction_id, score_method_id=score_method_id, structure_id=round_num, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
             mut_output_db3, wt_output_db3 = available_db3_files[(prediction_id, round_num)]
-            p.apply_async( read_db3_scores_helper, (empty_score_dict, prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field), callback=save_scores_helper) # Multiprocessing
-            #### save_scores_helper( read_db3_scores_helper(empty_score_dict, prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field) ) # Non-multiprocessing
-        p.close() # Multiprocessing
-        p.join() # Multiprocessing
-        if len(self.master_scores_list) > 0:
+            if use_multiprocessing:
+                p.apply_async( read_db3_scores_helper, (empty_score_dict, prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field), callback=save_scores_helper) # Multiprocessing
+            else:
+                save_scores_helper( read_db3_scores_helper(empty_score_dict, prediction_id, round_num, wt_output_db3, mut_output_db3, score_method_id, prediction_structure_scores_table, prediction_id_field) ) # Non-multiprocessing
+        if use_multiprocessing:
+            p.close() # Multiprocessing
+            p.join() # Multiprocessing
+        if use_multiprocessing and len(self.master_scores_list) > 0:
             self.store_scores_for_many_predictions(None, self.master_scores_list, safe=False, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
         r.done()
 
-        r = Reporter('zipping prediction id output directories', entries='directories')
-        r.set_total_count( len(len_output_dirs[sorted( len_output_dirs.keys() )[-1]]) )
-        for output_dir, prediction_id in len_output_dirs[sorted( len_output_dirs.keys() )[-1]]:
-            if self.zip_prediction_id(prediction_id, output_dir):
-                r.increment_report()
-            else:
-                r.decrement_total_count()
-        r.done()
+        if len(output_dirs_to_zip) > 0:
+            r = Reporter('zipping prediction id output directories', entries='directories')
+            r.set_total_count( len(output_dirs_to_zip) )
+            for output_dir, prediction_id in output_dirs_to_zip:
+                if self.zip_prediction_id(prediction_id, output_dir):
+                    r.increment_report()
+                else:
+                    r.decrement_total_count()
+            r.done()
 
     def update_prediction_id_status(self, prediction_set_id, output_log_file, prediction_id, round_num, verbose = True):
         # Looks for output file in root directory and reads for job status
