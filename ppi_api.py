@@ -1722,14 +1722,29 @@ class BindingAffinityDDGInterface(ddG):
 
             # Compute the stats per analysis set
             df = dfi['dataframe']
-            for analysis_set in dfi['analysis_sets']:
-                dfi['stats'][analysis_set] = get_xy_dataset_statistics_pandas(
+            if dfi['analysis_sets']:
+                # Case where there are analysis sets
+                for analysis_set in dfi['analysis_sets']:
+                    dfi['stats'][analysis_set] = get_xy_dataset_statistics_pandas(
+                        df,
+                        BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Experimental', analysis_set),
+                        BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Predicted_adj', analysis_set),
+                        fcorrect_x_cutoff = float(dfr.StabilityClassicationExperimentalCutoff),
+                        fcorrect_y_cutoff = float(dfr.StabilityClassicationPredictedCutoff),
+                        ignore_null_values = True)
+            elif 'Experimental' in df.columns:
+                # Case where there are no analysis sets
+                dfi['stats']['Global'] = get_xy_dataset_statistics_pandas(
                     df,
-                    BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Experimental', analysis_set),
-                    BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Predicted_adj', analysis_set),
+                    'Experimental',
+                    'Predicted_adj',
                     fcorrect_x_cutoff = float(dfr.StabilityClassicationExperimentalCutoff),
                     fcorrect_y_cutoff = float(dfr.StabilityClassicationPredictedCutoff),
                     ignore_null_values = True)
+            else:
+                # Case where there are no experimental data
+                dfi['stats'] = None
+
             if not return_dataframe:
                 # May be useful if we are keeping a lot of these in memory and the dataframe is not useful
                 dfi['dataframe'] = None
