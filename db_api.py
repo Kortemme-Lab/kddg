@@ -652,6 +652,17 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @informational_misc
+    def get_pdb_residues_by_pos(self, pdb_id, strip_res_ids = False):
+        '''Returns a mapping chain_id -> residue_id -> reside_aa.'''
+        chain_residue_by_pos = {}
+        for c in self.get_session().query(dbmodel.PDBChain).filter(dbmodel.PDBChain.PDBFileID == pdb_id):
+            chain_residue_by_pos[c.Chain] = {}
+        for r in self.get_session().query(dbmodel.PDBResidue).filter(dbmodel.PDBResidue.PDBFileID == pdb_id):
+            chain_residue_by_pos[r.Chain][r.ResidueID.strip() if strip_res_ids else r.ResidueID] = r.ResidueAA
+        return chain_residue_by_pos
+
+
+    @informational_misc
     def get_score_method_details(self, score_method_id = None, allow_recaching = True):
         '''Returns all score method details, unless a score method id is passed, then only those details are returned'''
         if not self.cached_score_method_details or (score_method_id and not(score_method_id in self.cached_score_method_details)):
@@ -2256,27 +2267,118 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @general_data_entry
-    def add_user_dataset(self, user_id, text_id, description):
+    def add_dataset(self, user_id, long_id, short_id, description, has_stability_ddg_records, has_binding_affinity_ddg_records, has_binding_affinity_de_records, ddg_convention, dataset_creation_start_date = None, dataset_creation_end_date = None, publication_ids = [], existing_session = None):
+        '''Adds a UserDataSet record. This is typically called before add_user_dataset_case which adds the user dataset
+           experiment records (e.g. UserDataSetExperiment or UserPPDataSetExperiment records).
+
+           :param user_id: User ID for the user adding this dataset to the database.
+           :param long_id: This should be a descriptive name e.g. "SSM_Psd95-CRIPT_Rama_10.1038/nature11500" which describes the type of dataset (SSM on the Psd95-CRIPT complex) and includes the DOI of the associated publication.
+           :param short_id: A short ID which will be used to refer to the dataset by humans e.g. "Psd95-CRIPT".
+           :param description: A description of the dataset.
+           :param has_stability_ddg_records: Does the dataset contain DDG data for monomeric stability assays?
+           :param has_binding_affinity_ddg_records: Does the dataset contain DDG data for binding affinity assays?
+           :param has_binding_affinity_de_records: Does the dataset contain DeltaE data for binding affinity assays?
+           :param ddg_convention: Either "Rosetta" (negative values indicate higher stability or binding) or "ProTherm" (negative values indicate lower stability or binding).
+           :param dataset_creation_start_date: The date when the dataset was first created. For publication datasets, this should be the publication date. For updated resources like ProTherm, this should be the publication date for the first revision.
+           :param dataset_creation_end_date: The date when the dataset was last modified or finalized. For publication datasets, this should be the publication date. For updated resources like ProTherm, this should be the publication date for the latest revision.
+           :param publication_id: A list of Publication.ID field values from the associated publications.
+           :return: The SQLAlchemy DataSet object.
+           '''
+
+        tsession = existing_session or self.get_session(new_session = True)
+        try:
+            user_record = tsession.query(dbmodel.User).filter(dbmodel.User.ID == user_id).one()
+        except:
+            raise Exception('Could not retrieve a record for user "{0}".'.format(user_id))
+        if not (ddg_convention == 'Rosetta' or ddg_convention == 'ProTherm'):
+            raise Exception('The DDG convention should be specified as either "Rosetta" (negative values indicate higher stability or binding) or "ProTherm" (negative values indicate lower stability or binding).')
+        if (len(long_id) > 128) or (len(short_id) > 32):
+            raise Exception('The long ID is limited to 128 characters and the short ID is limited to 32 characters.')
+
+        dataset_dict = {}
+        try:
+            dataset_dict = dict(
+                    ID = long_id,
+                    ShortID = short_id,
+                    UserID = user_id,
+                    Description = description,
+                    DatasetType = self._get_prediction_dataset_type(),
+                    ContainsStabilityDDG = has_stability_ddg_records,
+                    ContainsBindingAffinityDDG = has_binding_affinity_ddg_records,
+                    ContainsBindingAffinityDE = has_binding_affinity_de_records,
+                    CreationDateStart = dataset_creation_start_date,
+                    CreationDateEnd = dataset_creation_end_date,
+                    DDGConvention = ddg_convention,
+            )
+            data_set = get_or_create_in_transaction(tsession, dbmodel.DataSet, dataset_dict, variable_columns = ['Description', 'CreationDateStart', 'CreationDateEnd'])
+            data_set_id = data_set.ID
+
+            for publication_id in publication_ids:
+                dataset_reference = get_or_create_in_transaction(tsession, dbmodel.DataSetReference, dict(
+                    DataSetID = data_set_id,
+                    Publication = publication_id,
+                ))
+
+            if existing_session == None:
+                tsession.commit()
+                tsession.close()
+            return data_set
+        except Exception, e:
+            colortext.error('An exception occurred while adding the dataset:\n\n{0}\n\n{1}\n{2}'.format(pprint.pformat(dataset_dict), str(e), traceback.format_exc()))
+            if existing_session == None:
+                tsession.rollback()
+                tsession.close()
+            raise
+
+
+    @general_data_entry
+    def add_user_dataset(self, user_id, text_id, description, analyze_ddg, analyze_de, existing_session = None):
+        '''Adds a UserDataSet record. This is typically called before add_user_dataset_case which adds the user dataset
+           experiment records (e.g. UserDataSetExperiment or UserPPDataSetExperiment records).'''
+
         dt = datetime.datetime.now()
-        tsession = self.get_session(new_session = True)
+        tsession = existing_session or self.get_session(new_session = True)
         try:
             user_record = tsession.query(dbmodel.User).filter(dbmodel.User.ID == user_id).one()
         except:
             raise Exception('Could not retrieve a record for user "{0}".'.format(user_id))
 
-        user_data_set = get_or_create_in_transaction(tsession, dbmodel.UserDataSet, dict(
+        user_dataset_dict = {}
+        try:
+            user_dataset_dict = dict(
                 TextID = text_id,
                 UserID = user_id,
                 Description = description,
                 DatasetType = self._get_prediction_dataset_type(),
+                AnalyzeDDG = analyze_ddg,
+                AnalyzeDE = analyze_de,
                 FirstCreated = dt,
                 LastModified = dt,
-            ), missing_columns = ['ID'], variable_columns = ['FirstCreated', 'LastModified'])
-        tsession.commit()
-        tsession.close()
-        return user_data_set
+            )
+            user_data_set = get_or_create_in_transaction(tsession, dbmodel.UserDataSet, user_dataset_dict, missing_columns = ['ID'], variable_columns = ['Description', 'FirstCreated', 'LastModified'])
+
+            if existing_session == None:
+                tsession.commit()
+                tsession.close()
+            return user_data_set
+        except Exception, e:
+            colortext.error('An exception occurred while adding the user dataset:\n\n{0}\n\n{1}\n{2}'.format(pprint.pformat(user_dataset_dict), str(e), traceback.format_exc()))
+            if existing_session == None:
+                tsession.rollback()
+                tsession.close()
+            raise
 
 
+    @general_data_entry
+    def add_ddg_user_dataset(self, user_id, text_id, description, existing_session = None):
+        '''Convenience wrapper for add_user_dataset for DDG-only user datasets.'''
+        return self.add_user_dataset(user_id, text_id, description, True, False, existing_session = existing_session)
+
+
+    @general_data_entry
+    def add_de_user_dataset(self, user_id, text_id, description, existing_session = None):
+        '''Convenience wrapper for add_user_dataset for DeltaE-only user datasets.'''
+        return self.add_user_dataset(user_id, text_id, description, False, True, existing_session = existing_session)
 
 
     ################################################################################################

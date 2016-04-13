@@ -608,6 +608,61 @@ class DataImportInterface(object):
         except Exception, e:
             raise Exception('Failed to retrieve an RCSB record corresponding to "{0}".'.format(pdbfile_db_record.ID))
 
+    ####################################
+    #                                  #
+    #  Publication entry - public API  #
+    #                                  #
+    ####################################
+
+
+    # @todo: code debt: write the add_publication function (using the RIS parsing module in klab and the PubMed/DOI downloading modules).
+    a = """
+    def add_publication(self, ...):
+        @todo: write the add_publication function (using the RIS parsing module in klab and the PubMed/DOI downloading modules).
+
+        publication = get_or_create_in_transaction(tsession, dbmodel.Publication, dict(
+                    ID = 'PMID:23041932',
+                    DGUnit = 'fitness',
+                    DDGConvention = 'ProTherm',
+                    DDGProThermSignNotes = 'Note: The DeltaE values are fitness values so negative values indicate worse binding. This is therefore comparable to the ProTherm DDG convention.',
+                    DDGValuesNeedToBeChecked = False,
+                    RIS = '''TY  - JOUR
+AU  - McLaughlin Jr, Richard N.
+AU  - Poelwijk, Frank J.
+AU  - Raman, Arjun
+AU  - Gosal, Walraj S.
+AU  - Ranganathan, Rama
+TI  - The spatial architecture of protein function and adaptation
+JA  - Nature
+PY  - 2012/11/01/print
+VL  - 491
+IS  - 7422
+SP  - 138
+EP  - 142
+PB  - Nature Publishing Group, a division of Macmillan Publishers Limited. All Rights Reserved.
+SN  - 0028-0836
+UR  - http://dx.doi.org/10.1038/nature11500
+M3  - 10.1038/nature11500
+N1  - 10.1038/nature11500
+L3  - http://www.nature.com/nature/journal/v491/n7422/abs/nature11500.html#supplementary-information
+ER  - ''',
+                    DOI = '10.1038/nature11500',
+                    Title = 'The spatial architecture of protein function and adaptation',
+                    Issue = '7422',
+                    Volume = '491',
+                    StartPage = '138',
+                    EndPage = '142',
+                    PublicationDate = datetime.date(2012, 11, 1),
+                    PublicationYear = '2012',
+                    Publication = 'Nature',
+                    URL = 'http://www.nature.com/nature/journal/v491/n7422/full/nature11500.html',
+                    Notes = None,
+                    DGNotes = None,
+                    DGUnitUsedInProTherm = None,
+                    ))
+        dataset_publication_ID = publication.ID
+            """
+
 
     #################################
     #                               #

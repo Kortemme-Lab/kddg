@@ -34,7 +34,7 @@ from sqlalchemy import and_, or_, func
 
 from klab import colortext
 from klab.bio.pdb import PDB
-from klab.bio.basics import ChainMutation
+from klab.bio.basics import ChainMutation, residue_type_1to3_map
 from klab.fs.fsio import read_file, write_temp_file
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 from klab.bio.alignment import ScaffoldModelChainMapper, DecoyChainMapper
@@ -217,13 +217,26 @@ class BindingAffinityDDGInterface(ddG):
         else:
             complex_id = pp_mutagenesis['PPComplexID']
 
+        pdb_file_id, complex_chains = self.get_bound_pdb_set_details(complex_id, pdb_set_number, pdb_file_id = pdb_file_id, tsession = tsession)
+        return complex_chains
+
+
+    def get_bound_pdb_set_details(self, complex_id, pdb_set_number, pdb_file_id = None, tsession = None):
+        '''Returns the pdb_id and complex partner definitions (left PDB chains, right PDB chains) for complexes where all chains share the same PDB structure.'''
+
+        tsession = tsession or self.get_session() # do not create a new session
+
+        assert(complex_id != None and pdb_set_number != None)
         complex_chains = dict(L = [], R = [])
         for c in tsession.execute('''SELECT * FROM PPIPDBPartnerChain WHERE PPComplexID=:complex_id AND SetNumber=:pdb_set_number ORDER BY ChainIndex''', dict(complex_id = complex_id, pdb_set_number = pdb_set_number)):
-            assert(c['PDBFileID'] == pdb_file_id) # complex structure check
+            if pdb_file_id:
+                assert(c['PDBFileID'] == pdb_file_id) # complex structure check
+            else:
+                pdb_file_id = c['PDBFileID']
             complex_chains[c['Side']].append(c['Chain'])
         assert(complex_chains['L'] and complex_chains['R'])
         assert(len(set(complex_chains['L']).intersection(set(complex_chains['R']))) == 0) # in one unbound case, the same chain appears twice on one side (2CLR_DE|1CD8_AA, may be an error since this was published as 1CD8_AB but 1CD8 has no chain B) but it seems reasonable to assume that a chain should only appear on one side
-        return complex_chains
+        return pdb_file_id, complex_chains
 
 
     @informational_pdb
@@ -2186,6 +2199,152 @@ class BindingAffinityDDGInterface(ddG):
             raise
 
 
+    def lookup_pdb_set(self, tsession, passed_pdb_set, allow_partial_matches = True, complex_id = None):
+        '''Takes a dict {'L' -> List(Tuple(PDB ID, Chain ID)), 'R' -> List(Tuple(PDB ID, Chain ID))} and returns all PDB
+           sets (complex_id, set_number, reverse_match) which have either partial or exact matches depending on
+           whether allow_partial_matches is True or False respectively. If reverse_match is True it means that the
+           partner definitions are reversed (left partner = right partner,...).
+
+           The matching is symmetric over the partner definitions i.e. if L1 matches R2 and R1 matches L2 then we consider this a match.
+           If complex_id is specified then we restrict matches to that particular ID (PPComplex.ID). Otherwise, all definitions
+           in the database are considered.
+
+           If allow_partial_matches is True then we return hits if there is at least one common chain in each partner.
+           Otherwise, we return hits if there are exact matches (modulo chain ordering)
+           '''
+
+        defined_sets = {}
+        if complex_id != None:
+            # Consider sets for a specific complex
+            defined_sets[complex_id] = {}
+            for r in tsession.query(dbmodel.PPIPDBPartnerChain).filter(dbmodel.PPIPDBPartnerChain.PPComplexID == complex_id):
+                set_number = r.SetNumber
+                defined_sets[complex_id][set_number] = defined_sets[complex_id].get(set_number, {'L' : [], 'R' : []})
+                defined_sets[complex_id][set_number][r.Side].append((r.PDBFileID, r.Chain))
+        else:
+            # Consider all sets
+            for r in tsession.query(dbmodel.PPIPDBPartnerChain):
+                set_number = r.SetNumber
+                c_id = r.PPComplexID
+                defined_sets[c_id] = defined_sets.get(c_id, {})
+                defined_sets[c_id][set_number] = defined_sets[c_id].get(set_number, {'L' : [], 'R' : []})
+                defined_sets[c_id][set_number][r.Side].append((r.PDBFileID, r.Chain))
+
+        set_number_hits = set()
+        for c_id, set_definitions in sorted(defined_sets.iteritems()):
+            for set_number, set_partners in sorted(set_definitions.iteritems()):
+                # Check for matches against the stored PDB sets. Check for the symmetric definition as well
+                if allow_partial_matches:
+                    # Partial matching
+                    if set(passed_pdb_set['L']).intersection(set_partners['L']) and set(passed_pdb_set['R']).intersection(set_partners['R']):
+                        set_number_hits.add((c_id, set_number, False))
+                    if set(passed_pdb_set['L']).intersection(set_partners['R']) and set(passed_pdb_set['R']).intersection(set_partners['L']):
+                        set_number_hits.add((c_id, set_number, True))
+                else:
+                    # Exact matching
+                    if (sorted(passed_pdb_set['L']) == sorted(set_partners['L'])) and (sorted(passed_pdb_set['R']) == sorted(set_partners['R'])):
+                        set_number_hits.add((c_id, set_number, False))
+                    if (sorted(passed_pdb_set['L']) == sorted(set_partners['R'])) and (sorted(passed_pdb_set['R']) == sorted(set_partners['L'])):
+                        set_number_hits.add((c_id, set_number, True))
+
+        if len(set([t[2] for t in set_number_hits])) > 1:
+            raise colortext.Exception('WARNING: the complex definition has at least two PDB sets where the left and right partners are in the reverse direction. This indicates a redundancy in the database.')
+
+        return sorted(set_number_hits)
+
+
+    def lookup_complex_by_details(self, tsession, complex_details, allow_partial_matches = True):
+        '''Takes a complex_details dict (as defined in add_complex) for a bound complex (i.e. a single PDB ID) and returns
+           the corresponding complex(es) and PDB set details if the defined complex exists in the database.
+
+           There are two paths. First, we check whether a complex exists with an exact match on all fields in the PPComplex
+           table. This case is probably only likely in the case where the same complex definition is being added repeatedly
+           e.g. if a data import script is being run over and over again. Next, we check whether a complex exists based on
+           the PDB set i.e. whether a complex using the same PDB chains exists in the database.
+
+           Note that this function will NOT detect cases where the same complex is being used as an existing complex in the
+           database but where there are differences in the partner names and a different PDB file is being specified. Therefore,
+           care must still be taken when adding complexes to the database to ensure that we do not store duplicate definitions.
+
+           This function is mainly useful as a helper function for add_complex to avoid hitting fail branches when force == False
+           in that function. It results in cleaner handling of attempts to re-add existing data.
+
+           Note: We ignore the ChainIndex field in PPIPDBPartnerChain - i.e. we treat partner definitions as bags, not sequences
+
+           Returns: a dict mapping:
+                complex_id ->  Dict(reverse_match -> Boolean, # reverse_match is None, True, or False and indicates whether or not the matched complex names (L, R) are in the same order
+                                    set_numbers -> List(dict(set_number -> set_number, reverse_match = Boolean))) # reverse_match here is True or False and indicates whether or not the matched PDB sets (L, R) are in the same order
+
+        '''
+
+        # todo: this part of the function currently only allows bound complexes as there is a single structure_id parameter
+        # todo: this is the part of the code to change to allow the function to handle unbound complexes
+        passed_pdb_set = dict(
+            L = sorted([(complex_details['structure_id'], c) for c in complex_details['LChains']]),
+            R = sorted([(complex_details['structure_id'], c) for c in complex_details['RChains']])
+        )
+
+        complex_id = None
+        complex_reverse_match = None
+
+        # Try for an exact match
+        # This branch is only useful when the user is adding the same definition multiple times i.e. the same names for the complex.
+        # This is mostly hit when import scripts are run multiple times.
+        complex_record = get_or_create_in_transaction(tsession, dbmodel.PPComplex, complex_details, variable_columns = ['ID'], only_use_supplied_columns = True, read_only = True)
+        if complex_record:
+            results = [r for r in tsession.query(dbmodel.PPComplex).filter(and_(dbmodel.PPComplex.LName == complex_details['LName'], dbmodel.PPComplex.RName == complex_details['RName']))]
+            results += [r for r in tsession.query(dbmodel.PPComplex).filter(and_(dbmodel.PPComplex.LShortName == complex_details['LShortName'], dbmodel.PPComplex.RShortName == complex_details['RShortName']))]
+            results += [r for r in tsession.query(dbmodel.PPComplex).filter(and_(dbmodel.PPComplex.LHTMLName == complex_details['LHTMLName'], dbmodel.PPComplex.RHTMLName == complex_details['RHTMLName']))]
+            complex_ids = sorted(set([r.ID for r in results]))
+            if complex_ids:
+                if not len(complex_ids) == 1:
+                    raise colortext.Exception('WARNING: Multiple complex definitions (PPComplex.ID = {0}) share the same partner names. This indicates a redundancy in the database.'.format(', '.join(complex_ids)))
+                complex_id = complex_ids[0]
+                complex_record = tsession.query(dbmodel.PPComplex).filter(dbmodel.PPComplex.ID == complex_id).one()
+                complex_reverse_match = False
+
+            results = [r for r in tsession.query(dbmodel.PPComplex).filter(and_(dbmodel.PPComplex.LName == complex_details['RName'], dbmodel.PPComplex.RName == complex_details['LName']))]
+            results += [r for r in tsession.query(dbmodel.PPComplex).filter(and_(dbmodel.PPComplex.LShortName == complex_details['RShortName'], dbmodel.PPComplex.RShortName == complex_details['LShortName']))]
+            results += [r for r in tsession.query(dbmodel.PPComplex).filter(and_(dbmodel.PPComplex.LHTMLName == complex_details['RHTMLName'], dbmodel.PPComplex.LHTMLName == complex_details['LHTMLName']))]
+            complex_ids = sorted(set([r.ID for r in results]))
+            if complex_ids:
+                if (complex_id != None) or (len(complex_ids) != 1):
+                    raise colortext.Exception('WARNING: Multiple complex definitions (PPComplex.ID = {0}) share the same partner names. This indicates a redundancy in the database.'.format(', '.join(complex_ids)))
+                complex_id = complex_ids[0]
+                complex_record = tsession.query(dbmodel.PPComplex).filter(dbmodel.PPComplex.ID == complex_id).one()
+                complex_reverse_match = True
+
+        if complex_record:
+            # We found an associated PPComplex record. Now we check to see whether an associated PPIPDBSet exists
+            complex_id = complex_record.ID
+
+            # todo: this part of the function allows unbound complexes and does not need to be updated
+            set_number_hits = self.lookup_pdb_set(tsession, passed_pdb_set, allow_partial_matches = allow_partial_matches, complex_id = complex_id)
+
+            # One exact hit for the complex definition with one or many PDB sets
+            l = []
+            for h in set_number_hits:
+                assert(h[0] == complex_id)
+                set_number = h[1]
+                reverse_match = h[2]
+                assert(complex_reverse_match == reverse_match)
+                l.append(dict(set_number = set_number, reverse_match = reverse_match))
+            return {complex_id : dict(reverse_match = complex_reverse_match, set_numbers = l)}
+        else:
+            # The complex did not exactly match a PPComplex record however there may simply be differences in the partner names.
+            # We proceed by looking for a match based on the PDB chains by checking all PDB sets.
+            set_number_hits = self.lookup_pdb_set(tsession, passed_pdb_set, allow_partial_matches = allow_partial_matches)
+            results_by_complex = {}
+            for h in set_number_hits:
+                complex_id = h[0]
+                set_number = h[1]
+                reverse_match = h[2]
+                results_by_complex[complex_id] = results_by_complex.get(complex_id, dict(reverse_match = None, set_numbers = []))
+                results_by_complex[complex_id]['set_numbers'].append(dict(set_number = set_number, reverse_match = reverse_match))
+            return results_by_complex
+        return None
+
+
     @ppi_data_entry
     def add_complex(self, complex_details, keywords = [], force = False, debug = False, tsession = None):
         '''Add a complex to the database using a defined dict structure.
@@ -2199,10 +2358,14 @@ class BindingAffinityDDGInterface(ddG):
         :param debug: If debug is set to True then the transaction used to insert the complex into the database will be
                       rolled back and a message stating that the insertion would have been successful is returned in the
                       return dict.
-        :return: On successful import, the dict {success = True, ComplexID -> Long, SetNumber -> Long} corresponding to
-                 the database PPIPDBSet primary key is returned. If a similar complex is detected and force is False then
-                 a dict {success = False, debug = debug, message -> String} will be returned instead. On error, a dict
-                 {success = False, error -> String} is returned.
+        :return: On successful import, the dict
+                   {success = True, ComplexID -> Long, SetNumber -> Long, ReverseMatch -> Boolean}
+                 corresponding to the database PPIPDBSet primary key is returned. ReverseMatch is True if the complex was
+                 found in the database with the same partner ordering (Left = Left, Right = Right) and False otherwise.
+                 If a similar complex is detected and force is False then a dict
+                    {success = False, ComplexID -> Long, SetNumber -> Long, ReverseMatch -> Boolean, message -> String}
+                 will be returned instead.
+                 On error, a dict {success = False, error -> String} is returned.
 
         The database uses Unicode to encode the strings, allowing us to use e.g. Greek characters
         For this reason, please contain all structure definitions in a file encoded as Unicode. On Linux, you can add the
@@ -2260,6 +2423,43 @@ class BindingAffinityDDGInterface(ddG):
         existing_session = not(not(tsession))
         tsession = tsession or self.importer.get_session(new_session = True, utf = True)
 
+        # Search for exact matches first, then partial matches
+        pp_complex = None
+        reverse_match = None
+        for match_param in [False, True]:
+            existing_complexes = self.lookup_complex_by_details(tsession, complex_details, allow_partial_matches = match_param)
+            if existing_complexes:
+                if len(existing_complexes) == 1:
+                    existing_complex_id = existing_complexes.keys()[0]
+                    pp_complex = tsession.query(dbmodel.PPComplex).filter(dbmodel.PPComplex.ID == existing_complex_id)
+                    if 'ComplexID' in complex_details:
+                        if complex_details['ComplexID'] != pp_complex.ID:
+                            raise colortext.Exception('ComplexID {0} was passed but complex #{1} was found which seems to match the complex definition.'.format(complex_details['ComplexID'], pp_complex.ID))
+                    reverse_match = existing_complexes[existing_complex_id]['reverse_match']
+                    existing_pdb_sets = existing_complexes[existing_complex_id]['set_numbers']
+                    if existing_pdb_sets:
+                        if len(existing_pdb_sets) == 1:
+                            existing_pdb_set = existing_pdb_sets[0]
+                            msg = None
+                            if match_param == True:
+                                msg = 'A match was found on the partner/PDB set definition but the complex fields had different values e.g. different names of each partner.'
+                                if not force:
+                                    return dict(success = False, message = msg, ComplexID = existing_complex_id, SetNumber = existing_pdb_set['set_number'], ReverseMatch = existing_pdb_set['reverse_match'])
+                                else:
+                                    colortext.warning(msg)
+                                    return dict(success = True, message = msg, ComplexID = existing_complex_id, SetNumber = existing_pdb_set['set_number'], ReverseMatch = existing_pdb_set['reverse_match'])
+                            return dict(success = True, ComplexID = existing_complex_id, SetNumber = existing_pdb_set['set_number'], ReverseMatch = existing_pdb_set['reverse_match'])
+                        else:
+                            raise colortext.Exception('The complex definition exists in the database but multiple PDB sets / partner definitions match the passed parameters. Check this case manually.')
+                    else:
+                        # If force is not passed, raise an exception. Else, cascade into the new partner definition creation below.
+                        if not force:
+                            raise colortext.Exception('The complex definition exists in the database although no PDB sets / partner definitions corresponding EXACTLY to the partner definition were found. Check this case manually to see whether existing definitions would suit better than the passed definition (else, the force parameter can be passed to force creation of a new definition).')
+                else:
+                    raise colortext.Exception('Multiple complex definitions exists in the database which match the passed complex definition. Check this case manually.')
+
+        # We have not found an exact match or (if force == True) a similar match has been found.
+        # If force is False and a similar complex was found, we should have raise an exception above.
         try:
             assert('DatabaseKeys' not in complex_details) # todo: write this code
 
@@ -2278,38 +2478,45 @@ class BindingAffinityDDGInterface(ddG):
                 raise Exception('The structure "{0}" does not exist in the database.'.format(structure_id))
 
             # Add the PPComplex record
-            pp_complex = None
-            if 'ComplexID' in complex_details:
-                expected_keys.append('ComplexID')
-                if (('PDBComplexNotes' in complex_details) and len(complex_details) != 5) or (('PDBComplexNotes' not in complex_details) and (len(complex_details) != 4)):
-                    raise Exception('As the ComplexID was specified, the only expected fields were "{0}" but "{1}" were passed.'.format('", "'.join(sorted(expected_keys)), '", "'.join(passed_keys)))
-                pp_complex = tsession.query(dbmodel.PPComplex).filter(dbmodel.PPComplex.ID == complex_details['ComplexID']).one()
+            if pp_complex:
+                if reverse_match == True:
+                    raise Exception('Write this case. We should add the passed chains in the opposite order (L = R, R = L) since the found complex has the opposite partner ordering.')
+                else:
+                    assert(force)
+                    assert(reverse_match == False) # i.e. it is not equal to None
             else:
-                keywords = keywords + [complex_details['LName'], complex_details['LShortName'], complex_details['LHTMLName'], complex_details['RName'], complex_details['RShortName'], complex_details['RHTMLName']]
-                if complex_details.get('AdditionalKeywords'):
-                    keywords.extend(complex_details['AdditionalKeywords'])
+                pp_complex = None
+                if 'ComplexID' in complex_details:
+                    expected_keys.append('ComplexID')
+                    if (('PDBComplexNotes' in complex_details) and len(complex_details) != 5) or (('PDBComplexNotes' not in complex_details) and (len(complex_details) != 4)):
+                        raise Exception('As the ComplexID was specified, the only expected fields were "{0}" but "{1}" were passed.'.format('", "'.join(sorted(expected_keys)), '", "'.join(passed_keys)))
+                    pp_complex = tsession.query(dbmodel.PPComplex).filter(dbmodel.PPComplex.ID == complex_details['ComplexID']).one()
+                else:
+                    keywords = keywords + [complex_details['LName'], complex_details['LShortName'], complex_details['LHTMLName'], complex_details['RName'], complex_details['RShortName'], complex_details['RHTMLName']]
+                    if complex_details.get('AdditionalKeywords'):
+                        keywords.extend(complex_details['AdditionalKeywords'])
 
-                possible_matches = self.find_complex([structure_id], keywords, tsession = tsession)
-                if possible_matches:
-                    if not force:
-                        return dict(success = False, debug = debug, error = 'Complexes exist in the database which may be related. Please check whether any of these complexes match your case.', possible_matches = possible_matches)
-                    colortext.warning('Complexes exist in the database which may be related. Continuing to add a new complex regardless.')
+                    possible_matches = self.find_complex([structure_id], keywords, tsession = tsession)
+                    if possible_matches:
+                        if not force:
+                            return dict(success = False, debug = debug, error = 'Complexes exist in the database which may be related. Please check whether any of these complexes match your case.', possible_matches = possible_matches)
+                        colortext.warning('Complexes exist in the database which may be related. Continuing to add a new complex regardless.')
 
-                pp_complex = get_or_create_in_transaction(tsession, dbmodel.PPComplex, dict(
-                    LName = complex_details['LName'],
-                    LShortName = complex_details['LShortName'],
-                    LHTMLName = complex_details['LHTMLName'],
-                    RName = complex_details['RName'],
-                    RShortName = complex_details['RShortName'],
-                    RHTMLName = complex_details['RHTMLName'],
-                    FunctionalClassID = complex_details['FunctionalClassID'],
-                    PPDBMFunctionalClassID = complex_details['PPDBMFunctionalClassID'],
-                    PPDBMDifficulty = complex_details['PPDBMDifficulty'],
-                    IsWildType = complex_details['IsWildType'],
-                    WildTypeComplexID = complex_details['WildTypeComplexID'],
-                    Notes = complex_details['Notes'],
-                    Warnings = complex_details['Warnings'],
-                ), missing_columns = ['ID'])
+                    pp_complex = get_or_create_in_transaction(tsession, dbmodel.PPComplex, dict(
+                        LName = complex_details['LName'],
+                        LShortName = complex_details['LShortName'],
+                        LHTMLName = complex_details['LHTMLName'],
+                        RName = complex_details['RName'],
+                        RShortName = complex_details['RShortName'],
+                        RHTMLName = complex_details['RHTMLName'],
+                        FunctionalClassID = complex_details['FunctionalClassID'],
+                        PPDBMFunctionalClassID = complex_details['PPDBMFunctionalClassID'],
+                        PPDBMDifficulty = complex_details['PPDBMDifficulty'],
+                        IsWildType = complex_details['IsWildType'],
+                        WildTypeComplexID = complex_details['WildTypeComplexID'],
+                        Notes = complex_details['Notes'],
+                        Warnings = complex_details['Warnings'],
+                    ), missing_columns = ['ID'])
 
             # Search for an existing PDB set. Read the current definitions, treating them as bags then sorting lexically
             pdb_sets = {}
@@ -2332,7 +2539,7 @@ class BindingAffinityDDGInterface(ddG):
                     matching_set, reverse_match = True, True
                 if matching_set:
                     pdb_set = tsession.query(dbmodel.PPIPDBSet).filter(and_(dbmodel.PPIPDBSet.PPComplexID == pp_complex.ID, dbmodel.PPIPDBSet.SetNumber == set_number)).one()
-                    return dict(success = True, reverse_match = reverse_match, PPIPDBSet = pdb_set)
+                    return dict(success = True, ReverseMatch = reverse_match, ComplexID = pp_complex.ID, SetNumber = set_number) # this used to also return PPIPDBSet = pdb_set
 
             # No match. Create a new set by adding a PPIPDBSet record.
             if pdb_sets:
@@ -2368,7 +2575,7 @@ class BindingAffinityDDGInterface(ddG):
                     chain_index += 1
 
             # Return the API response
-            api_response = dict(success = True, reverse_match = False, PPIPDBSet = pdb_set_object)
+            api_response = dict(success = True, ReverseMatch = False, PPIPDBSet = pdb_set_object, ComplexID = pp_complex.ID, SetNumber = new_set_number) # this used to also return PPIPDBSet = pdb_set_object
             if not(existing_session):
                 if debug:
                     api_response = dict(success = False, debug = debug, error = 'Debug call - rolling back the transaction.')
@@ -2446,10 +2653,15 @@ class BindingAffinityDDGInterface(ddG):
         assert(len(set_number) == 1)
         set_number = set_number.pop()
 
+        is_wildtype = 1
+        if udc['Mutations']:
+            is_wildtype = 0
+
         # 1. Create the mutagenesis record
         pp_mutagenesis = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesis, dict(
                     PPComplexID = udc['Mutagenesis']['PPComplexID'],
                     SKEMPI_KEY = udc['Mutagenesis']['RecognizableString'],
+                    WildType = is_wildtype,
                 ), missing_columns = ['ID'])
 
         # 2. Create the PPMutagenesisMutation and PPMutagenesisPDBMutation records
@@ -2523,3 +2735,264 @@ class BindingAffinityDDGInterface(ddG):
             colortext.wgreen('.')
         else:
             colortext.wcyan('.')
+
+
+    @general_data_entry
+    def add_de_dataset(self, user_id, long_id, short_id, description, ddg_convention, dataset_creation_start_date = None, dataset_creation_end_date = None, publication_ids = [], existing_session = None):
+        '''Convenience wrapper for add_dataset for DeltaE-only datasets.'''
+        return self.add_dataset(user_id, long_id, short_id, description, False, False, True, ddg_convention, dataset_creation_start_date = dataset_creation_start_date, dataset_creation_end_date = dataset_creation_end_date, publication_ids = publication_ids, existing_session = existing_session)
+
+
+    @ppi_data_entry
+    def add_ssm_dataset(self, dataset_short_id, user_dataset_id, complex_id, set_number, mutations_dataframe, existing_session = None, debug = True):
+        '''Import SSM data from an RCSB PDB file. Non-RCSB files are not currently handled. Some data (DataSet and UserDataSet)
+           must be set up before calling this function.
+
+        :param dataset_short_id: The short ID of the existing dataset in the database (DataSet.ShortID)
+        :param user_dataset_id: The ID of the existing user dataset in the database (UserDataSet.ID)
+        :param pp_complex_id: The complex ID used in the database (PPComplex.ID). This will be used to add the structure to the database.
+        :param set_number: The set_number of the complex used in the database (PPIPDBSet.SetNumber). This is used to determine the choice of chains in predictions.
+        :param mutations_dataframe: A pandas dataframe in the intermediate input format described below.
+        :param debug: If True then the transaction is rolled back. This is set to True by default to reduce data-entry errors i.e. you should do a test-run of add_ssm_dataset first and then do a run with debug = False.
+        :return: Dict {success : <True/False>, DataSetID : dataset_id, [errors : <list of error strings if failed>]}
+
+        This function requires the complex, DataSet, and UserDataSet records to have been created. Those records can be added using
+        the appropriate functions e.g.
+
+            ppi_api = get_ppi_interface(read_file('pw'))
+
+            # If the complex structure has not been added to the database:
+            ppi_api.importer.add_pdb_from_rcsb(pdb_id, trust_database_content = True)
+
+            # If the complex has not been added to the database:
+            complex_ids = ppi_api.search_complexes_by_pdb_id(pdb_id)
+            if complex_ids:
+                colortext.warning('The PDB file {0} has associated complexes: {1}'.format(pdb_id, ', '.join(map(str, complex_ids))))
+            api_response = ppi_api.add_complex(json.loads(read_file('my_complex.json')[path][to][complex_definition])) # The structure of the JSON file is described in the docstring for add_complex
+            if not api_response['success']:
+                raise Exception(api_response['error'])
+            pp_complex_id, set_number = api_response['ComplexID'], api_response['SetNumber']
+
+            # else if the complex already exists in the database:
+            pp_complex_id, set_number = ..., ...
+
+            # Add dataset publications
+            publication_ids = [
+                ppi_api.add_publication(...).ID, # currently not implemented
+                ...
+                ppi_api.add_publication(...).ID, # currently not implemented
+            ]
+
+            # Add the dataset and user dataset records
+            dataset = ppi_api.add_de_dataset('oconchus', 'SSM_Psd95-CRIPT_Rama_10.1038/nature11500', 'Psd95-CRIPT', 'description...', ddg_convention, dataset_creation_start_date = datetime.date(...), dataset_creation_end_date = datetime.date(...), publication_ids = [...])
+            user_dataset = ppi_api.add_de_user_dataset('oconchus', 'SSM-Psd95-CRIPT', '...')
+
+            # Finally, import the SSM dataset
+            add_ssm_dataset(dataset.ShortID, user_dataset.ID, pp_complex_id, set_number, mutations_dataframe)
+
+        @todo: write the add_publication function (using the RIS parsing module in klab and the PubMed/DOI downloading modules).
+
+        mutations_dataframe should be a complete (either a value or null at all positions in the m x n array) pandas
+        dataframe with a standardized structure.
+        This simplifies the data import. The dataframe should be indexed/row-indexed by residue type and column-indexed
+        by a string chain ID + <underscore> + residue ID without spaces e.g. 'A_311' is residue ' 311 ' of chain A and 'A_312B' is residue ' 312B' of chain A.
+        We include an underscore in the format to reduce confusion for cases where the PDB chain ID is an integer.
+        For example, if the input file is a TSV formatted like:
+
+            Pos/aa	A_311	A_312	...
+            A	0.131	-0.42	...
+            C	0.413	-0.022	...
+            ...
+
+        then a valid mutations_dataframe can be constructed via
+
+            mutations_dataframe = pandas.read_csv(ssm_input_data_path, sep = '\t', header = 0, index_col = 0)
+
+        '''
+
+        tsession = existing_session or self.get_session(new_session = True, utf = False)
+
+        # Sanity checks
+        assert(complex_id != None and set_number != None)
+        dataset_id = None
+        try:
+            dataset_id = tsession.query(dbmodel.DataSet).filter(dbmodel.DataSet.ShortID == dataset_short_id).one().ID
+        except:
+            raise Exception('No dataset with ShortID "{0}" exists in the database.'.format(dataset_short_id))
+        try:
+            tsession.query(dbmodel.UserDataSet).filter(dbmodel.UserDataSet.ID== user_dataset_id).one()
+        except:
+            raise Exception('No user dataset with TextID "{0}" exists in the database.'.format(user_dataset_id))
+
+        # Retrieve the mapping from chain -> residue ID -> wildtype residue
+        pdb_id, complex_chains = self.get_bound_pdb_set_details(complex_id, set_number)
+        chain_wt_residue_by_pos = self.get_pdb_residues_by_pos(pdb_id, strip_res_ids = True)
+
+        # Sanity checks on column indices
+        chain_ids = set()
+        for v in mutations_dataframe.columns.values:
+            error_msg = 'The column index "{0}" does not have the expected format: <chain>_<residue id> e.g. "A_123".'.format(v)
+            if v.find('_') == -1 or len(v.split('_')) != 2:
+                raise colortext.Exception(error_msg)
+            tokens = v.split('_')
+            chain_id = tokens[0]
+            residue_id = tokens[1]
+            if len(chain_id) != 1 or (not(residue_id.strip().isdigit()) and not(residue_id.strip()[:-1].isdigit())):
+                raise colortext.Exception(error_msg)
+            chain_ids.add(chain_id)
+
+        # Sanity checks on row indices
+        mut_aas = sorted(mutations_dataframe.index)
+        expected_mut_aas = set(residue_type_1to3_map.keys())
+        expected_mut_aas.remove('X')
+        assert(len(expected_mut_aas) == 20)
+        if set(mut_aas).difference(expected_mut_aas):
+            raise colortext.Exception('The row indices contain values which are non canonical residue types: "{0}".'.format('", "'.join(sorted(set(mut_aas).difference(expected_mut_aas)))))
+
+        # Extract the data into a list of point mutations, iterating by column/position then row/AA
+        # Add a single wildtype PPMutagenesis record (essentially a Complex with no corresponding mutation records)
+        # For all single PDB mutations in the list
+        #     if not wildtype
+        #        add a PPMutagenesis record and corresponding mutation records
+        #     add a PPIDataSetDE record to represent the original data (experimental data) in the database
+        #     add a UserPPDataSetExperiment record to be used to create prediction runs
+        #     add a UserPPAnalysisSetDE record to be used when analyzing prediction runs against the experimental data
+        #
+        # Note that there will be one UserPPAnalysisSetDE record for each mutant but only one record for wildtype even though
+        # the wildtype sequence has exactly one corresponding DeltaE for each position. There will be exactly one UserPPAnalysisSetDE
+        # record per mutant and one wildtype record for each position however all of the wildtype UserPPAnalysisSetDE records
+        # will be associated to the sole wildtype UserPPAnalysisSetDE record.
+        colortext.warning('Adding data for complex #{0}, dataset "{1}", user dataset #{2}.'.format(complex_id, dataset_id, user_dataset_id))
+        record_number = 0
+        mut_aas = list(mutations_dataframe.index)
+        res_ids = list(mutations_dataframe.columns.values)
+        try:
+            # Add a PPMutagenesis record with no mutation records i.e. the wildtype/null 'mutagenesis'
+            pp_wt_mutagenesis = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesis, dict(
+                PPComplexID = complex_id,
+                SKEMPI_KEY = 'SSM {0}| WildType'.format(pdb_id), # todo: this format is ambiguous if we start to store multiple SSM datasets with different choices of bound partners. We should ideally check all PPMutagenesisMutation/PPMutagenesisPDBMutation records on the complex for a match. At present (2016), it is unlikely that we will have many SSM datasets for consideration, never mind overlapping sets.
+                WildType = 1,
+            ), missing_columns = ['ID',])
+            pp_wt_mutagenesis_id = pp_wt_mutagenesis.ID
+            first_wt_record_number = None
+            for chain_res_id in res_ids:
+
+                tokens = chain_res_id.split('_')
+                assert(len(tokens) == 2)
+                chain_id = tokens[0]
+                assert(len(chain_id) == 1)
+                assert(chain_id in chain_wt_residue_by_pos)
+                res_id = tokens[1]
+                assert(res_id in chain_wt_residue_by_pos[chain_id])
+                wt_aa = chain_wt_residue_by_pos[chain_id][res_id]
+                for mut_aa in mut_aas:
+                    record_number += 1
+                    if record_number % 10 == 0:
+                        colortext.wgreen('.')
+                        sys.stdout.flush()
+
+                    # Add the PPMutagenesis records for mutant cases
+                    if mut_aa == wt_aa:
+                        ppi_dataset_de_key = 'SSM {0}| WildType'.format(pdb_id)
+                        if first_wt_record_number == None:
+                            first_wt_record_number = record_number
+                        analysis_set_record_number = first_wt_record_number
+                        pp_mutagenesis_id = pp_wt_mutagenesis_id
+                    else:
+                        ppi_dataset_de_key = 'SSM {0}| {1} {2} {3} {4}'.format(pdb_id, chain_id, wt_aa, res_id, mut_aa) # SKEMPI_KEY is a bad name for a field!,
+                        analysis_set_record_number = record_number
+
+                        # Add a PPMutagenesis record with no mutation records i.e. the wildtype/null 'mutagenesis'
+                        pp_mutagenesis = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesis, dict(
+                            PPComplexID = complex_id,
+                            SKEMPI_KEY = 'SSM {0}| {1} {2} {3} {4}'.format(pdb_id, chain_id, wt_aa, res_id, mut_aa), # SKEMPI_KEY is a bad name for a field!,
+                            WildType = 0,
+                        ), missing_columns = ['ID'])
+                        pp_mutagenesis_id = pp_mutagenesis.ID
+                        #pprint.pprint(pp_mutagenesis.__dict__)
+
+                        pp_mutagenesis_mutation = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesisMutation, dict(
+                            PPMutagenesisID = pp_mutagenesis_id,
+                            RecordKey = '{0} {1}{2}{3}'.format(chain_id, wt_aa, res_id, mut_aa),
+                            ProteinID = None,
+                            ResidueIndex = None,
+                            WildTypeAA = wt_aa,
+                            MutantAA = mut_aa,
+                        ), missing_columns = ['ID',])
+                        pp_mutagenesis_mutation_id = pp_mutagenesis_mutation.ID
+                        #pprint.pprint(pp_mutagenesis_mutation.__dict__)
+
+                        pp_mutagenesis_pdb_mutation = get_or_create_in_transaction(tsession, dbmodel.PPMutagenesisPDBMutation, dict(
+                            PPMutagenesisID = pp_mutagenesis_id,
+                            PPMutagenesisMutationID = pp_mutagenesis_mutation_id,
+                            PPComplexID = complex_id,
+                            SetNumber = set_number,
+                            PDBFileID = pdb_id,
+                            Chain = chain_id,
+                            WildTypeAA = wt_aa,
+                            ResidueID = PDB.ResidueID2String(res_id),
+                            MutantAA = mut_aa,
+                        ), missing_columns = ['ID',])
+                        pp_mutagenesis_pdb_mutation_id = pp_mutagenesis_pdb_mutation.ID
+                        #pprint.pprint(pp_mutagenesis_pdb_mutation.__dict__)
+
+                    # Add a DeltaE measurement record (PPIDataSetDE)
+                    ppi_dataset_de = get_or_create_in_transaction(tsession, dbmodel.PPIDataSetDE, dict(
+                        SecondaryID = ppi_dataset_de_key, # optional field
+                        DataSetID = dataset_id,
+                        Section = 'Supplementary Information II',
+                        RecordNumber = record_number,
+                        DE = mutations_dataframe[chain_res_id][mut_aa],
+                        DEUnit = 'DeltaE (see DataSet.Description)',
+                        PublishedError = None,
+                        NumberOfMeasurements = None,
+                        PPMutagenesisID = pp_mutagenesis_id,
+                        PPComplexID = complex_id,
+                        SetNumber = set_number,
+                        PublishedPDBFileID = pdb_id,
+                        PossibleError = False,
+                        Remarks = None,
+                        IsABadEntry = 0,
+                        AddedBy = 'oconchus',
+                        AddedDate = datetime.datetime.now(),
+                        LastModifiedBy = 'oconchus',
+                        LastModifiedDate = datetime.datetime.now(),
+                    ), missing_columns = ['ID',], variable_columns = ['AddedDate', 'LastModifiedDate'])
+                    ppi_dataset_de_id = ppi_dataset_de.ID
+
+                    # Add a record (UserPPDataSetExperiment) to be included in the associated prediction run
+                    user_pp_dataset_experiment = get_or_create_in_transaction(tsession, dbmodel.UserPPDataSetExperiment, dict(
+                        UserDataSetID = user_dataset_id,
+                        PPMutagenesisID = pp_mutagenesis_id,
+                        PDBFileID = pdb_id,
+                        PPComplexID = complex_id,
+                        SetNumber = set_number,
+                        IsComplex = 1
+                    ), missing_columns = ['ID',])
+                    user_pp_dataset_experiment_id = user_pp_dataset_experiment.ID
+
+                    # dd a record (UserPPAnalysisSetDE) to be used in the analysis, linking the UserPPDataSetExperiment with the DeltaE (PPIDataSetDE) record
+                    user_pp_analysis_set_de = get_or_create_in_transaction(tsession, dbmodel.UserPPAnalysisSetDE, dict(
+                        Subset = 'Psd95-Cript',
+                        Section = 'McLaughlin2012',
+                        RecordNumber = analysis_set_record_number,
+                        UserPPDataSetExperimentID = user_pp_dataset_experiment_id,
+                        PPIDataSetDEID = ppi_dataset_de_id,
+                        PPMutagenesisID = pp_mutagenesis_id,
+                    ), missing_columns = ['ID',])
+                    user_pp_analysis_set_de_id = user_pp_analysis_set_de.ID
+
+            if debug:
+                colortext.warning('\nDEBUG MODE IS SET. THE CODE RAN SUCCESSFULLY BUT THE DATASET WILL NOT BE ADDED. RE-RUN THIS FUNCTION WITH debug = False.')
+                tsession.rollback()
+                tsession.close()
+            else:
+                tsession.commit()
+                tsession.close()
+        except Exception, e:
+            tsession.rollback()
+            tsession.close()
+            colortext.warning(traceback.format_exc())
+            raise colortext.Exception(str(e))
+
+
