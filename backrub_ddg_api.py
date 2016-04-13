@@ -133,22 +133,26 @@ class BackrubDDGInterface(DDGMonomerInterface):
         output_dirs_to_zip = len_output_dirs[sorted( len_output_dirs.keys() )[-1]] # Take only folders with the most structures for zipping
         self.parse_db3_files_to_process(db3_files_to_process, available_db3_files, output_log_files, score_method_ids, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field, output_dirs_to_zip = output_dirs_to_zip )
 
-    def parse_db3_files_to_process(self, db3_files_to_process, available_db3_files, output_log_files, score_method_id, prediction_structure_scores_table = None, prediction_id_field = None, output_dirs_to_zip = [], use_multiprocessing = True):
+    def parse_db3_files_to_process(self, db3_files_to_process, available_db3_files, output_log_files, score_method_id, prediction_structure_scores_table = None, prediction_id_field = None, output_dirs_to_zip = [], use_multiprocessing = True, verbose = True):
         if not prediction_structure_scores_table:
             prediction_structure_scores_table = self.prediction_structure_scores_table
         if not prediction_id_field:
             prediction_id_field = self.prediction_table + 'ID'
-        r = Reporter('parsing output files', entries='output files')
-        r.set_total_count( len(output_log_files) )
+        if verbose:
+            r = Reporter('parsing output files', entries='output files')
+            r.set_total_count( len(output_log_files) )
         for prediction_set_id, output_log_file, prediction_id, round_num in output_log_files:
-            self.update_prediction_id_status(prediction_set_id, output_log_file, prediction_id, round_num)
-            r.increment_report()
-        r.done()
+            self.update_prediction_id_status(prediction_set_id, output_log_file, prediction_id, round_num, verbose = verbose)
+            if verbose:
+                r.increment_report()
+        if verbose:
+            r.done()
 
-        self.finalize_update_prediction_id_status()
+        self.finalize_update_prediction_id_status(verbose = verbose)
 
-        r = Reporter('parsing output db3 files and saving scores in database', entries='scores')
-        r.set_total_count( len(db3_files_to_process) )
+        if verbose:
+            r = Reporter('parsing output db3 files and saving scores in database', entries='scores')
+            r.set_total_count( len(db3_files_to_process) )
         if use_multiprocessing:
             p = multiprocessing.Pool(min(multiprocessing.cpu_count(), 16)) # Multiprocessing
             self.master_scores_list = []
@@ -162,7 +166,8 @@ class BackrubDDGInterface(DDGMonomerInterface):
                         self.master_scores_list = []
             else:
                 self.store_scores(None, prediction_id, scores_list, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field) # Save each score one at a time
-            r.increment_report()
+            if verbose:
+                r.increment_report()
 
         for prediction_id, round_num in db3_files_to_process:
             empty_score_dict = self.get_score_dict(prediction_id=prediction_id, score_method_id=score_method_id, structure_id=round_num, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
@@ -176,17 +181,22 @@ class BackrubDDGInterface(DDGMonomerInterface):
             p.join() # Multiprocessing
         if use_multiprocessing and len(self.master_scores_list) > 0:
             self.store_scores_for_many_predictions(None, self.master_scores_list, safe=False, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
-        r.done()
+        if verbose:
+            r.done()
 
         if len(output_dirs_to_zip) > 0:
-            r = Reporter('zipping prediction id output directories', entries='directories')
-            r.set_total_count( len(output_dirs_to_zip) )
+            if verbose:
+                r = Reporter('zipping prediction id output directories', entries='directories')
+                r.set_total_count( len(output_dirs_to_zip) )
             for output_dir, prediction_id in output_dirs_to_zip:
                 if self.zip_prediction_id(prediction_id, output_dir):
-                    r.increment_report()
+                    if verbose:
+                        r.increment_report()
                 else:
-                    r.decrement_total_count()
-            r.done()
+                    if verbose:
+                        r.decrement_total_count()
+            if verbose:
+                r.done()
 
     def update_prediction_id_status(self, prediction_set_id, output_log_file, prediction_id, round_num, verbose = True):
         # Looks for output file in root directory and reads for job status
@@ -271,12 +281,13 @@ class BackrubDDGInterface(DDGMonomerInterface):
             )
 
 
-    def finalize_update_prediction_id_status(self):
+    def finalize_update_prediction_id_status(self, verbose = True):
         if len(self.prediction_id_status_cache) == 0:
             return
 
-        r = Reporter('updating prediction id statii in database', entries='prediction IDs')
-        r.set_total_count( len(self.prediction_id_status_cache) )
+        if verbose:
+            r = Reporter('updating prediction id statii in database', entries='prediction IDs')
+            r.set_total_count( len(self.prediction_id_status_cache) )
 
         tsession = self.importer.session
         for prediction_id in self.prediction_id_status_cache:
@@ -293,9 +304,10 @@ class BackrubDDGInterface(DDGMonomerInterface):
             prediction_record.ERRORS = str( max(cache['return_code']) )
             tsession.flush()
             tsession.commit()
-            r.increment_report()
-            print prediction_id
-        r.done()
+            if verbose:
+                r.increment_report()
+        if verbose:
+            r.done()
 
 
     def struct_has_all_scores(self, prediction_id, round_num, expect_n = 6, verbose = True, prediction_id_field = None, prediction_structure_scores_table = None):
