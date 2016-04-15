@@ -73,7 +73,7 @@ class APIInterface(BindingAffinityDDGInterface):
         if return_code_key in d:
             if d[return_code_key] != 0:
                 status = 'failed'
-                errors = '%d' % d[return_code_key]
+                errors = '%d' % int(d[return_code_key])
             else:
                 status = 'done'
                 errors = ''
@@ -147,10 +147,17 @@ class APIInterface(BindingAffinityDDGInterface):
 
         for struct_id in self.run_data[prediction_id]['structIDs']:
             score_dict = self.get_score_dict(score_type='DDG', prediction_id=prediction_id, score_method_id=score_method_id, structure_id=struct_id, prediction_structure_scores_table = prediction_structure_scores_table, prediction_id_field = prediction_id_field)
-            subtracted_scores = subtract_wt_from_mutant(
-                self.run_data[prediction_id]['structIDs'][struct_id]['WT'],
-                self.run_data[prediction_id]['structIDs'][struct_id]['Mutant']
-            )
+            try:
+                subtracted_scores = subtract_wt_from_mutant(
+                    self.run_data[prediction_id]['structIDs'][struct_id]['WT'],
+                    self.run_data[prediction_id]['structIDs'][struct_id]['Mutant']
+                )
+            except KeyError:
+                print self.run_data[prediction_id]['structIDs'][struct_id]
+                print prediction_id
+                print struct_id
+                raise
+            
             for key in score_dict:
                 if key in subtracted_scores:
                     score_dict[key] = subtracted_scores[key]
