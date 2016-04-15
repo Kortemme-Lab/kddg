@@ -157,7 +157,7 @@ class APIInterface(BindingAffinityDDGInterface):
                 print prediction_id
                 print struct_id
                 raise
-            
+
             for key in score_dict:
                 if key in subtracted_scores:
                     score_dict[key] = subtracted_scores[key]
