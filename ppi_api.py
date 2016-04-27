@@ -1309,26 +1309,6 @@ class BindingAffinityDDGInterface(ddG):
     ## This part of the API is responsible for running analysis on completed predictions
     ###########################################################################################
 
-
-    @analysis_api
-    def determine_best_pair(self, prediction_id, score_method_id, expectn = None, returnn = 1):
-        '''This returns the best wildtype/mutant pair for a prediction given a scoring method. NOTE: Consider generalising this to the n best pairs.'''
-        # todo: rewrite to use determine_best_pairs
-        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
-        mutant_complexes = []
-        wildtype_complexes = []
-        for structure_id, scores in scores.iteritems():
-            if scores.get('MutantComplex'):
-                mutant_complexes.append((scores['MutantComplex']['total'], structure_id))
-            if scores.get('WildTypeComplex'):
-                wildtype_complexes.append((scores['WildTypeComplex']['total'], structure_id))
-        wildtype_complexes = sorted(wildtype_complexes)
-        mutant_complexes = sorted(mutant_complexes)
-        if wildtype_complexes and mutant_complexes:
-            return wildtype_complexes[0][1], mutant_complexes[0][1]
-        return None, None
-
-
     @analysis_api
     def determine_best_pairs(self, prediction_id, score_method_id = None, expectn = None, top_x = 3):
         '''This returns the top_x lowest-scoring wildtype/mutants for a prediction given a scoring method.
