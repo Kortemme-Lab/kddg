@@ -1788,11 +1788,11 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def get_analysis_dataframe(self, prediction_set_id,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
-            additional_join_parameters = {},
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
             use_single_reported_value = False,
+            ddg_analysis_type = None,
             take_lowest = 3,
             burial_cutoff = 0.25,
             stability_classication_experimental_cutoff = 1.0,
@@ -1824,7 +1824,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     @analysis_api
-    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None, prediction_table_rows_cache = None, dataframe_type = None):
+    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, expectn = None, extract_data_for_case_if_missing = True, root_directory = None, prediction_table_rows_cache = None, dataframe_type = None):
         '''Returns a dictionary with values relevant to predictions e.g. binding affinity, monomeric stability.'''
         prediction_data = {}
         # Add memory and runtime
@@ -1842,7 +1842,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         else:
             raise Exception("Not implemented. Write a function to get the data only for this prediction_id here")
 
-        return self._get_prediction_data(prediction_id, score_method_id, main_ddg_analysis_type, top_x = top_x, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory, prediction_data = prediction_data, dataframe_type = dataframe_type)
+        return self._get_prediction_data(prediction_id, score_method_id, main_ddg_analysis_type, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory, prediction_data = prediction_data, dataframe_type = dataframe_type)
 
     def _get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None):
         '''Returns a dictionary with values relevant to predictions e.g. binding affinity, monomeric stability.'''
@@ -1854,7 +1854,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             prediction_set_id = None,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
-            additional_join_parameters = {},
+            ddg_analysis_type = None,
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
@@ -1876,17 +1876,35 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             ):
         '''This 'private' function does most of the work for get_analysis_dataframe.'''
 
-        ddg_analysis_type = 'DDG_Top%d' % take_lowest
+        if take_lowest:
+            assert( ddg_analysis_type == None )
+            ddg_analysis_type = 'DDG_Top%d' % take_lowest
+        else:
+            assert( ddg_analysis_type != None and take_lowest == None )
+            if ddg_analysis_type.startswith( 'DDG_Top' ):
+                take_lowest = int( ddg_analysis_type[7:] )
+
         assert(dataframe_type != None and prediction_set_id != None)
         hdf_store_blob = None
         if use_existing_benchmark_data:
-            hdf_store_blob = self.DDG_db.execute_select('''
-            SELECT PandasHDFStore FROM AnalysisDataFrame WHERE
-               PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND BurialCutoff=%s AND
-               StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
-               IncludesDerivedMutations=%s AND DDGAnalysisType=%s''', parameters=(
-                    prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, take_lowest, burial_cutoff,
-                    stability_classication_experimental_cutoff, stability_classication_predicted_cutoff, include_derived_mutations, ddg_analysis_type))
+            if take_lowest == None:
+                hdf_store_blob = self.DDG_db.execute_select('''
+                SELECT PandasHDFStore FROM AnalysisDataFrame WHERE
+                   PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX IS NULL AND BurialCutoff=%s AND
+                   StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
+                   IncludesDerivedMutations=%s AND DDGAnalysisType=%s''', parameters=(
+                        prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, burial_cutoff,
+                        stability_classication_experimental_cutoff, stability_classication_predicted_cutoff, include_derived_mutations, ddg_analysis_type))
+            else:
+                # KAB TODO: to ask Shane - why does passing None not correctly change to IS NULL?
+                hdf_store_blob = self.DDG_db.execute_select('''
+                SELECT PandasHDFStore FROM AnalysisDataFrame WHERE
+                   PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND BurialCutoff=%s AND
+                   StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
+                   IncludesDerivedMutations=%s AND DDGAnalysisType=%s''', parameters=(
+                        prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, take_lowest, burial_cutoff,
+                        stability_classication_experimental_cutoff, stability_classication_predicted_cutoff, include_derived_mutations, ddg_analysis_type))
+
             if hdf_store_blob:
                 assert(len(hdf_store_blob) == 1)
                 mem_zip = StringIO.StringIO()
@@ -1913,16 +1931,16 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         top_level_dataframe_attributes = {}
         if not(use_existing_benchmark_data and hdf_store_blob):
             if extract_data_for_case_if_missing and not silent:
-                print('Computing the TopX values for each prediction case, extracting data if need be.')
+                print('Computing the best/top/whatever values for each prediction case, extracting data if need be.')
             elif not extract_data_for_case_if_missing and not silent:
-                print('Computing the TopX values for each prediction case; skipping missing data without attempting to extract.')
+                print('Computing the best/top/whatever values for each prediction case; skipping missing data without attempting to extract.')
             num_predictions_in_prediction_set = len(prediction_ids)
             failed_cases = set()
             ## get_job_description(self, prediction_id)
             for UserDataSetExperimentID in UserDataSetExperimentIDs:
                 try:
                     prediction_id = prediction_set_case_details[UserDataSetExperimentID]['PredictionID']
-                    prediction_id_data = self.get_prediction_data(prediction_id, score_method_id, ddg_analysis_type, top_x = take_lowest, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory, dataframe_type = dataframe_type, prediction_table_rows_cache = prediction_table_rows_cache)
+                    prediction_id_data = self.get_prediction_data(prediction_id, score_method_id, ddg_analysis_type, expectn = expectn, extract_data_for_case_if_missing = extract_data_for_case_if_missing, root_directory = root_directory, dataframe_type = dataframe_type, prediction_table_rows_cache = prediction_table_rows_cache)
                     analysis_data[UserDataSetExperimentID] = prediction_id_data
                     del analysis_data[UserDataSetExperimentID]['UserDataSetExperimentID']
                     analysis_data[UserDataSetExperimentID]['PredictionID'] = prediction_id
@@ -1934,15 +1952,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                     failed_cases.add(prediction_id)
                 except Exception, e:
                     if not allow_failures:
-                        raise Exception('An error occurred during the TopX computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
+                        raise Exception('An error occurred during the best/top/whatever computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
                     failed_cases.add(prediction_id)
                 if debug and len(analysis_data) >= 20:
                     break
 
-                # best_pair_id = self.determine_best_pair(prediction_id, score_method_id)
-
             if failed_cases:
-                colortext.error('Failed to determine the TopX score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
+                colortext.error('Failed to determine the best/top/whatever score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
             working_prediction_ids = sorted(set(prediction_ids).difference(failed_cases))
             top_level_dataframe_attributes = dict(
                 num_predictions_in_prediction_set = num_predictions_in_prediction_set,
@@ -1959,6 +1975,21 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         prediction_set_description = prediction_set_description or prediction_set_details['Description']
         prediction_set_color = prediction_set_color or prediction_set_details['SeriesColor']
         prediction_set_alpha = prediction_set_alpha or prediction_set_details['SeriesAlpha']
+        score_method_details = self.get_score_method_details( score_method_id = score_method_id )
+
+        additional_join_parameters = {
+            'score_method' : {
+                'short_name' : score_method_details['MethodName'],
+                'long_name' : '%s - %s' % (score_method_details['MethodType'], score_method_details['Authors']),
+            },
+            'prediction_set_id' : {
+                'short_name' : prediction_set_id,
+            },
+            'ddg_analysis_type' : {
+                'short_name' : ddg_analysis_type[4:],
+                'long_name' : ddg_analysis_type,
+            },
+        }
 
         # Initialize the BindingAffinityBenchmarkRun object
         # Note: prediction_set_case_details, analysis_data, and top_level_dataframe_attributes will not be filled in
@@ -1969,13 +2000,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 contains_experimental_data = experimental_data_exists,
                 additional_join_parameters = additional_join_parameters,
                 store_data_on_disk = False,
+                calculate_scalar_adjustments = False,
                 benchmark_run_directory = None,
                 use_single_reported_value = use_single_reported_value,
                 description = prediction_set_description,
                 dataset_description = prediction_set_description,
                 credit = prediction_set_credit,
                 include_derived_mutations = include_derived_mutations,
-                take_lowest = take_lowest,
                 generate_plots = False,
                 report_analysis = report_analysis,
                 silent = silent,

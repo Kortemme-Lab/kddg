@@ -19,6 +19,7 @@ import copy
 import json
 import zipfile
 import re
+import random
 import traceback
 import StringIO
 import gzip
@@ -1309,26 +1310,6 @@ class BindingAffinityDDGInterface(ddG):
     ## This part of the API is responsible for running analysis on completed predictions
     ###########################################################################################
 
-
-    @analysis_api
-    def determine_best_pair(self, prediction_id, score_method_id, expectn = None, returnn = 1):
-        '''This returns the best wildtype/mutant pair for a prediction given a scoring method. NOTE: Consider generalising this to the n best pairs.'''
-        # todo: rewrite to use determine_best_pairs
-        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
-        mutant_complexes = []
-        wildtype_complexes = []
-        for structure_id, scores in scores.iteritems():
-            if scores.get('MutantComplex'):
-                mutant_complexes.append((scores['MutantComplex']['total'], structure_id))
-            if scores.get('WildTypeComplex'):
-                wildtype_complexes.append((scores['WildTypeComplex']['total'], structure_id))
-        wildtype_complexes = sorted(wildtype_complexes)
-        mutant_complexes = sorted(mutant_complexes)
-        if wildtype_complexes and mutant_complexes:
-            return wildtype_complexes[0][1], mutant_complexes[0][1]
-        return None, None
-
-
     @analysis_api
     def determine_best_pairs(self, prediction_id, score_method_id = None, expectn = None, top_x = 3):
         '''This returns the top_x lowest-scoring wildtype/mutants for a prediction given a scoring method.
@@ -1516,29 +1497,95 @@ class BindingAffinityDDGInterface(ddG):
             raise Exception('{0}\n{1}'.format(str(e), traceback.format_exc()))
 
 
-    def _get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = False, root_directory = None, dataframe_type = "Binding affinity", prediction_data = {}):
+    def _get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, expectn = None, extract_data_for_case_if_missing = False, root_directory = None, dataframe_type = "Binding affinity", prediction_data = {}):
+        assert( main_ddg_analysis_type.startswith('DDG_') )
+        analysis_type = main_ddg_analysis_type[4:]
+        top_x = 3
+        if analysis_type.startswith('Top'):
+            analysis_function = self.get_top_x_ddg
+            analysis_parameter = int( analysis_type[3:] )
+            top_x = analysis_parameter
+        elif analysis_type.startswith('Random'):
+            analysis_function = self.get_random_pairing_ddg
+            if len(analysis_type) > len('Random'):
+                analysis_parameter = int( analysis_type[len('Random'):] )
+            else:
+                analysis_parameter = None
+        else:
+            raise Exception("Didn't recognize analysis type: " + str(main_ddg_analysis_type))
+
+
         try:
-            top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+            predicted_ddg = analysis_function(prediction_id, score_method_id, analysis_parameter, expectn = expectn)
         except Exception, e:
             colortext.pcyan(str(e))
             colortext.warning(traceback.format_exc())
             if extract_data_for_case_if_missing:
                 self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
             try:
-                top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+                predicted_ddg = analysis_function(prediction_id, score_method_id, analysis_parameter, expectn = expectn)
             except PartialDataException, e:
                 raise
             except Exception, e:
                 raise
         top_x_ddg_stability = self.get_top_x_ddg_stability(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
 
-        prediction_data[main_ddg_analysis_type] = top_x_ddg
+        prediction_data[main_ddg_analysis_type] = predicted_ddg
         prediction_data['DDGStability_Top%d' % top_x] = top_x_ddg_stability
         return prediction_data
 
 
     @analysis_api
-    def get_top_x_ddg(self, prediction_id, score_method_id, top_x = 3, expectn = None):
+    def get_random_pairing_ddg(self, prediction_id, score_method_id, structs_to_use, expectn = None):
+        '''
+        Returns DDG for this prediction by randomly pairing mutant structures with wildtype structures
+        '''
+
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        if scores == None:
+            return None
+
+        if self.scores_contains_ddg_score(scores):
+            try:
+                total_scores = [(scores[struct_num]['DDG']['total'], struct_num) for struct_num in scores]
+                random.shuffle( total_scores )
+                if structs_to_use == None:
+                    structs_to_use = len(total_scores)
+                structs_to_use_struct_nums = [t[1] for t in total_scores[:structs_to_use]]
+                structs_to_use_score = numpy.average([
+                    scores[struct_num]['DDG']['total']
+                    for struct_num in structs_to_use_struct_nums
+                ])
+                return structs_to_use_score
+            except:
+                print scores[struct_num]
+                raise PartialDataException('The case is missing some data.')
+
+        try:
+            wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
+            mut_total_scores = [(scores[struct_num]['MutantComplex']['total'], struct_num) for struct_num in scores]
+
+            if structs_to_use == None:
+                structs_to_use = min( len(wt_total_scores), len(mut_total_scores) )
+
+            random.shuffle( wt_total_scores )
+            structs_to_use_wt_struct_nums = [t[1] for t in wt_total_scores[:structs_to_use]]
+
+            random.shuffle( mut_total_scores )
+            structs_to_use_mut_struct_nums = [t[1] for t in mut_total_scores[:structs_to_use]]
+
+            structs_to_use_score = numpy.average([
+                (scores[mut_struct_num]['MutantComplex']['total'] - scores[mut_struct_num]['MutantLPartner']['total'] - scores[mut_struct_num]['MutantRPartner']['total']) -
+                (scores[wt_struct_num]['WildTypeComplex']['total'] - scores[wt_struct_num]['WildTypeLPartner']['total'] - scores[wt_struct_num]['WildTypeRPartner']['total'])
+                for wt_struct_num, mut_struct_num in zip(structs_to_use_wt_struct_nums, structs_to_use_mut_struct_nums)
+            ])
+            return structs_to_use_score
+        except PartialDataException:
+            raise PartialDataException('The case is missing some data.')
+
+
+    @analysis_api
+    def get_top_x_ddg(self, prediction_id, score_method_id, top_x , expectn = None):
         '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
            case computed using the associated Score records in the database.'''
 
@@ -1549,18 +1596,7 @@ class BindingAffinityDDGInterface(ddG):
 
         # Make sure that we have as many cases as we expect
         scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
-        # todo: move get_top_x_ddg_total_score into this function
-        return self.get_top_x_ddg_total_score(scores, top_x)
 
-
-    def scores_contains_ddg_score(self, scores):
-        for struct_num, score_dict in scores.iteritems():
-            if 'DDG' not in score_dict:
-                return False
-        return True
-
-
-    def get_top_x_ddg_total_score(self, scores, top_x):
         if scores == None:
             return None
 
@@ -1576,7 +1612,6 @@ class BindingAffinityDDGInterface(ddG):
                 return top_x_score
             except:
                 print scores[struct_num]
-                sys.exit(0)
                 raise PartialDataException('The case is missing some data.')
 
         try:
@@ -1596,6 +1631,13 @@ class BindingAffinityDDGInterface(ddG):
             return top_x_score
         except:
             raise PartialDataException('The case is missing some data.')
+
+
+    def scores_contains_ddg_score(self, scores):
+        for struct_num, score_dict in scores.iteritems():
+            if 'DDG' not in score_dict:
+                return False
+        return True
 
 
     def scores_contains_complex_scores(self, scores):
@@ -1629,12 +1671,12 @@ class BindingAffinityDDGInterface(ddG):
     def get_analysis_dataframe(self, prediction_set_id,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
-            additional_join_parameters = {},
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
             use_single_reported_value = False,
-            take_lowest = 3,
+            ddg_analysis_type = 'DDG_Top3',
+            take_lowest = None,
             burial_cutoff = 0.25,
             stability_classication_experimental_cutoff = 1.0,
             stability_classication_predicted_cutoff = 1.0,
@@ -1695,6 +1737,7 @@ class BindingAffinityDDGInterface(ddG):
                 }
             }
         '''
+        ### KAB TODO: this function is not adjusted for new changes in top_x
         if analysis_dataframe_id == None:
             # Get a valid PredictionSet record if one exists
             assert(prediction_set_id != None)
@@ -1764,7 +1807,8 @@ class BindingAffinityDDGInterface(ddG):
             include_derived_mutations = False,
             expectn = 50,
             use_single_reported_value = False,
-            take_lowests = [3],
+            take_lowests = [],
+            ddg_analysis_types = [],
             burial_cutoff = 0.25,
             stability_classication_experimental_cutoff = 1.0,
             stability_classication_predicted_cutoff = 1.0,
@@ -1801,6 +1845,7 @@ class BindingAffinityDDGInterface(ddG):
 
            use_single_reported_value is specific to ddg_monomer. If this is True then the DDG value reported by the application is used and take_lowest is ignored. This is inadvisable - take_lowest = 3 is a better default.
            take_lowest AKA Top_X. Specifies how many of the best-scoring groups of structures to consider when calculating the predicted DDG value.
+           analysis_types defines if other analysis methods other than TopX/take_lowest will be used. Not mutually exclusive.
            burial_cutoff defines what should be considered buried (DSSPExposure field). Values around 1.0 are fully exposed, values of 0.0 are fully buried. For technical reasons, the DSSP value can exceed 1.0 but usually not by much.
            stability_classication_experimental_cutoff AKA x_cutoff. This defines the neutral mutation range for experimental values in kcal/mol i.e. values between -1.0 and 1.0 kcal/mol are considered neutral by default.
            stability_classication_predicted_cutoff AKA y_cutoff. This defines the neutral mutation range for predicted values in energy units.
@@ -1813,8 +1858,16 @@ class BindingAffinityDDGInterface(ddG):
            report_analysis  : Whether or not to print analysis to stdout.
            silent = False   : Whether or not anything should be printed to stdout (True is useful for webserver interaction).
         '''
+        for ddg_analysis_type in ddg_analysis_types:
+            assert( ddg_analysis_type.startswith('DDG_') )
         for take_lowest in take_lowests:
             assert(take_lowest > 0 and (int(take_lowest) == take_lowest))
+            ddg_analysis_types.append( 'DDG_Top%d' % take_lowest )
+
+        # Remove duplicate analysis types
+        ddg_analysis_types = set( ddg_analysis_types )
+        ddg_analysis_types = sorted( list(ddg_analysis_types) )
+
         assert(0 <= burial_cutoff <= 2.0)
         assert(stability_classication_experimental_cutoff > 0)
         assert(stability_classication_predicted_cutoff > 0)
@@ -1836,22 +1889,12 @@ class BindingAffinityDDGInterface(ddG):
             for score_method_id in score_method_ids:
                 if len(score_method_ids) > 1:
                     print 'Generating benchmark run for score method ID: %d' % score_method_id
-                score_method_details = self.get_score_method_details( score_method_id = score_method_id )
-                for take_lowest in take_lowests:
-                    if len(take_lowests) > 1:
-                        print 'Generating benchmark run for take_lowest (TopX): %d' % take_lowest
+                for ddg_analysis_type in ddg_analysis_types:
+                    if len(ddg_analysis_types) > 1:
+                        print 'Generating benchmark run for DDG analysis type: %s' % ddg_analysis_type
 
                     benchmark_run = self.get_analysis_dataframe(prediction_set_id,
                         experimental_data_exists = experimental_data_exists,
-                        additional_join_parameters = {
-                            'score_method' : {
-                                'short_name' : score_method_details['MethodName'],
-                                'long_name' : '%s - %s' % (score_method_details['MethodType'], score_method_details['Authors']),
-                            },
-                            'prediction_set_id' : {
-                                'short_name' : prediction_set_id,
-                            },
-                        },
                         prediction_set_series_name = prediction_set_series_names.get(prediction_set_id),
                         prediction_set_description = prediction_set_descriptions.get(prediction_set_id),
                         prediction_set_color = prediction_set_colors.get(prediction_set_id),
@@ -1860,7 +1903,7 @@ class BindingAffinityDDGInterface(ddG):
                         use_existing_benchmark_data = use_existing_benchmark_data,
                         include_derived_mutations = include_derived_mutations,
                         use_single_reported_value = use_single_reported_value,
-                        take_lowest = take_lowest,
+                        ddg_analysis_type = ddg_analysis_type,
                         burial_cutoff = burial_cutoff,
                         stability_classication_experimental_cutoff = 1.0,
                         stability_classication_predicted_cutoff = 1.0,
@@ -3009,5 +3052,3 @@ class BindingAffinityDDGInterface(ddG):
             tsession.close()
             colortext.warning(traceback.format_exc())
             raise colortext.Exception(str(e))
-
-
