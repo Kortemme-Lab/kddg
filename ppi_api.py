@@ -1629,7 +1629,7 @@ class BindingAffinityDDGInterface(ddG):
     def get_analysis_dataframe(self, prediction_set_id,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
-            additional_join_parameters = {},
+            analysis_parameters = {},
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
@@ -1843,7 +1843,7 @@ class BindingAffinityDDGInterface(ddG):
 
                     benchmark_run = self.get_analysis_dataframe(prediction_set_id,
                         experimental_data_exists = experimental_data_exists,
-                        additional_join_parameters = {
+                        analysis_parameters = {
                             'score_method' : {
                                 'short_name' : score_method_details['MethodName'],
                                 'long_name' : '%s - %s' % (score_method_details['MethodType'], score_method_details['Authors']),
@@ -3009,5 +3009,3 @@ class BindingAffinityDDGInterface(ddG):
             tsession.close()
             colortext.warning(traceback.format_exc())
             raise colortext.Exception(str(e))
-
-
