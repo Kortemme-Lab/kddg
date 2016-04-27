@@ -1568,13 +1568,7 @@ class BindingAffinityDDGInterface(ddG):
             try:
                 total_scores = [(scores[struct_num]['DDG']['total'], struct_num) for struct_num in scores]
                 total_scores.sort()
-                #James' sketchy median_x scoring
-                if top_x == 50:
-                    top_x_struct_nums = [t[1] for t in total_scores[:top_x]]
-                elif top_x % 2 == 0:
-                    top_x_struct_nums = [t[1] for t in total_scores[25 - (top_x / 2):-(25 - (top_x / 2))]]
-                else:
-                    top_x_struct_nums = [t[1] for t in total_scores[25 - (top_x // 2) : -(24 - (top_x // 2 ))]]
+                top_x_struct_nums = [t[1] for t in total_scores[:top_x]]
                 top_x_score = numpy.average([
                     scores[struct_num]['DDG']['total']
                     for struct_num in top_x_struct_nums
