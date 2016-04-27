@@ -19,6 +19,7 @@ import copy
 import json
 import zipfile
 import re
+import random
 import traceback
 import StringIO
 import gzip
@@ -1497,8 +1498,6 @@ class BindingAffinityDDGInterface(ddG):
 
 
     def _get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, expectn = None, extract_data_for_case_if_missing = False, root_directory = None, dataframe_type = "Binding affinity", prediction_data = {}):
-        # KAB TODO: deal with removing top_x parameter and replacing with main_ddg_analysis_type
-        # Main todo left to todo! (other than actual implementation of different analysis)
         assert( main_ddg_analysis_type.startswith('DDG_') )
         analysis_type = main_ddg_analysis_type[4:]
         top_x = 3
@@ -1506,6 +1505,15 @@ class BindingAffinityDDGInterface(ddG):
             analysis_function = self.get_top_x_ddg
             analysis_parameter = int( analysis_type[3:] )
             top_x = analysis_parameter
+        elif analysis_type.startswith('Random'):
+            analysis_function = self.get_random_pairing_ddg
+            if len(analysis_type) > len('Random'):
+                analysis_parameter = int( analysis_type[len('Random'):] )
+            else:
+                analysis_parameter = None
+        else:
+            raise Exception("Didn't recognize analysis type: " + str(main_ddg_analysis_type))
+
 
         try:
             predicted_ddg = analysis_function(prediction_id, score_method_id, analysis_parameter, expectn = expectn)
@@ -1528,7 +1536,56 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
-    def get_top_x_ddg(self, prediction_id, score_method_id, top_x = 3, expectn = None):
+    def get_random_pairing_ddg(self, prediction_id, score_method_id, structs_to_use, expectn = None):
+        '''
+        Returns DDG for this prediction by randomly pairing mutant structures with wildtype structures
+        '''
+
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        if scores == None:
+            return None
+
+        if self.scores_contains_ddg_score(scores):
+            try:
+                total_scores = [(scores[struct_num]['DDG']['total'], struct_num) for struct_num in scores]
+                random.shuffle( total_scores )
+                if structs_to_use == None:
+                    structs_to_use = len(total_scores)
+                structs_to_use_struct_nums = [t[1] for t in total_scores[:structs_to_use]]
+                structs_to_use_score = numpy.average([
+                    scores[struct_num]['DDG']['total']
+                    for struct_num in structs_to_use_struct_nums
+                ])
+                return structs_to_use_score
+            except:
+                print scores[struct_num]
+                raise PartialDataException('The case is missing some data.')
+
+        try:
+            wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
+            mut_total_scores = [(scores[struct_num]['MutantComplex']['total'], struct_num) for struct_num in scores]
+
+            if structs_to_use == None:
+                structs_to_use = min( len(wt_total_scores), len(mut_total_scores) )
+
+            random.shuffle( wt_total_scores )
+            structs_to_use_wt_struct_nums = [t[1] for t in wt_total_scores[:structs_to_use]]
+
+            random.shuffle( mut_total_scores )
+            structs_to_use_mut_struct_nums = [t[1] for t in mut_total_scores[:structs_to_use]]
+
+            structs_to_use_score = numpy.average([
+                (scores[mut_struct_num]['MutantComplex']['total'] - scores[mut_struct_num]['MutantLPartner']['total'] - scores[mut_struct_num]['MutantRPartner']['total']) -
+                (scores[wt_struct_num]['WildTypeComplex']['total'] - scores[wt_struct_num]['WildTypeLPartner']['total'] - scores[wt_struct_num]['WildTypeRPartner']['total'])
+                for wt_struct_num, mut_struct_num in zip(structs_to_use_wt_struct_nums, structs_to_use_mut_struct_nums)
+            ])
+            return structs_to_use_score
+        except PartialDataException:
+            raise PartialDataException('The case is missing some data.')
+
+
+    @analysis_api
+    def get_top_x_ddg(self, prediction_id, score_method_id, top_x , expectn = None):
         '''Returns the TopX value for the prediction. Typically, this is the mean value of the top X predictions for a
            case computed using the associated Score records in the database.'''
 
@@ -1539,18 +1596,7 @@ class BindingAffinityDDGInterface(ddG):
 
         # Make sure that we have as many cases as we expect
         scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
-        # todo: move get_top_x_ddg_total_score into this function
-        return self.get_top_x_ddg_total_score(scores, top_x)
 
-
-    def scores_contains_ddg_score(self, scores):
-        for struct_num, score_dict in scores.iteritems():
-            if 'DDG' not in score_dict:
-                return False
-        return True
-
-
-    def get_top_x_ddg_total_score(self, scores, top_x):
         if scores == None:
             return None
 
@@ -1566,7 +1612,6 @@ class BindingAffinityDDGInterface(ddG):
                 return top_x_score
             except:
                 print scores[struct_num]
-                sys.exit(0)
                 raise PartialDataException('The case is missing some data.')
 
         try:
@@ -1586,6 +1631,13 @@ class BindingAffinityDDGInterface(ddG):
             return top_x_score
         except:
             raise PartialDataException('The case is missing some data.')
+
+
+    def scores_contains_ddg_score(self, scores):
+        for struct_num, score_dict in scores.iteritems():
+            if 'DDG' not in score_dict:
+                return False
+        return True
 
 
     def scores_contains_complex_scores(self, scores):

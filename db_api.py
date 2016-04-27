@@ -1887,13 +1887,24 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         assert(dataframe_type != None and prediction_set_id != None)
         hdf_store_blob = None
         if use_existing_benchmark_data:
-            hdf_store_blob = self.DDG_db.execute_select('''
-            SELECT PandasHDFStore FROM AnalysisDataFrame WHERE
-               PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND BurialCutoff=%s AND
-               StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
-               IncludesDerivedMutations=%s AND DDGAnalysisType=%s''', parameters=(
-                    prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, take_lowest, burial_cutoff,
-                    stability_classication_experimental_cutoff, stability_classication_predicted_cutoff, include_derived_mutations, ddg_analysis_type))
+            if take_lowest == None:
+                hdf_store_blob = self.DDG_db.execute_select('''
+                SELECT PandasHDFStore FROM AnalysisDataFrame WHERE
+                   PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX IS NULL AND BurialCutoff=%s AND
+                   StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
+                   IncludesDerivedMutations=%s AND DDGAnalysisType=%s''', parameters=(
+                        prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, burial_cutoff,
+                        stability_classication_experimental_cutoff, stability_classication_predicted_cutoff, include_derived_mutations, ddg_analysis_type))
+            else:
+                # KAB TODO: to ask Shane - why does passing None not correctly change to IS NULL?
+                hdf_store_blob = self.DDG_db.execute_select('''
+                SELECT PandasHDFStore FROM AnalysisDataFrame WHERE
+                   PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND BurialCutoff=%s AND
+                   StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
+                   IncludesDerivedMutations=%s AND DDGAnalysisType=%s''', parameters=(
+                        prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, take_lowest, burial_cutoff,
+                        stability_classication_experimental_cutoff, stability_classication_predicted_cutoff, include_derived_mutations, ddg_analysis_type))
+
             if hdf_store_blob:
                 assert(len(hdf_store_blob) == 1)
                 mem_zip = StringIO.StringIO()
@@ -1920,9 +1931,9 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         top_level_dataframe_attributes = {}
         if not(use_existing_benchmark_data and hdf_store_blob):
             if extract_data_for_case_if_missing and not silent:
-                print('Computing the best/top values for each prediction case, extracting data if need be.')
+                print('Computing the best/top/whatever values for each prediction case, extracting data if need be.')
             elif not extract_data_for_case_if_missing and not silent:
-                print('Computing the best/top values for each prediction case; skipping missing data without attempting to extract.')
+                print('Computing the best/top/whatever values for each prediction case; skipping missing data without attempting to extract.')
             num_predictions_in_prediction_set = len(prediction_ids)
             failed_cases = set()
             ## get_job_description(self, prediction_id)
@@ -1941,13 +1952,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                     failed_cases.add(prediction_id)
                 except Exception, e:
                     if not allow_failures:
-                        raise Exception('An error occurred during the best/top computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
+                        raise Exception('An error occurred during the best/top/whatever computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
                     failed_cases.add(prediction_id)
                 if debug and len(analysis_data) >= 20:
                     break
 
             if failed_cases:
-                colortext.error('Failed to determine the best/top score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
+                colortext.error('Failed to determine the best/top/whatever score for {0}/{1} predictions. Continuing with the analysis ignoring these cases.'.format(len(failed_cases), len(prediction_ids)))
             working_prediction_ids = sorted(set(prediction_ids).difference(failed_cases))
             top_level_dataframe_attributes = dict(
                 num_predictions_in_prediction_set = num_predictions_in_prediction_set,
