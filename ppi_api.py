@@ -1516,23 +1516,33 @@ class BindingAffinityDDGInterface(ddG):
             raise Exception('{0}\n{1}'.format(str(e), traceback.format_exc()))
 
 
-    def _get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = False, root_directory = None, dataframe_type = "Binding affinity", prediction_data = {}):
+    def _get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, expectn = None, extract_data_for_case_if_missing = False, root_directory = None, dataframe_type = "Binding affinity", prediction_data = {}):
+        # KAB TODO: deal with removing top_x parameter and replacing with main_ddg_analysis_type
+        # Main todo left to todo! (other than actual implementation of different analysis)
+        assert( main_ddg_analysis_type.startswith('DDG_') )
+        analysis_type = main_ddg_analysis_type[4:]
+        top_x = 3
+        if analysis_type.startswith('Top'):
+            analysis_function = self.get_top_x_ddg
+            analysis_parameter = int( analysis_type[3:] )
+            top_x = analysis_parameter
+
         try:
-            top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+            predicted_ddg = analysis_function(prediction_id, score_method_id, analysis_parameter, expectn = expectn)
         except Exception, e:
             colortext.pcyan(str(e))
             colortext.warning(traceback.format_exc())
             if extract_data_for_case_if_missing:
                 self.extract_data_for_case(prediction_id, root_directory = root_directory, force = True, score_method_id = score_method_id)
             try:
-                top_x_ddg = self.get_top_x_ddg(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
+                predicted_ddg = analysis_function(prediction_id, score_method_id, analysis_parameter, expectn = expectn)
             except PartialDataException, e:
                 raise
             except Exception, e:
                 raise
         top_x_ddg_stability = self.get_top_x_ddg_stability(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
 
-        prediction_data[main_ddg_analysis_type] = top_x_ddg
+        prediction_data[main_ddg_analysis_type] = predicted_ddg
         prediction_data['DDGStability_Top%d' % top_x] = top_x_ddg_stability
         return prediction_data
 
@@ -1629,12 +1639,12 @@ class BindingAffinityDDGInterface(ddG):
     def get_analysis_dataframe(self, prediction_set_id,
             experimental_data_exists = True,
             prediction_set_series_name = None, prediction_set_description = None, prediction_set_credit = None,
-            analysis_parameters = {},
             prediction_set_color = None, prediction_set_alpha = None,
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
             use_single_reported_value = False,
-            take_lowest = 3,
+            ddg_analysis_type = 'DDG_Top3',
+            take_lowest = None,
             burial_cutoff = 0.25,
             stability_classication_experimental_cutoff = 1.0,
             stability_classication_predicted_cutoff = 1.0,
@@ -1695,6 +1705,7 @@ class BindingAffinityDDGInterface(ddG):
                 }
             }
         '''
+        ### KAB TODO: this function is not adjusted for new changes in top_x
         if analysis_dataframe_id == None:
             # Get a valid PredictionSet record if one exists
             assert(prediction_set_id != None)
@@ -1764,7 +1775,8 @@ class BindingAffinityDDGInterface(ddG):
             include_derived_mutations = False,
             expectn = 50,
             use_single_reported_value = False,
-            take_lowests = [3],
+            take_lowests = [],
+            ddg_analysis_types = [],
             burial_cutoff = 0.25,
             stability_classication_experimental_cutoff = 1.0,
             stability_classication_predicted_cutoff = 1.0,
@@ -1801,6 +1813,7 @@ class BindingAffinityDDGInterface(ddG):
 
            use_single_reported_value is specific to ddg_monomer. If this is True then the DDG value reported by the application is used and take_lowest is ignored. This is inadvisable - take_lowest = 3 is a better default.
            take_lowest AKA Top_X. Specifies how many of the best-scoring groups of structures to consider when calculating the predicted DDG value.
+           analysis_types defines if other analysis methods other than TopX/take_lowest will be used. Not mutually exclusive.
            burial_cutoff defines what should be considered buried (DSSPExposure field). Values around 1.0 are fully exposed, values of 0.0 are fully buried. For technical reasons, the DSSP value can exceed 1.0 but usually not by much.
            stability_classication_experimental_cutoff AKA x_cutoff. This defines the neutral mutation range for experimental values in kcal/mol i.e. values between -1.0 and 1.0 kcal/mol are considered neutral by default.
            stability_classication_predicted_cutoff AKA y_cutoff. This defines the neutral mutation range for predicted values in energy units.
@@ -1813,8 +1826,16 @@ class BindingAffinityDDGInterface(ddG):
            report_analysis  : Whether or not to print analysis to stdout.
            silent = False   : Whether or not anything should be printed to stdout (True is useful for webserver interaction).
         '''
+        for ddg_analysis_type in ddg_analysis_types:
+            assert( ddg_analysis_type.startswith('DDG_') )
         for take_lowest in take_lowests:
             assert(take_lowest > 0 and (int(take_lowest) == take_lowest))
+            ddg_analysis_types.append( 'DDG_Top%d' % take_lowest )
+
+        # Remove duplicate analysis types
+        ddg_analysis_types = set( ddg_analysis_types )
+        ddg_analysis_types = sorted( list(ddg_analysis_types) )
+
         assert(0 <= burial_cutoff <= 2.0)
         assert(stability_classication_experimental_cutoff > 0)
         assert(stability_classication_predicted_cutoff > 0)
@@ -1836,22 +1857,12 @@ class BindingAffinityDDGInterface(ddG):
             for score_method_id in score_method_ids:
                 if len(score_method_ids) > 1:
                     print 'Generating benchmark run for score method ID: %d' % score_method_id
-                score_method_details = self.get_score_method_details( score_method_id = score_method_id )
-                for take_lowest in take_lowests:
-                    if len(take_lowests) > 1:
-                        print 'Generating benchmark run for take_lowest (TopX): %d' % take_lowest
+                for ddg_analysis_type in ddg_analysis_types:
+                    if len(ddg_analysis_types) > 1:
+                        print 'Generating benchmark run for DDG analysis type: %s' % ddg_analysis_type
 
                     benchmark_run = self.get_analysis_dataframe(prediction_set_id,
                         experimental_data_exists = experimental_data_exists,
-                        analysis_parameters = {
-                            'score_method' : {
-                                'short_name' : score_method_details['MethodName'],
-                                'long_name' : '%s - %s' % (score_method_details['MethodType'], score_method_details['Authors']),
-                            },
-                            'prediction_set_id' : {
-                                'short_name' : prediction_set_id,
-                            },
-                        },
                         prediction_set_series_name = prediction_set_series_names.get(prediction_set_id),
                         prediction_set_description = prediction_set_descriptions.get(prediction_set_id),
                         prediction_set_color = prediction_set_colors.get(prediction_set_id),
@@ -1860,7 +1871,7 @@ class BindingAffinityDDGInterface(ddG):
                         use_existing_benchmark_data = use_existing_benchmark_data,
                         include_derived_mutations = include_derived_mutations,
                         use_single_reported_value = use_single_reported_value,
-                        take_lowest = take_lowest,
+                        ddg_analysis_type = ddg_analysis_type,
                         burial_cutoff = burial_cutoff,
                         stability_classication_experimental_cutoff = 1.0,
                         stability_classication_predicted_cutoff = 1.0,
