@@ -1511,6 +1511,12 @@ class BindingAffinityDDGInterface(ddG):
                 analysis_parameter = int( analysis_type[len('Random'):] )
             else:
                 analysis_parameter = None
+        elif analysis_type == 'AvgAllPairs':
+            analysis_function = self.get_avg_all_pairings_ddg
+            analysis_parameter = None
+        elif analysis_type == 'MatchPairs':
+            analysis_function = self.get_match_pairs_ddg
+            analysis_parameter = None
         else:
             raise Exception("Didn't recognize analysis type: " + str(main_ddg_analysis_type))
 
@@ -1536,6 +1542,61 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
+    def get_match_pairs_ddg(self, prediction_id, score_method_id, structs_to_use, expectn = None):
+        '''
+        Returns DDG for this prediction by averaging all values for paired output structures
+        '''
+
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        if scores == None:
+            return None
+
+        if self.scores_contains_ddg_score(scores):
+            raise Exception("This scoring analysis doesn't make sense to use without complex scores")
+
+        try:
+            structs_to_use_score = numpy.average([
+                (scores[struct_num]['MutantComplex']['total'] - scores[struct_num]['MutantLPartner']['total'] - scores[struct_num]['MutantRPartner']['total']) -
+                (scores[struct_num]['WildTypeComplex']['total'] - scores[struct_num]['WildTypeLPartner']['total'] - scores[struct_num]['WildTypeRPartner']['total'])
+                for struct_num in scores
+            ])
+            return structs_to_use_score
+        except PartialDataException:
+            sys.exit(0)
+            raise PartialDataException('The case is missing some data.')
+
+
+    @analysis_api
+    def get_avg_all_pairings_ddg(self, prediction_id, score_method_id, structs_to_use, expectn = None):
+        '''
+        Returns DDG for this prediction by averaging together all possible pairings
+        '''
+
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        if scores == None:
+            return None
+
+        if self.scores_contains_ddg_score(scores):
+            raise Exception("This scoring analysis doesn't make sense to use without complex scores")
+
+        try:
+            all_struct_num_pairs = []
+            for wt_struct_num in scores:
+                for mut_struct_num in scores:
+                    all_struct_num_pairs.append( (wt_struct_num, mut_struct_num) )
+
+            structs_to_use_score = numpy.average([
+                (scores[mut_struct_num]['MutantComplex']['total'] - scores[mut_struct_num]['MutantLPartner']['total'] - scores[mut_struct_num]['MutantRPartner']['total']) -
+                (scores[wt_struct_num]['WildTypeComplex']['total'] - scores[wt_struct_num]['WildTypeLPartner']['total'] - scores[wt_struct_num]['WildTypeRPartner']['total'])
+                for wt_struct_num, mut_struct_num in all_struct_num_pairs
+            ])
+            return structs_to_use_score
+        except PartialDataException:
+            sys.exit(0)
+            raise PartialDataException('The case is missing some data.')
+
+
+    @analysis_api
     def get_random_pairing_ddg(self, prediction_id, score_method_id, structs_to_use, expectn = None):
         '''
         Returns DDG for this prediction by randomly pairing mutant structures with wildtype structures
@@ -1547,32 +1608,22 @@ class BindingAffinityDDGInterface(ddG):
 
         if self.scores_contains_ddg_score(scores):
             try:
-                total_scores = [(scores[struct_num]['DDG']['total'], struct_num) for struct_num in scores]
-                random.shuffle( total_scores )
+                total_scores = [scores[struct_num]['DDG']['total'] for struct_num in scores]
                 if structs_to_use == None:
                     structs_to_use = len(total_scores)
-                structs_to_use_struct_nums = [t[1] for t in total_scores[:structs_to_use]]
-                structs_to_use_score = numpy.average([
-                    scores[struct_num]['DDG']['total']
-                    for struct_num in structs_to_use_struct_nums
-                ])
+                structs_to_use_score = numpy.average(
+                    random.sample(total_scores, structs_to_use)
+                )
                 return structs_to_use_score
             except:
-                print scores[struct_num]
                 raise PartialDataException('The case is missing some data.')
 
         try:
-            wt_total_scores = [(scores[struct_num]['WildTypeComplex']['total'], struct_num) for struct_num in scores]
-            mut_total_scores = [(scores[struct_num]['MutantComplex']['total'], struct_num) for struct_num in scores]
-
             if structs_to_use == None:
                 structs_to_use = min( len(wt_total_scores), len(mut_total_scores) )
 
-            random.shuffle( wt_total_scores )
-            structs_to_use_wt_struct_nums = [t[1] for t in wt_total_scores[:structs_to_use]]
-
-            random.shuffle( mut_total_scores )
-            structs_to_use_mut_struct_nums = [t[1] for t in mut_total_scores[:structs_to_use]]
+            structs_to_use_wt_struct_nums = random.sample(scores.keys(), structs_to_use)
+            structs_to_use_mut_struct_nums = random.sample(scores.keys(), structs_to_use)
 
             structs_to_use_score = numpy.average([
                 (scores[mut_struct_num]['MutantComplex']['total'] - scores[mut_struct_num]['MutantLPartner']['total'] - scores[mut_struct_num]['MutantRPartner']['total']) -

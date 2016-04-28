@@ -1951,8 +1951,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                         raise Exception('Prediction {0} has partial data. Skipping.'.format(prediction_id))
                     failed_cases.add(prediction_id)
                 except Exception, e:
-                    if not allow_failures:
-                        raise Exception('An error occurred during the best/top/whatever computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
+                    raise Exception('An error occurred during the best/top/whatever computation: {0}.\n{1}'.format(str(e), traceback.format_exc()))
                     failed_cases.add(prediction_id)
                 if debug and len(analysis_data) >= 20:
                     break
