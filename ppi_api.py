@@ -1517,6 +1517,10 @@ class BindingAffinityDDGInterface(ddG):
         elif analysis_type == 'MatchPairs':
             analysis_function = self.get_match_pairs_ddg
             analysis_parameter = None
+        elif analysis_type.startswith('CplxBoltz'):
+            assert( len(analysis_type) > len('CplxBoltz') )
+            analysis_function = self.get_complex_weighted_boltzmann_ddg
+            analysis_parameter = float( analysis_type[len('CplxBoltz'):] )
         else:
             raise Exception("Didn't recognize analysis type: " + str(main_ddg_analysis_type))
 
@@ -1539,6 +1543,53 @@ class BindingAffinityDDGInterface(ddG):
         prediction_data[main_ddg_analysis_type] = predicted_ddg
         prediction_data['DDGStability_Top%d' % top_x] = top_x_ddg_stability
         return prediction_data
+
+
+    @analysis_api
+    def get_complex_weighted_boltzmann_ddg(self, prediction_id, score_method_id, temperature, expectn = None):
+        '''
+        Returns DDG for this prediction by averaging all values for paired output structures
+        '''
+
+        scores = self.get_prediction_scores(prediction_id, expectn = expectn).get(score_method_id)
+        if scores == None:
+            return None
+
+        if self.scores_contains_ddg_score(scores):
+            raise Exception("This scoring analysis doesn't make sense to use without complex scores")
+
+        def boltz_exponent(x, t):
+            return numpy.exp( -1.0 * x / t )
+
+        try:
+            np_type = numpy.float64
+
+            struct_nums = scores.keys()
+            mut_complex = numpy.array( [np_type( scores[struct_num]['MutantComplex']['total'] ) for struct_num in struct_nums]  )
+            mut_lpartner = numpy.array( [np_type( scores[struct_num]['MutantLPartner']['total'] ) for struct_num in struct_nums] )
+            mut_rpartner = numpy.array( [np_type( scores[struct_num]['MutantRPartner']['total'] ) for struct_num in struct_nums] )
+            wt_complex = numpy.array( [np_type( scores[struct_num]['WildTypeComplex']['total'] ) for struct_num in struct_nums] )
+            wt_lpartner = numpy.array( [np_type( scores[struct_num]['WildTypeLPartner']['total'] ) for struct_num in struct_nums] )
+            wt_rpartner = numpy.array( [np_type( scores[struct_num]['WildTypeRPartner']['total'] ) for struct_num in struct_nums] )
+
+            matched_ddgs = (mut_complex - mut_lpartner - mut_rpartner) - (wt_complex - wt_lpartner - wt_rpartner)
+
+            scores_for_weighting = wt_complex
+
+            max_scores_for_weighting = numpy.max(scores_for_weighting)
+            normalized_scores_for_weighting = scores_for_weighting - max_scores_for_weighting
+
+            exponented_scores = numpy.exp( np_type(-1.0) * normalized_scores_for_weighting / np_type(temperature) )
+
+            weighted_ddg = numpy.divide(
+                numpy.sum( numpy.multiply(matched_ddgs, exponented_scores) ),
+                numpy.sum( exponented_scores )
+            )
+
+            return weighted_ddg
+        except PartialDataException:
+            sys.exit(0)
+            raise PartialDataException('The case is missing some data.')
 
 
     @analysis_api
