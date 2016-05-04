@@ -1633,8 +1633,10 @@ class BindingAffinityDDGInterface(ddG):
         try:
             all_struct_num_pairs = []
             for wt_struct_num in scores:
-                for mut_struct_num in scores:
-                    all_struct_num_pairs.append( (wt_struct_num, mut_struct_num) )
+                if 'WildTypeComplex' in scores[wt_struct_num]:
+                    for mut_struct_num in scores:
+                        if 'MutantComplex' in scores[mut_struct_num]:
+                            all_struct_num_pairs.append( (wt_struct_num, mut_struct_num) )
 
             structs_to_use_score = numpy.average([
                 (scores[mut_struct_num]['MutantComplex']['total'] - scores[mut_struct_num]['MutantLPartner']['total'] - scores[mut_struct_num]['MutantRPartner']['total']) -
@@ -1671,7 +1673,9 @@ class BindingAffinityDDGInterface(ddG):
 
         try:
             if structs_to_use == None:
-                structs_to_use = min( len(wt_total_scores), len(mut_total_scores) )
+                structs_to_use = len(scores)
+            else:
+                structs_to_use = min(structs_to_use, len(scores))
 
             structs_to_use_wt_struct_nums = random.sample(scores.keys(), structs_to_use)
             structs_to_use_mut_struct_nums = random.sample(scores.keys(), structs_to_use)
