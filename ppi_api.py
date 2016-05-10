@@ -1546,7 +1546,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
-    def get_complex_weighted_boltzmann_ddg(self, prediction_id, score_method_id, temperature, expectn = None):
+    def get_complex_weighted_boltzmann_ddg(self, prediction_id, score_method_id, temperature, expectn = None, scores_to_weight = 'wt_complex'):
         '''
         Returns DDG for this prediction by averaging all values for paired output structures
         '''
@@ -1574,7 +1574,12 @@ class BindingAffinityDDGInterface(ddG):
 
             matched_ddgs = (mut_complex - mut_lpartner - mut_rpartner) - (wt_complex - wt_lpartner - wt_rpartner)
 
-            scores_for_weighting = wt_complex
+            if scores_to_weight == 'wt_complex':
+                scores_for_weighting = wt_complex
+            elif scores_to_weight == 'mut_complex':
+                scores_for_weighting = mut_complex
+            else:
+                raise Exception('Unrecognized scores_to_weight argument: ' + str(scores_to_weight) )
 
             max_scores_for_weighting = numpy.max(scores_for_weighting)
             normalized_scores_for_weighting = scores_for_weighting - max_scores_for_weighting
