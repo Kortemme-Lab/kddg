@@ -128,6 +128,7 @@ class ddG(object):
 
         # Caching dictionaries
         self.cached_score_method_details = None
+        self.prediction_scores_cache = {}
 
         # Create an instance of the import API
         try:
@@ -1742,6 +1743,10 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         '''Returns the scores for the prediction using nested dicts with the structure:
                 ScoreMethodID -> StructureID -> ScoreType -> database record
         '''
+        cache_id = (prediction_id, expectn)
+        if cache_id in self.prediction_scores_cache:
+            return self.prediction_scores_cache[cache_id]
+
         scores = {}
         for r in self.DDG_db.execute_select('SELECT * FROM {0} WHERE {1}=%s'.format(self._get_prediction_structure_scores_table(), self._get_prediction_id_field()), parameters=(prediction_id,)):
             ScoreMethodID = r['ScoreMethodID']
@@ -1767,6 +1772,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 if num_cases < expectn:
                     print 'Expected scores for at least {0} runs with score method {1}; found {2}. Prediction id: {3}.'.format(expectn, score_method_id, num_cases, prediction_id)
 
+        self.prediction_scores_cache[cache_id] = scores
         return scores
 
 
