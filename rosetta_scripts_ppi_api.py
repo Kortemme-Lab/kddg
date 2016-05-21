@@ -37,7 +37,7 @@ DeclarativeBase = dbmodel.DeclarativeBase
 rosetta_scripts_xml_file = os.path.join('ddglib', 'score_partners.xml')
 output_db3 = 'output.db3'
 
-def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
+def get_interface(passwd, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
     '''This is the function that should be used to get a RosettaScriptsInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
     return GenericUserInterface.generate(RosettaScriptsInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)

@@ -11,7 +11,7 @@ import multiprocessing
 import random
 
 
-def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
+def get_interface(passwd, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a DDGMonomerInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
     return GenericUserInterface.generate(RescoreddGDatabase, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)

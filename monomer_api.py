@@ -39,7 +39,7 @@ from db_api import ddG, PartialDataException
 DeclarativeBase = dbmodel.DeclarativeBase
 
 
-def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
+def get_interface(passwd, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a MonomericStabilityDDGInterface interface object. It hides the
     private methods from the user so that a more traditional object-oriented API is created.'''
     return GenericUserInterface.generate(MonomericStabilityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)

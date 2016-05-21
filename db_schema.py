@@ -1214,7 +1214,7 @@ def generate_sqlalchemy_definition(tablenames = []):
        entire definition - it omits unique keys, foreign key constraints etc. but it saves a lot of manual work setting
        up the boilerplate field definitions. When the database schema changes, call this function to update the
        SQLAlchemy class definitions. You may want/need to reuse any existing relationships defined between tables.'''
-    sc = MySQLSchemaConverter('kortemmelab', 'kortemmelab.ucsf.edu', 'ddG', read_file(os.path.join('..', 'pw')).strip(), 3306, "/var/lib/mysql/mysql.sock")
+    sc = MySQLSchemaConverter('kortemmelab', 'guybrush.ucsf.edu', 'ddG', read_file(os.path.join('..', 'pw')).strip(), 3306, "/var/lib/mysql/mysql.sock")
     #sc.get_sqlalchemy_schema(['PDBFile', 'PDBChain', 'PDBMolecule', 'PDBMoleculeChain', 'PDBResidue'])
     sc.get_sqlalchemy_schema(tablenames)
 

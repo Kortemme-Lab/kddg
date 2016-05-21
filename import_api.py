@@ -136,7 +136,7 @@ class DataImportInterface(object):
     ##################
 
 
-    def __init__(self, passwd, connect_string, connect_string_utf, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, cache_dir = None, echo_sql = False, port = 3306, file_content_buffer_size = None):
+    def __init__(self, passwd, connect_string, connect_string_utf, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, cache_dir = None, echo_sql = False, port = 3306, file_content_buffer_size = None):
         '''
         :param passwd:
         :param connect_string:
@@ -190,7 +190,7 @@ class DataImportInterface(object):
 
 
     @classmethod
-    def get_interface_with_config_file(cls, database = 'ddg', host_config_name = 'kortemmelab', rosetta_scripts_path = None, rosetta_database_path = None, my_cnf_path = None, cache_dir = None, echo_sql = False, port = 3306):
+    def get_interface_with_config_file(cls, database = 'ddg', host_config_name = 'guybrush', rosetta_scripts_path = None, rosetta_database_path = None, my_cnf_path = None, cache_dir = None, echo_sql = False, port = 3306):
         # Uses ~/.my.cnf to get authentication information
         ### Example .my.cnf (host_config_name will equal guybrush2):
         ### [clientguybrush2]
@@ -1907,5 +1907,3 @@ def _test():
     # Update certain properties of RCSB files in the database
     importer.update_pdbs(update_sections = set(['Residues', 'Publication']), start_at = None, restrict_to_file_source = 'RCSB')
     #importer.update_pdbs(update_sections = set(['Ligands', 'Ions']), start_at = None, restrict_to_file_source = 'RCSB')
-
-

@@ -40,7 +40,7 @@ output_db3 = 'output.db3'
 date_format_string = '%Y-%m-%d %H:%M:%S'
 setup_run_with_multiprocessing = True
 
-def get_interface(passwd, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
+def get_interface(passwd, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
     '''This is the function that should be used to get a BackrubDDGInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
     return GenericUserInterface.generate(

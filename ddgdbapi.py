@@ -1947,7 +1947,7 @@ class ddGDatabase(DatabaseInterface):
     chainErrors = {}
     chainWarnings= {}
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'kortemmelab.ucsf.edu', use_utf=False, port = 3306):
+    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', use_utf=False, port = 3306):
         if not passwd:
             if os.path.exists("pw"):
                 F = open("pw")
@@ -1961,7 +1961,7 @@ class ddGDatabase(DatabaseInterface):
         super(ddGDatabase, self).__init__({},
             isInnoDB = True,
             numTries = 32,
-            db = "ddG",
+            db = "DDG",
             user = username,
             passwd = passwd,
             host = hostname,
