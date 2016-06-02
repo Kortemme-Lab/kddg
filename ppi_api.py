@@ -1517,10 +1517,18 @@ class BindingAffinityDDGInterface(ddG):
         elif analysis_type == 'MatchPairs':
             analysis_function = self.get_match_pairs_ddg
             analysis_parameter = None
-        elif analysis_type.startswith('CplxBoltz'):
-            assert( len(analysis_type) > len('CplxBoltz') )
-            analysis_function = self.get_complex_weighted_boltzmann_ddg
-            analysis_parameter = float( analysis_type[len('CplxBoltz'):] )
+        elif analysis_type.startswith('CplxBoltzWT'):
+            assert( len(analysis_type) > len('CplxBoltzWT') )
+            analysis_function = self.get_wt_complex_weighted_boltzmann_ddg
+            analysis_parameter = float( analysis_type[len('CplxBoltzWT'):] )
+        elif analysis_type.startswith('CplxBoltzMut'):
+            assert( len(analysis_type) > len('CplxBoltzMut') )
+            analysis_function = self.get_mut_complex_weighted_boltzmann_ddg
+            analysis_parameter = float( analysis_type[len('CplxBoltzMut'):] )
+        elif analysis_type.startswith('CplxBoltzBoth'):
+            assert( len(analysis_type) > len('CplxBoltzBoth') )
+            analysis_function = self.get_both_complex_weighted_boltzmann_ddg
+            analysis_parameter = float( analysis_type[len('CplxBoltzBoth'):] )
         else:
             raise Exception("Didn't recognize analysis type: " + str(main_ddg_analysis_type))
 
@@ -1544,6 +1552,17 @@ class BindingAffinityDDGInterface(ddG):
         prediction_data['DDGStability_Top%d' % top_x] = top_x_ddg_stability
         return prediction_data
 
+    @analysis_api
+    def get_wt_complex_weighted_boltzmann_ddg(self, prediction_id, score_method_id, temperature, expectn = None):
+        return self.get_complex_weighted_boltzmann_ddg(prediction_id, score_method_id, temperature, expectn = expectn, scores_to_weight = 'wt_complex')
+
+    @analysis_api
+    def get_mut_complex_weighted_boltzmann_ddg(self, prediction_id, score_method_id, temperature, expectn = None):
+        return self.get_complex_weighted_boltzmann_ddg(prediction_id, score_method_id, temperature, expectn = expectn, scores_to_weight = 'mut_complex')
+
+    @analysis_api
+    def get_both_complex_weighted_boltzmann_ddg(self, prediction_id, score_method_id, temperature, expectn = None):
+        return self.get_complex_weighted_boltzmann_ddg(prediction_id, score_method_id, temperature, expectn = expectn, scores_to_weight = 'both_complexes')
 
     @analysis_api
     def get_complex_weighted_boltzmann_ddg(self, prediction_id, score_method_id, temperature, expectn = None, scores_to_weight = 'wt_complex'):
@@ -1578,6 +1597,8 @@ class BindingAffinityDDGInterface(ddG):
                 scores_for_weighting = wt_complex
             elif scores_to_weight == 'mut_complex':
                 scores_for_weighting = mut_complex
+            elif scores_to_weight == 'both_complexes':
+                scores_for_weighting = mut_complex + wt_complex
             else:
                 raise Exception('Unrecognized scores_to_weight argument: ' + str(scores_to_weight) )
 
