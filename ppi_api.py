@@ -1359,26 +1359,6 @@ class BindingAffinityDDGInterface(ddG):
         return {}
 
 
-    def get_pubs_job_archive(self, *args, **kw):
-        prediction_type = kw.get('PredictionType')
-        prediction_id = kw.get('PredictionID')
-        if prediction_id and prediction_type:
-            if prediction_type == 'Binding affinity':
-                source_path = os.path.join('/home/kyleb/gits/ddg/job_output/151106-kyleb_dipubs/{0}-ddg/'.format(str(prediction_id)))
-                return self.zip_job_files(source_path, 'job_data_{0}_ba.zip'.format(prediction_id))
-            elif prediction_type == 'Monomeric stability':
-                source_filepath = os.path.join('/kortemmelab', 'shared', 'DDG', 'jobs', '{0}.zip'.format(str(prediction_id)))
-                try:
-                    assert(os.path.exists(source_filepath))
-                    archive = read_file(source_filepath)
-                    tg.response.headers['Content-type'] = 'application/zip'
-                    tg.response.headers['Content-Disposition'] = 'attachment;filename=job_data_{0}_ms.zip'.format(prediction_id)
-                    return archive
-                except Exception, e:
-                    return {'success' : False, 'message' : traceback.format_exc()}
-        else:
-            return {'success' : False}
-
     @app_pymol
     def create_pymol_session_in_memory(self, prediction_id, wt_task_number, mutant_task_number, pymol_executable = '/var/www/tg2/tg2env/designdb/pymol/pymol/pymol'):
 

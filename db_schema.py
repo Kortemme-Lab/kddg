@@ -573,7 +573,7 @@ class PPIDataSetCrossmap(DeclarativeBase):
 class PPIDatabaseComplex(DeclarativeBase):
     __tablename__ = 'PPIDatabaseComplex'
 
-    DatabaseName = Column(Enum('Kortemme & Baker','Kastritis et al.','Protein Protein Docking Benchmark v4.0','SKEMPI','ZEMu','CC/PBSA','Ben Stranges'), nullable=False, primary_key=True)
+    DatabaseName = Column(Enum('Kortemme & Baker', 'Kastritis et al.', 'Protein Protein Docking Benchmark v4.0', 'SKEMPI', 'ZEMu', 'CC/PBSA', 'Ben Stranges'), nullable=False, primary_key=True)
     DatabaseKey = Column(String(32), nullable=False, primary_key=True)
     PPComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=False)
 

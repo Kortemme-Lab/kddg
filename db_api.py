@@ -61,7 +61,6 @@ from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
 from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction, get_single_record_from_query
 from klab.rosetta.input_files import Mutfile, Resfile
 
-import score
 import ddgdbapi
 from import_api import DataImportInterface, json_dumps
 import db_schema as dbmodel
