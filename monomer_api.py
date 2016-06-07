@@ -35,11 +35,13 @@ import db_schema as dbmodel
 from api_layers import *
 from db_api import ddG, PartialDataException
 
+import settings # from ddg.ddglib import settings
+sys_settings = settings.load()
 
 DeclarativeBase = dbmodel.DeclarativeBase
 
 
-def get_interface(passwd, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None):
+def get_interface(passwd, username = sys_settings.database.username, hostname = sys_settings.database.hostname, rosetta_scripts_path = None, rosetta_database_path = None):
     '''This is the function that should be used to get a MonomericStabilityDDGInterface interface object. It hides the
     private methods from the user so that a more traditional object-oriented API is created.'''
     return GenericUserInterface.generate(MonomericStabilityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
@@ -48,7 +50,7 @@ def get_interface(passwd, username = 'kortemmelab', hostname = 'guybrush.ucsf.ed
 class MonomericStabilityDDGInterface(ddG):
 
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, file_content_buffer_size = None, port = 3306):
+    def __init__(self, passwd = None, username = sys_settings.database.username, hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, file_content_buffer_size = None, port = sys_settings.database.port):
         super(MonomericStabilityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, file_content_buffer_size = file_content_buffer_size, port = port)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionDataPath"')[0]['Value']
 

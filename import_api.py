@@ -7,7 +7,7 @@ High-level functions for importing data into the DDG database.
 
 Example usage:
     # Create an import API instance
-    importer = DataImportInterface.get_interface_with_config_file(cache_dir = '/kortemmelab/data/oconchus/ddgcache', echo_sql = False)
+    importer = DataImportInterface.get_interface_with_config_file(echo_sql = False)
 
     # Access the SQLAlchemy session directly
     session = importer.session
@@ -92,6 +92,9 @@ from db_schema import Publication, PublicationAuthor, PublicationIdentifier, Dec
 from api_layers import *
 import ddgdbapi
 
+import settings # from ddg.ddglib import settings
+sys_settings = settings.load()
+
 try:
     import magic
 except ImportError:
@@ -136,7 +139,7 @@ class DataImportInterface(object):
     ##################
 
 
-    def __init__(self, passwd, connect_string, connect_string_utf, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, cache_dir = None, echo_sql = False, port = 3306, file_content_buffer_size = None):
+    def __init__(self, passwd, connect_string, connect_string_utf, username = sys_settings.database.username, hostname = sys_settings.database.hostname, rosetta_scripts_path = None, rosetta_database_path = None, cache_dir = sys_settings.cache.cache_dir, echo_sql = False, port = sys_settings.database.port, file_content_buffer_size = None):
         '''
         :param passwd:
         :param connect_string:
@@ -162,7 +165,7 @@ class DataImportInterface(object):
         if self.cache_dir:
             self.initialize_cache_directory()
         else:
-            colortext.warning('Warning: No cache directory has been specified in your configuration file e.g.\n  cache_dir = /kortemmelab/data/username/ddgcache\nThis may result in files being retrieved from the RCSB servers multiple times.')
+            colortext.warning('Warning: No cache directory has been specified in your configuration file. Please look at settings.json.template for an example of how to configure this.\n Not using a cache directory may result in files being retrieved from the RCSB servers multiple times.')
 
         # Set up SQLAlchemy connections
         self.connect_string = connect_string
@@ -190,13 +193,13 @@ class DataImportInterface(object):
 
 
     @classmethod
-    def get_interface_with_config_file(cls, database = 'ddg', host_config_name = 'guybrush', rosetta_scripts_path = None, rosetta_database_path = None, my_cnf_path = None, cache_dir = None, echo_sql = False, port = 3306):
+    def get_interface_with_config_file(cls, database = sys_settings.database.database, host_config_name = sys_settings.database.host_config_name, rosetta_scripts_path = None, rosetta_database_path = None, my_cnf_path = None, cache_dir = sys_settings.cache.cache_dir, echo_sql = False, port = sys_settings.database.port):
         # Uses ~/.my.cnf to get authentication information
-        ### Example .my.cnf (host_config_name will equal guybrush2):
-        ### [clientguybrush2]
-        ### user=kyleb
+        ### Example .my.cnf (host_config_name will equal myserver):
+        ### [clientmyserver]
+        ### user=username
         ### password=notmyrealpass
-        ### host=guybrush.ucsf.edu
+        ### host=server.domain.com
         if not my_cnf_path:
             my_cnf_path = os.path.expanduser(os.path.join('~', '.my.cnf'))
         if not os.path.isfile(os.path.expanduser(my_cnf_path)):
@@ -207,6 +210,7 @@ class DataImportInterface(object):
         password = None
         host = None
         connection_string = None
+        connection_string_utf = None
         connection_string_key = 'sqlalchemy.{0}.url'.format(database)
         connection_string_key_utf = 'sqlalchemy.{0}.url.utf'.format(database)
         file_content_buffer_size = None
@@ -237,14 +241,14 @@ class DataImportInterface(object):
                         elif key == connection_string_key:
                             connection_string = val
                         elif key == connection_string_key_utf:
-                            connect_string_utf = val
+                            connection_string_utf = val
                     else:
                         parsing_config_section = False
 
-        if not user or not password or not host or not connection_string or not connect_string_utf:
+        if not user or not password or not host or not connection_string or not connection_string_utf:
             raise Exception("Couldn't find host(%s), username(%s), password, or connection string in section %s in %s" % (host, user, host_config_name, my_cnf_path) )
 
-        return cls(password, connection_string, connect_string_utf, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, cache_dir = cache_dir, echo_sql = echo_sql, port = port, file_content_buffer_size = file_content_buffer_size)
+        return cls(password, connection_string, connection_string_utf, username = user, hostname = host, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, cache_dir = cache_dir, echo_sql = echo_sql, port = port, file_content_buffer_size = file_content_buffer_size)
 
 
     def __del__(self):
@@ -823,7 +827,7 @@ ER  - ''',
         # Transmembrane
         if is_rcsb_pdb:
             if is_new_record or (db_record_object.Transmembrane == None):
-                pdbtmo = PDBTM(read_file('/kortemmelab/shared/mirror/PDBTM/pdbtmall.xml')) # todo: set this up as a parameter in the configuration file
+                pdbtmo = PDBTM(read_file(sys_settings.PDBTM.xml)) # this must be set up as a parameter in settings.json
                 pdb_id_map = pdbtmo.get_pdb_id_map()
                 uc_pdb_id_map = {}
                 for k, v in pdb_id_map.iteritems():
@@ -1896,7 +1900,7 @@ ER  - ''',
 def _test():
 
     # Create an import API instance
-    importer = DataImportInterface.get_interface_with_config_file(cache_dir = '/kortemmelab/data/oconchus/ddgcache', echo_sql = False)
+    importer = DataImportInterface.get_interface_with_config_file(cache_dir = sys_settings.cache.cache_dir, echo_sql = False)
 
     # Access the SQLAlchemy session directly
     session = importer.session

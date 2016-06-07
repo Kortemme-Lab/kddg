@@ -25,6 +25,9 @@ from klab.hash import CRC64
 from klab.biblio.ris import RISEntry
 from ddgobjects import DBObject
 
+import settings # from ddg.ddglib import settings
+sys_settings = settings.load()
+
 relaxed_amino_acid_codes = list(relaxed_amino_acid_codes)
 sqrt = math.sqrt
 DictCursor = MySQLdb.cursors.DictCursor
@@ -1947,7 +1950,7 @@ class ddGDatabase(DatabaseInterface):
     chainErrors = {}
     chainWarnings= {}
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', use_utf=False, port = 3306):
+    def __init__(self, passwd = None, username = sys_settings.database.username, hostname = sys_settings.database.hostname, use_utf=False, port = sys_settings.database.port):
         if not passwd:
             if os.path.exists("pw"):
                 F = open("pw")
@@ -1961,12 +1964,12 @@ class ddGDatabase(DatabaseInterface):
         super(ddGDatabase, self).__init__({},
             isInnoDB = True,
             numTries = 32,
-            db = "DDG",
+            db = sys_settings.database.database,
             user = username,
             passwd = passwd,
             host = hostname,
             port = port,
-            unix_socket = "/var/lib/mysql/mysql.sock",
+            unix_socket = sys_settings.database.socket,
             use_utf = use_utf,
         )
 

@@ -47,22 +47,25 @@ from api_layers import *
 from db_api import ddG, PartialDataException, SanityCheckException
 from import_api import json_dumps
 
+import settings # from ddg.ddglib import settings
+sys_settings = settings.load()
+
 DeclarativeBase = dbmodel.DeclarativeBase
 
 
-def get_interface(passwd, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
+def get_interface(passwd, username = sys_settings.database.username, hostname = sys_settings.database.hostname, rosetta_scripts_path = None, rosetta_database_path = None, port = sys_settings.database.port):
     '''This is the function that should be used to get a BindingAffinityDDGInterface object. It hides the private methods
        from the user so that a more traditional object-oriented API is created.'''
     return GenericUserInterface.generate(BindingAffinityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
 
 
-def get_interface_with_config_file(host_config_name = 'guybrush', rosetta_scripts_path = None, rosetta_database_path = None, get_interface_factory = get_interface, passed_port = None):
+def get_interface_with_config_file(host_config_name = sys_settings.database.host_config_name, rosetta_scripts_path = None, rosetta_database_path = None, get_interface_factory = get_interface, passed_port = None):
     # Uses ~/.my.cnf to get authentication information
-    ### Example .my.cnf (host_config_name will equal guybrush2):
-    ### [clientguybrush2]
-    ### user=myname
+    ### Example .my.cnf (host_config_name will equal myserver):
+    ### [clientmyserver]
+    ### user=username
     ### password=notmyrealpass
-    ### host=guybrush.ucsf.edu
+    ### host=server.domain.com
     my_cnf_path = os.path.expanduser(os.path.join('~', '.my.cnf'))
     if not os.path.isfile( os.path.expanduser(my_cnf_path) ):
         raise Exception("A .my.cnf file must exist at: " + my_cnf_path)
@@ -106,7 +109,7 @@ class BindingAffinityDDGInterface(ddG):
     '''This is the internal API class that should be NOT used to interface with the database.'''
 
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = None, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
+    def __init__(self, passwd = None, username = sys_settings.database.username, hostname = sys_settings.database.hostname, rosetta_scripts_path = None, rosetta_database_path = None, port = sys_settings.database.port, file_content_buffer_size = None):
         super(BindingAffinityDDGInterface, self).__init__(passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port, file_content_buffer_size = file_content_buffer_size)
         self.prediction_data_path = self.DDG_db.execute('SELECT Value FROM _DBCONSTANTS WHERE VariableName="PredictionPPIDataPath"')[0]['Value']
         self.unfinished_prediction_ids_cache = {}

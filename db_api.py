@@ -65,6 +65,9 @@ import ddgdbapi
 from import_api import DataImportInterface, json_dumps
 import db_schema as dbmodel
 
+import settings # from ddg.ddglib import settings
+sys_settings = settings.load()
+
 
 class FatalException(Exception): pass
 class PartialDataException(Exception): pass
@@ -107,7 +110,7 @@ class ddG(object):
 
     GET_JOB_FN_CALL_COUNTER_MAX = 10
 
-    def __init__(self, passwd = None, username = 'kortemmelab', hostname = 'guybrush.ucsf.edu', rosetta_scripts_path = None, rosetta_database_path = None, port = 3306, file_content_buffer_size = None):
+    def __init__(self, passwd = None, username = sys_settings.database.username, hostname = sys_settings.database.hostname, rosetta_scripts_path = None, rosetta_database_path = None, port = sys_settings.database.port, file_content_buffer_size = None):
         if passwd:
             passwd = passwd.strip()
         self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
@@ -1484,7 +1487,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
            depending on the dataset size. It seems to make more sense to me to use transactions at the single prediction
            level i.e. in extract_data_for_case
 
-           root_directory defaults to /kortemmelab/shared/DDG/ppijobs.
+           root_directory defaults to sys_settings.[api].prediction_data_path.
            If force is True then existing records should be overridden.
         '''
 
@@ -1519,7 +1522,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
            extract_data_for_case calls parse_prediction_scores to get the scores and the store_scores to commit them to the database.
         '''
 
-        root_directory = root_directory or self.prediction_data_path # defaults to /kortemmelab/shared/DDG/ppijobs
+        root_directory = root_directory or self.prediction_data_path # defaults to sys_settings.[api].prediction_data_path
         prediction_set = self.get_job_details(prediction_id, include_files = False)['PredictionSet']
 
         # todo: implement force behavior
