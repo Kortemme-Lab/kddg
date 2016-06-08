@@ -1,7 +1,7 @@
 #!/usr/bin/python2.4
 # encoding: utf-8
 """
-import_api.py
+data.py
 High-level functions for importing data into the DDG database.
 
 
@@ -90,7 +90,7 @@ from kddg.api.schema import Ion as DBIon
 from kddg.api.schema import User as DBUser
 from kddg.api.schema import Publication, PublicationAuthor, PublicationIdentifier, DeclarativeBase
 from kddg.api.layers import *
-import ddgdbapi
+from kddg.api import dbi
 
 import settings # from ddg.ddglib import settings
 sys_settings = settings.load()
@@ -154,8 +154,8 @@ class DataImportInterface(object):
 
         # Set up MySQLdb connections
         passwd = passwd.strip()
-        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
-        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True, port = port)
+        self.DDG_db = dbi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
+        self.DDG_db_utf = dbi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True, port = port)
 
         self.cache_dir = cache_dir
         self.echo_sql = echo_sql

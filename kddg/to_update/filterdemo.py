@@ -7,7 +7,7 @@ import profile
 from klab import colortext
 from klab.deprecated import rosettadb
 from klab.debug.profile import ProfileTimer
-from ddglib import db_api, ddgdbapi
+from kddg.api import db, dbi
 from ddglib import help as ddg_help
 from ddglib.ddgfilters import *
 
@@ -16,7 +16,7 @@ import klab.deprecated.rosettahelper
 
 def simpleRunExample(self):
 	# Step 1: Open a database connection
-	ddGdb = ddgdbapi.ddGDatabase()
+	ddGdb = dbi.ddGDatabase()
 
 	# Step 2: Select database records
 	sr = StructureResultSet(ddGdb, AdditionalIDs = ['2BQC', '1LAW', '1LHH', '1LHI'])
@@ -38,7 +38,7 @@ def help():
 	ddg_help.ShowFilter()
 
 def dump_zip(jobnumber):
-	ddG_connection = db_api.ddG()
+	ddG_connection = db.ddG()
 	ddG_connection.dumpData("testzip-%d.zip" % jobnumber, jobnumber)
 
 class JobRunner:
@@ -68,7 +68,7 @@ class JobRunner:
 
 		experimentIDs = sorted(list(er1.getFilteredIDs()))
 		colortext.message("\nThe number of unique experiments is %d.\n" % len(experimentIDs))
-		ddG_connection = db_api.ddG()
+		ddG_connection = db.ddG()
 		count = 0
 		for experimentID in experimentIDs:
 			ddG_connection.addPrediction(experimentID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True)
@@ -95,7 +95,7 @@ class JobRunner:
 
 		experimentIDs = sorted(list(er1.getFilteredIDs()))
 		colortext.message("\nThe number of unique experiments is %d.\n" % len(experimentIDs))
-		ddG_connection = db_api.ddG()
+		ddG_connection = db.ddG()
 		count = 0
 		for experimentID in experimentIDs:
 			ddG_connection.addPrediction(experimentID, PredictionSet, ProtocolID, KeepHETATMLines, StoreOutput = True)
@@ -109,7 +109,7 @@ class JobRunner:
 	@staticmethod
 	def addAllMutationsForAGivenPDB1():
 		'''Used to create dummy Experiment records for Lin's DDG run. This should probably be an API function.'''
-		ddG_connection = db_api.ddG()
+		ddG_connection = db.ddG()
 		opdb = common.pdb.PDB("3K0NA_lin.pdb")
 		count = 1
 		for chainresidueid, wt in sorted(opdb.ProperResidueIDToAAMap().iteritems()):
@@ -117,7 +117,7 @@ class JobRunner:
 			residueid = chainresidueid[1:].strip()
 			allotherAAs = sorted([aa for aa in klab.deprecated.rosettahelper.ROSETTAWEB_SK_AAinv.keys() if aa != wt])
 			for otherAA in allotherAAs:
-				ms = db_api.MutationSet()
+				ms = db.MutationSet()
 				ms.addMutation(chain, residueid, wt, otherAA)
 				print("3K0NA_lin", ms, ms.getChains(), count, 0)
 				ddG_connection.createDummyExperiment("3K0NA_lin", ms, ms.getChains(), count, 0, ExperimentSetName = "DummySource")
@@ -126,7 +126,7 @@ class JobRunner:
 	@staticmethod
 	def addAllMutationsForAGivenPDB2():
 		'''Used to create dummy Experiment records for Lin's DDG run. This should probably be an API function.'''
-		ddG_connection = db_api.ddG()
+		ddG_connection = db.ddG()
 		opdb = common.pdb.PDB("3K0On_lin.pdb")
 		count = 3098
 		for chainresidueid, wt in sorted(opdb.ProperResidueIDToAAMap().iteritems()):
@@ -134,7 +134,7 @@ class JobRunner:
 			residueid = chainresidueid[1:].strip()
 			allotherAAs = sorted([aa for aa in klab.deprecated.rosettahelper.ROSETTAWEB_SK_AAinv.keys() if aa != wt])
 			for otherAA in allotherAAs:
-				ms = db_api.MutationSet()
+				ms = db.MutationSet()
 				ms.addMutation(chain, residueid, wt, otherAA)
 				print("3K0On_lin", ms, ms.getChains(), count, 0)
 				ddG_connection.createDummyExperiment("3K0On_lin", ms, ms.getChains(), count, 0, ExperimentSetName = "DummySource")
@@ -144,10 +144,10 @@ class JobRunner:
 	def addAllMutationsForAGivenPDB3():
 		'''Used to create dummy Experiment records for Lin's DDG run. This should probably be an API function.'''
 		FilterTester.openDB()
-		ddG_connection = db_api.ddG()
+		ddG_connection = db.ddG()
 		opdb = common.pdb.PDB("pdbs/3K0NB_lin.pdb")
 
-		results = ddGdb.execute('''SELECT SourceID FROM ExperimentScore INNER JOIN Experiment ON ExperimentScore.ExperimentID = Experiment.ID WHERE Source="DummySource"''', cursorClass=ddgdbapi.StdCursor)
+		results = ddGdb.execute('''SELECT SourceID FROM ExperimentScore INNER JOIN Experiment ON ExperimentScore.ExperimentID = Experiment.ID WHERE Source="DummySource"''', cursorClass=dbi.StdCursor)
 		assert(results)
 		highestID = max([int(r[0]) for r in results])
 		count = highestID + 1
@@ -157,7 +157,7 @@ class JobRunner:
 			residueid = chainresidueid[1:].strip()
 			allotherAAs = sorted([aa for aa in klab.deprecated.rosettahelper.ROSETTAWEB_SK_AAinv.keys() if aa != wt])
 			for otherAA in allotherAAs:
-				ms = db_api.MutationSet()
+				ms = db.MutationSet()
 				ms.addMutation(chain, residueid, wt, otherAA)
 				print("3K0NB_lin", ms, ms.getChains(), count, 0, chain, wt, residueid, otherAA)
 				ddG_connection.createDummyExperiment("3K0NB_lin", ms, ms.getChains(), count, 0, ExperimentSetName = "DummySource")
@@ -168,13 +168,13 @@ class Analyzer:
 
 	@staticmethod
 	def testAnalysis():
-		ddG_connection = db_api.ddG()
+		ddG_connection = db.ddG()
 		pr = PredictionResultSet(ddGdb, SQL = "WHERE PredictionSet='kellogg16-A' AND Status='done' LIMIT 2000")
 		ddG_connection.analyze(pr)
 
 	@staticmethod
 	def testAnalysis2():
-		ddG_connection = db_api.ddG()
+		ddG_connection = db.ddG()
 		pr = PredictionResultSet(ddGdb, SQL = "WHERE PredictionSet='lizsettest1' AND Status='done' LIMIT 2000")
 		ddG_connection.analyze(pr)
 
@@ -209,7 +209,7 @@ class FilterTester:
 	@staticmethod
 	def openDB():
 		if not globals().get("ddGdb"):
-			globals()["ddGdb"] = ddgdbapi.ddGDatabase()
+			globals()["ddGdb"] = dbi.ddGDatabase()
 			total_number_of_experiments = ddGdb.execute('SELECT COUNT(ID) AS C FROM Experiment')[0]['C']
 			globals()["total_number_of_experiments"] = total_number_of_experiments
 
@@ -590,7 +590,7 @@ class FilterTester:
 	def showAllEligibleProTherm(PredictionSet, ProtocolID, KeepHETATMLines):
 		#inserter = JobInserter()
 		colortext.printf("\nAdding ProTherm mutations to %s prediction set." % PredictionSet, "lightgreen")
-		#ddGdb = ddgdbapi.ddGDatabase()
+		#ddGdb = dbi.ddGDatabase()
 		
 		MAX_RESOLUTION = 2.1
 		MAX_NUMRES_PROTHERM = 350
@@ -633,7 +633,7 @@ class FilterTester:
 		
 		experimentIDs = sorted(list(er1.getFilteredIDs()))
 		colortext.message("\nThe number of unique ProTherm experiments with:\n\t- one mutation;\n\t- structures solved by X-ray diffraction and with <= %d residues;\n\t- a maximum standard deviation in experimental results of <= %0.2f;\n\t- and a resolution of <= %0.2f Angstroms.\nis %d.\n" % (MAX_NUMRES_PROTHERM, MAX_STANDARD_DEVIATION, MAX_RESOLUTION, len(experimentIDs)))
-		ddG_connection = db_api.ddG()
+		ddG_connection = db.ddG()
 		count = 0
 		sys.exit(0)
 		print("")
@@ -649,7 +649,7 @@ class FilterTester:
 
 	@staticmethod
 	def testPublications():
-		ddG_connection = db_api.ddG()
+		ddG_connection = db.ddG()
 
 		FilterTester.openDB()
 		pr = PredictionResultSet(ddGdb, SQL = "WHERE ID >= 28331 and ID <= 28431")
@@ -683,10 +683,10 @@ if False:
 
 #ddG_connection.createPredictionsFromUserDataSet("AllValidPGPK", "AllExperimentsProtocol16", "Kellogg:10.1002/prot.22921:protocol16:32231", False, StoreOutput = False, Description = {}, InputFiles = {}, testonly = False)
 	
-#ddG_connection = db_api.ddG()
+#ddG_connection = db.ddG()
 #ddG_connection.addPDBtoDatabase(pdbID = "1FKJ")
 
-ddG_connection = db_api.ddG()
+ddG_connection = db.ddG()
 
 if __name__ == '__main__':
 	#help()

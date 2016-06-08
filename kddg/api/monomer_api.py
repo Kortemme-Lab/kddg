@@ -1,7 +1,7 @@
 #!/usr/bin/python2.4
 # encoding: utf-8
 """
-monomer_api.py
+monomer.py
 High-level functions for interacting with the protein stability sections of the ddG database.
 
 Classes:

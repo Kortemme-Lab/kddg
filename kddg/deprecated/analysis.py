@@ -24,7 +24,7 @@ import json
 from tempfile import mkstemp
 
 import klab.colortext as colortext
-import ddgdbapi
+from kddg.api import dbi
 import klab.deprecated.rosettahelper as rosettahelper
 from klab.deprecated.rosettahelper import kJtokcal
 
@@ -414,7 +414,7 @@ class Analyzer(object):
             self.score_cap = float(score_cap)
 
         self.analysis_tables = None
-        self.ddGdb = ddgdbapi.ddGDatabase()
+        self.ddGdb = dbi.ddGDatabase()
         self.description = []
         self.CreateAnalysisTables()
 

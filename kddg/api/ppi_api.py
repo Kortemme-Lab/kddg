@@ -1,7 +1,7 @@
 #!/usr/bin/python2.4
 # encoding: utf-8
 """
-ppi_api.py
+ppi.py
 High-level functions for interacting with the protein-protein interaction sections of the ddG database.
 
 Classes:
@@ -45,7 +45,7 @@ from klab.stats.misc import get_xy_dataset_statistics_pandas
 import kddg.api.schema as dbmodel
 from kddg.api.layers import *
 from kddg.api.db import ddG, PartialDataException, SanityCheckException
-from import_api import json_dumps
+from kddg.api.data import json_dumps
 
 import settings # from ddg.ddglib import settings
 sys_settings = settings.load()
@@ -2318,7 +2318,7 @@ class BindingAffinityDDGInterface(ddG):
 
            complex_structure_definition_pair should be a dict with the structure:
                 dict(
-                    Structure = <see the definition in import_api:add_designed_pdb>,
+                    Structure = <see the definition in kddg.api.data:add_designed_pdb>,
                     Complex = <see the definition in ppi_api:add_complex>,
                 )
 

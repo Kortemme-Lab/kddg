@@ -1,7 +1,7 @@
 #!/usr/bin/python2.4
 # encoding: utf-8
 """
-import_api.py
+old import_api.py
 High-level functions for importing data into the DDG database.
 
 Created by Shane O'Connor 2015.
@@ -51,7 +51,7 @@ from kddg.api.schema import Ligand as DBLigand
 #from kddg.api.schema import Publication, PublicationAuthor, PublicationIdentifier
 from kddg.api.layers import *
 from kddg.api.db import ddG, PartialDataException, SanityCheckException
-import klab.api.ddgdbapi as ddgdbapi
+import kddg.api.dbi as dbi
 
 rosetta_scripts_path =  '/home/oconchus/t14benchmarking/r57934/main/source/bin/rosetta_scripts.linuxgccrelease'
 rosetta_database_path = '/home/oconchus/t14benchmarking/r57934/main/database'
@@ -61,7 +61,7 @@ p.construct_pdb_to_rosetta_residue_map(rosetta_scripts_path, rosetta_database_pa
 pprint.pprint(p.get_atom_sequence_to_rosetta_map())
 pprint.pprint(p.rosetta_sequences)
 
-from ppi_api import get_interface as get_ppi_interface
+from kddg.api.ppi import get_interface as get_ppi_interface
 ppi_api = get_ppi_interface(read_file('../misc/ddgdb.pw'),
                                 rosetta_scripts_path =  '/home/oconchus/t14benchmarking/r57934/main/source/bin/rosetta_scripts.linuxgccrelease',
                                 rosetta_database_path = '/home/oconchus/t14benchmarking/r57934/main/database')

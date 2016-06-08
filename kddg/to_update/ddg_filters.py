@@ -9,10 +9,10 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 """
 import pickle
 from string import join
-import ddgdbapi
+import kddg.api.dbi as dbi
 from ddglib.filter import *
 
-from ddgdbapi import ddGDatabase
+from kddg.api.dbi import ddGDatabase
 
 if __name__ == '__main__':
     dbfields = ddGDatabase().FieldNames
@@ -318,7 +318,7 @@ class ExperimentFilter(Filter):
 	def setAminoAcids(self, wildtype = None, mutant = None):
 		valid_wildtype = None
 		valid_mutant = None
-		for aa in ddgdbapi.aas:
+		for aa in dbi.aas:
 			if wildtype == aa[0] or wildtype == aa[1]:
 				valid_wildtype = aa[0] 
 			if mutant == aa[0] or mutant == aa[1]:

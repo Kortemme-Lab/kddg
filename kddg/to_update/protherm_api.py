@@ -11,8 +11,8 @@ if __name__ == "__main__":
 from string import join
 #import common.colortext as colortext
 import klab.colortext as colortext
-import ddgdbapi
-import ddgobjects
+from kddg.api import dbi
+
 #from common.rosettahelper import kJtokcal, NUMBER_KJ_IN_KCAL, NUMBER_KELVIN_AT_ZERO_CELSIUS
 from klab.deprecated.rosettahelper import kJtokcal, NUMBER_KJ_IN_KCAL, NUMBER_KELVIN_AT_ZERO_CELSIUS
 from klab.bio.basics import Mutation as MutationO
@@ -2351,7 +2351,7 @@ def getDDGUnitsUsedInDB(ddGDB):
 	return unitsUsed
 	
 def getIDsInDB(ddGDB = None, source = "ProTherm-2008-09-08-23581"):
-	records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = ddgdbapi.StdCursor)])
+	records_in_database = set([int(r[0]) for r in ddGDB.execute('SELECT SourceID FROM ExperimentScore INNER JOIN Experiment on ExperimentID=Experiment.ID WHERE Source=%s', parameters =(source,), cursorClass = dbi.StdCursor)])
 	return records_in_database
 	
 def summarizeList(l):
@@ -2380,7 +2380,7 @@ class ProThermReader(object):
 	def __init__(self, infilepath, ddGDB = None, quiet = False, skipIndexStore = False):
 		
 		if not ddGDB:
-			ddGDB = ddgdbapi.ddGDatabase()
+			ddGDB = dbi.ddGDatabase()
 		self.ddGDB = ddGDB
 		
 		mtchs = re.match(".*(ProTherm)(\d+)[.]dat$", infilepath, re.IGNORECASE)
@@ -3212,7 +3212,7 @@ class ProThermReader(object):
 		return passed
 		
 	def getMutations(self, ID, record = None):
-		'''Returns a list of ddgobjects.Mutation objects.'''
+		'''Returns a list of kddg.api.base.Mutation objects.'''
 		record = self._getRecord(ID, record)
 			
 		mutations = []

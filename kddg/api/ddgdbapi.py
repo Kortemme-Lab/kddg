@@ -23,7 +23,8 @@ from klab.bio.pdb import PDB, MissingRecordsException
 from klab.bio.basics import relaxed_residue_types_1 as relaxed_amino_acid_codes
 from klab.hash import CRC64
 from klab.biblio.ris import RISEntry
-from ddgobjects import DBObject
+
+from kddg.api.base import DBObject
 
 import settings # from ddg.ddglib import settings
 sys_settings = settings.load()
@@ -345,7 +346,7 @@ def read_UniProt_map(ddGdb):
 
 class PDBStructure_deprecated(DBObject):
 
-    '''This was the old object used to import data into the database. I am transitioning this to import_api:PDBFile.'''
+    '''This was the old object used to import data into the database. I am transitioning this to kddg.api.data:PDBFile.'''
 
     # At the time of writing, these PDB IDs had no UniProt entries
     NoUniProtIDs = set(['1GTX', '1UOX', '1WSY', '1YYJ', '2IMM', '2MBP'])

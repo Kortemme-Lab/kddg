@@ -177,7 +177,7 @@ def getDataForRosettaCon(self):
 		publicationSources[publicationID]["DDGValueLocations"] = [location["Location"] for location in ddGdb.execute('SELECT * FROM SourceDDGValueLocation WHERE SourceID=%s', parameters=(publicationID,))]
 
 	ExistingDBIDs = {}
-	for r in ddGdb.execute('SELECT RecordNumber, DataSetDDGSource.ExperimentAssayID FROM DataSetDDG INNER JOIN DataSetDDGSource ON DataSetDDGID=DataSetDDG.ID INNER JOIN ExperimentAssayDDG ON DataSetDDGSource.ExperimentAssayID=ExperimentAssayDDG.ExperimentAssayID WHERE DataSetID="ProTherm_v25616_2011/12/21"', cursorClass = ddgdbapi.StdCursor):
+	for r in ddGdb.execute('SELECT RecordNumber, DataSetDDGSource.ExperimentAssayID FROM DataSetDDG INNER JOIN DataSetDDGSource ON DataSetDDGID=DataSetDDG.ID INNER JOIN ExperimentAssayDDG ON DataSetDDGSource.ExperimentAssayID=ExperimentAssayDDG.ExperimentAssayID WHERE DataSetID="ProTherm_v25616_2011/12/21"', cursorClass = dbi.StdCursor):
 		ExistingDBIDs[int(r[0])] = int(r[1])
 	
 	PublicationsToCheck = [r["SourceID"] for r in ddGdb.execute('SELECT SourceID FROM ProThermUnits WHERE DDGConvention IS NULL')] 

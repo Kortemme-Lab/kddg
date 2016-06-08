@@ -61,8 +61,8 @@ from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
 from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction, get_single_record_from_query
 from klab.rosetta.input_files import Mutfile, Resfile
 
-import ddgdbapi
-from import_api import DataImportInterface, json_dumps
+from kddg.api import dbi
+from kddg.api.data import DataImportInterface, json_dumps
 import kddg.api.schema as dbmodel
 
 import settings # from ddg.ddglib import settings
@@ -97,7 +97,7 @@ class ddG(object):
        of the derived classes e.g. MonomericStabilityDDGInterface or the clean user API which hides internal functionality.
        The clean API is instantiated as in the example below:
 
-            from ddglib.monomer_api import get_interface as get_protein_stability_interface
+            from kddg.api.monomer import get_interface as get_protein_stability_interface
             stability_api = get_protein_stability_interface(read_file('ddgdb.pw'))
             stability_api.help()
 
@@ -113,8 +113,8 @@ class ddG(object):
     def __init__(self, passwd = None, username = sys_settings.database.username, hostname = sys_settings.database.hostname, rosetta_scripts_path = None, rosetta_database_path = None, port = sys_settings.database.port, file_content_buffer_size = None):
         if passwd:
             passwd = passwd.strip()
-        self.DDG_db = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
-        self.DDG_db_utf = ddgdbapi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True, port = port)
+        self.DDG_db = dbi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, port = port)
+        self.DDG_db_utf = dbi.ddGDatabase(passwd = passwd, username = username, hostname = hostname, use_utf = True, port = port)
         self.prediction_data_path = None
         self.rosetta_scripts_path = rosetta_scripts_path
         self.rosetta_database_path = rosetta_database_path
@@ -397,7 +397,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                     for pub in pubs:
                         print("\t%s: %s" % (pub["Type"], pub["SourceLocation.ID"]))
 
-                experimentsets = [e[0] for e in self.DDG_db.execute_select("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % ','.join(map(str, list(experiments.IDs))), cursorClass = ddgdbapi.StdCursor)]
+                experimentsets = [e[0] for e in self.DDG_db.execute_select("SELECT DISTINCT Source FROM Experiment WHERE ID IN (%s)" % ','.join(map(str, list(experiments.IDs))), cursorClass = dbi.StdCursor)]
 
                 if experimentsets:
                     colortext.printf("\nRelated publications for experiment-set sources:", "lightgreen")
@@ -454,7 +454,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def addPrediction(self, experimentID, UserDataSetExperimentID, PredictionSet, ProtocolID, KeepHETATMLines, PDB_ID = None, StoreOutput = False, ReverseMutation = False, Description = {}, InputFiles = {}, testonly = False, strip_other_chains = True): raise Exception('This function has been deprecated. Use add_job instead.')
 
     @deprecated
-    def add_pdb_file(self, filepath, pdb_id): raise Exception('This function has been deprecated. Use the import_api.add_pdb_* functions instead.')
+    def add_pdb_file(self, filepath, pdb_id): raise Exception('This function has been deprecated. Use the kddg.api.data.add_pdb_* functions instead.')
 
     @deprecated
     def getPublications(self, result_set): raise Exception('This function has been deprecated. Use get_publications_for_result_set instead.')
@@ -481,7 +481,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def createDummyExperiment(self, pdbID, mutationset, chains, sourceID, ddG, ExperimentSetName = "DummySource"):
         #todo: elide createDummyExperiment, createDummyExperiment_ankyrin_repeat, and add_mutant
         raise Exception("Out of date function.")
-        Experiment = ddgdbapi.ExperimentSet(pdbID, ExperimentSetName)
+        Experiment = dbi.ExperimentSet(pdbID, ExperimentSetName)
         for m in mutationset.mutations:
             Experiment.addMutation(m[0], m[1], m[2], m[3])
         for c in chains:
@@ -493,7 +493,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def createDummyExperiment_ankyrin_repeat(self, pdbID, mutations, chain):
         raise Exception("Out of date function.")
         #todo: elide createDummyExperiment, createDummyExperiment_ankyrin_repeat, and add_mutant
-        experiment = ddgdbapi.ExperimentDefinition(self.DDG_db, pdbID, interface = None)
+        experiment = dbi.ExperimentDefinition(self.DDG_db, pdbID, interface = None)
         experiment.addChain(chain)
         for m in mutations:
             experiment.addMutation(m)
@@ -834,7 +834,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def get_pdb_details(self, pdb_ids, cached_pdb_details = None):
         '''Returns the details stored in the database about the PDB files associated with pdb_ids e.g. chains, resolution,
            technique used to determine the structure etc.'''
-        raise Exception('Replace this with a call to import_api.py::DataImportInterface.get_pdb_details()')
+        raise Exception('Replace this with a call to kddg.api.data.py::DataImportInterface.get_pdb_details()')
         return self.importer.get_pdb_details(pdb_ids, cached_pdb_details = None)
         pdbs = {}
         cached_pdb_ids = []
@@ -2588,7 +2588,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
 
     def _add_stripped_pdb_to_prediction(self, prediction_id):
-        # todo: this is not being called (and should be) - see _add_job in ppi_api.py
+        # todo: this is not being called (and should be) - see _add_job in kddg.api.ppi.py
         raise Exception('reimplement')
         pdb_file_id, chains = self.get_pdb_chains_for_prediction(prediction_id)
         pdb_content = self._strip_pdb(pdb_file_id, chains)
