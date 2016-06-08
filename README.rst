@@ -3,6 +3,8 @@ kddg - The Kortemme Lab DDG Database Repository
 
 Database APIs for a database used by our lab to store data about mutageneses, macromolecular complexes, experimental measurements, and computational methods. This database is used primarily for DDG predictions at present.
 
+Note: This code is unsupported and provided as is (see LICENSE).
+
 Coding convention
 =================
 
