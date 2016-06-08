@@ -16,6 +16,14 @@ Coding convention
 - Nerdy references   : Allowed / encouraged.
 - Shiny?             : Shiny! See above.
 
+Versioning
+==========
+
+The version of this repository (currently 0.29) follows the internal numbering Shane has used for the database schema
+versions (currently v2.9).
+
+I plan to change the schema considerably in the near future so the code should be considered in flux and alpha.
+
 Installation
 ============
 
