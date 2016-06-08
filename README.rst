@@ -12,7 +12,7 @@ Coding convention
 - Whitespace         : Use spaces instead of tabs, with indents set to 4 spaces.
 - Natural language   : Please do not use contractions.
 - Nerdy references   : Allowed / encouraged.
-- Shiny?             : See above.
+- Shiny?             : Shiny! See above.
 
 Installation
 ============
