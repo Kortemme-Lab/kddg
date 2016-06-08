@@ -5,6 +5,11 @@ Database APIs for a database used by our lab to store data about mutageneses, ma
 
 Note: This code is unsupported and provided as is (see LICENSE).
 
+Dependencies
+============
+
+This repository relies on the klab repository: https://github.com/Kortemme-Lab/klab.
+
 Coding convention
 =================
 
@@ -19,8 +24,6 @@ Coding convention
 Installation
 ============
 
-Once the PyPI package is up and running (it is currently not)...
-
 This package can be installed via:
 ::
   pip install kddg
@@ -29,14 +32,17 @@ To install via pip and allow git push/pulling, use:
 
 In a virtualenv:
 ::
-  pip install -e git+ssh://git@github.com/Kortemme-Lab/kddg.git#egg=Package
+  pip install -e git+ssh://git@github.com/Kortemme-Lab/klab.git#egg=klab
+  pip install -e git+ssh://git@github.com/Kortemme-Lab/kddg.git#egg=kddg
 
 In your user-directory:
 ::
-  pip install --user -e git+ssh://git@github.com/Kortemme-Lab/kddg.git#egg=Package
+  pip install --user -e git+ssh://git@github.com/Kortemme-Lab/klab.git#egg=klab
+  pip install --user -e git+ssh://git@github.com/Kortemme-Lab/kddg.git#egg=kddg
 
 In your user-directory, without using SSH:
 ::
-  pip install --user -e git+https://github.com/Kortemme-Lab/kddg.git#egg=Package
+  pip install --user -e git+https://github.com/Kortemme-Lab/klab.git#egg=klab
+  pip install --user -e git+https://github.com/Kortemme-Lab/kddg.git#egg=kddg
 
 
