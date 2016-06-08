@@ -24,18 +24,18 @@ import pprint
 import datetime
 import numpy
 from sqlalchemy import and_
+import pandas as pd
 
 from klab import colortext
 from klab.bio.alignment import ScaffoldModelChainMapper
-
 from klab.benchmarking.analysis.ddg_monomeric_stability_analysis import DBBenchmarkRun as MonomericStabilityBenchmarkRun
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 
 import kddg.api.schema as dbmodel
 from kddg.api.layers import *
 from kddg.api.db import ddG, PartialDataException
+from kddg.api import settings
 
-import settings # from ddg.ddglib import settings
 sys_settings = settings.load()
 
 DeclarativeBase = dbmodel.DeclarativeBase
@@ -1080,9 +1080,6 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
             Returns a symmetric matrix (as a pandas dataframe) with the pairwise overlaps.
             Usage: self.get_dataset_overlap_by_Experiment(restrict_to_subsets = ['CuratedProTherm', 'Guerois', 'Kellogg', 'Potapov']).'''
 
-        import numpy
-        import pandas as pd
-
         # Read the list of experiments from the database
         analysis_set_experiments = {}
         results = self.DDG_db.execute_select('SELECT * FROM UserAnalysisSet WHERE UserDataSetID=%s', parameters=(UserDataSetID,))
@@ -1110,9 +1107,6 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
                     still some duplicates.
             Returns a symmetric matrix (as a pandas dataframe) with the pairwise overlaps.
             Usage: self.get_dataset_overlap_by_Experiment(other_subsets = ['CuratedProTherm', 'Guerois', 'Kellogg', 'Potapov']).'''
-
-        import numpy
-        import pandas as pd
 
         # Read the list of experiments from the database
         analysis_set_experiments = {}
@@ -1178,7 +1172,7 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
     @analysis_api
     def get_analysis_set_overlap_by_Experiment_as_radii(self, max_radius, restrict_to_subsets = set(), UserDataSetID = 1):
         '''Todo: look at where this was called and figure out what I was doing. I think this was used to decide on the relative sizes of overlaps between datasets in a Venn diagram.'''
-        import numpy
+
         df = self.get_analysis_set_overlap_by_Experiment(restrict_to_subsets = restrict_to_subsets, UserDataSetID = UserDataSetID)
 
         # Determine the relative sizes for the radii (a = pi.r^2 so pi cancels out).

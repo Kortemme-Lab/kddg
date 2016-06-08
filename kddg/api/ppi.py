@@ -46,8 +46,8 @@ import kddg.api.schema as dbmodel
 from kddg.api.layers import *
 from kddg.api.db import ddG, PartialDataException, SanityCheckException
 from kddg.api.data import json_dumps
+from kddg.api import settings
 
-import settings # from ddg.ddglib import settings
 sys_settings = settings.load()
 
 DeclarativeBase = dbmodel.DeclarativeBase

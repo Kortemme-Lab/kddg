@@ -9,6 +9,10 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 """
 
 import inspect
+from string import join
+
+from klab import colortext
+
 
 class kobject(object):
 
@@ -72,11 +76,6 @@ class kobject(object):
 
         return {"functions" : lfunctions, "methods" : lmethods, "attributes" : lattributes}
 
-
-
-import inspect
-from klab import colortext
-from string import join
 
 class AbstractClass(object):
     '''Helper class to try to emulate abstract classes in Python. For this to work, the abstract class A must call

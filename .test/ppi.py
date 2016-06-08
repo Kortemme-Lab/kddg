@@ -1,6 +1,3 @@
-import sys
-sys.path.insert(0, '../..')
-
 import pprint
 
 from kddg.api.ppi import get_interface_with_config_file

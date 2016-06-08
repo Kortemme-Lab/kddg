@@ -13,7 +13,8 @@ import functools
 
 from klab import colortext
 
-import settings # from ddg.ddglib import settings
+from kddg.api import settings
+
 sys_settings = settings.load()
 
 

@@ -11,11 +11,8 @@ Copyright (c) 2012 __UCSF__. All rights reserved.
 import sys
 import os
 import string
-import re
-import shutil
 import glob
 import traceback
-import pickle
 import random
 import datetime
 import zipfile
@@ -25,7 +22,7 @@ import pprint
 import json
 
 from io import BytesIO
-from kddg.api.layers import *
+
 try:
     import pandas
 except ImportError:
@@ -48,13 +45,11 @@ from klab.bio.basics import residue_type_3to1_map as aa1, dssp_elision
 from klab.bio.basics import Mutation
 from klab.bio.pdbtm import PDBTM
 
-#from Bio.PDB import *
 from klab.fs.fsio import write_file, read_file, open_temp_file
 from klab.process import Popen
 from klab.constants import rosetta_weights
 from klab import colortext
 from klab.stats.misc import get_xy_dataset_statistics
-
 from klab.general.strutil import remove_trailing_line_whitespace
 from klab.hash.md5 import get_hexdigest
 from klab.fs.fsio import read_file, get_file_lines, write_file, write_temp_file
@@ -64,8 +59,9 @@ from klab.rosetta.input_files import Mutfile, Resfile
 from kddg.api import dbi
 from kddg.api.data import DataImportInterface, json_dumps
 import kddg.api.schema as dbmodel
+from kddg.api.layers import *
+from kddg.api import settings
 
-import settings # from ddg.ddglib import settings
 sys_settings = settings.load()
 
 
@@ -1607,10 +1603,10 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             # Only check prediction is in prediction set if prediction set is passed in
             self._check_prediction(prediction_id, prediction_set)
         if prediction_id_field == None:
-            # Only check for self-consistency if we're not (evilly) overriding everything that is good in the world
+            # Only check for self-consistency if we are not (evilly) overriding everything that is good in the world
             self._check_scores_for_main_fields(scores, prediction_id)
         if prediction_structure_scores_table == None:
-            # Only check for self-consistency if we're not (evilly) overriding everything our forefathers died for
+            # Only check for self-consistency if we are not (evilly) overriding everything our forefathers died for
             self._check_score_fields(scores)
 
         prediction_structure_scores_table = prediction_structure_scores_table or self._get_prediction_structure_scores_table()
@@ -1921,7 +1917,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 hdf_store_blob = gzip.GzipFile(fileobj = mem_zip, mode='rb').read()
 
         if not(use_existing_benchmark_data and hdf_store_blob):
-            # Create this cache if we're going to end up using it in if statements below
+            # Create this cache if we are going to end up using it in if statements below
             prediction_table_rows_cache = self._get_prediction_set_prediction_table_rows(prediction_set_id)
         else:
             prediction_table_rows_cache = None

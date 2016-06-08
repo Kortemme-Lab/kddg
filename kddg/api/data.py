@@ -60,6 +60,8 @@ import time
 import numpy
 import pandas
 
+from MySQLdb import OperationalError as MySQLOperationalError
+
 from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
@@ -67,7 +69,6 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy import create_engine, and_
 from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
-from MySQLdb import OperationalError as MySQLOperationalError
 
 from klab import colortext
 from klab.bio.pdb import PDB
@@ -91,8 +92,8 @@ from kddg.api.schema import User as DBUser
 from kddg.api.schema import Publication, PublicationAuthor, PublicationIdentifier, DeclarativeBase
 from kddg.api.layers import *
 from kddg.api import dbi
+from kddg.api import settings
 
-import settings # from ddg.ddglib import settings
 sys_settings = settings.load()
 
 try:
@@ -119,7 +120,7 @@ class DataImportInterface(object):
     '''This is the data import API class which should be used when adding basic data (PDB files, complex definitions, etc.)
        to the database.
 
-            from ddglib.interface_api import DataImportInterface
+            from kddg.api.data import DataImportInterface
             importer = DataImportInterface(read_file('ddgdb.pw'))
             e.g.
             importer.add_pdb_from_rcsb('1A2K')

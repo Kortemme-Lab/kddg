@@ -12,8 +12,9 @@ from string import join, letters
 import math
 import getpass
 import itertools
-#if __name__ == "__main__":
-#    sys.path.insert(0, "../../")
+import urllib, urllib2
+import pprint
+
 from klab.db.mysql import DatabaseInterface
 from klab.fs.fsio import read_file, write_file
 from klab.bio import rcsb
@@ -25,8 +26,8 @@ from klab.hash import CRC64
 from klab.biblio.ris import RISEntry
 
 from kddg.api.base import DBObject
+from kddg.api import settings
 
-import settings # from ddg.ddglib import settings
 sys_settings = settings.load()
 
 relaxed_amino_acid_codes = list(relaxed_amino_acid_codes)
@@ -115,7 +116,6 @@ def mapFromUniProtACs2IDs(ACs):
         ACs = set(ACs)
     if type(ACs) == type(set([])):
         ACIDMapping = {}
-        import urllib,urllib2
         url = 'http://www.uniprot.org/mapping/'
         params = {
             'from': 'ACC',
@@ -157,7 +157,6 @@ def mapBetweenUniProtandPDB(IDs, fromtype, totype):
         IDs = set(IDs)
     if type(IDs) == type(set([])):
         MappingBetweenIDs = {}
-        import urllib,urllib2
         url = 'http://www.uniprot.org/mapping/'
         params = {
             'from': fromtype,
@@ -228,7 +227,6 @@ def getUniProtMapping(pdbIDs, storeInDatabase = False, ddGdb = None):
         db = ddGdb #ddGDatabase()
         for numtries in range(1, maxtries + 1):
             try:
-                import urllib,urllib2
                 url = 'http://www.uniprot.org/mapping/'
                 print("Querying UniProt: ")
                 PDBtoAC_mapping = {}
@@ -1629,7 +1627,6 @@ class DataSet(DBObject):
 
 
 
-import pprint
 def extract_details_from_RIS_records(ddGdb, PublicationIDs = [], overwrite = False):
 
     if not ddGdb.use_utf:
@@ -1958,7 +1955,6 @@ class ddGDatabase(DatabaseInterface):
                 passwd = F.read().strip()
                 F.close()
             else:
-                import traceback
                 passwd = getpass.getpass("Enter password to connect to MySQL database:")
         self.passwd = passwd
 
@@ -3264,19 +3260,3 @@ class DatabasePrimer(object):
         newcmd = "%(BIN_DIR)s/fix_bb_monomer_ddg.linuxgccrelease -in:file:s %(in:file:s)s -resfile %(resfile)s -database %(DATABASE_DIR)s -ignore_unrecognized_res -in:file:fullatom -constraints::cst_file %(constraints::cst_file)s -score:weights soft_rep_design -ddg::weight_file soft_rep_design -ddg::iterations 50 -ddg::local_opt_only false -ddg::min_cst true -ddg::mean false -ddg::min true -ddg::sc_min_only false -ddg::ramp_repulsive true -ddg::minimization_scorefunction standard -ddg::minimization_patch score12"
         ddGdb.locked_execute("UPDATE Command SET Command=%s WHERE ID=5;", parameters = (newcmd,))
 
-
-if __name__ == "__main__":
-    ddGdb = ddGDatabase()
-
-    primer = DatabasePrimer(ddGdb)
-    #primer.insertUniProtKB()
-    #primer.checkForCSEandMSE()
-    #primer.computeBFactors()
-    #print("Removing all data")
-    #primer.deleteAllExperimentalData()
-    #primer.insertKelloggLeaverFayBakerProtocols()
-    #primer.insertTools()
-    #primer.addPDBSources()
-    #primer.updateCommand()
-    #primer.insertRosettaCon2013Protocols()
-    primer.protocol_16_complex()

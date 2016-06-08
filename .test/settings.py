@@ -1,7 +1,4 @@
-import sys
-sys.path.insert(0, '../..')
-
-import ddg.ddglib.settings as settings
+import kddg.api.settings as settings
 sys_settings = settings.load()
 
 print(sys_settings.database)

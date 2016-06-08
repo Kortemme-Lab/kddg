@@ -27,15 +27,13 @@ from sqlalchemy.dialects.mysql import DOUBLE, TINYINT, LONGBLOB
 from sqlalchemy.types import DateTime, Enum, Integer, TIMESTAMP, Text, Unicode, String
 from sqlalchemy.orm import deferred
 
-#if __name__ == '__main__':
-#    sys.path.insert(0, '../../klab')
-
 from klab.db.sqlalchemy_interface import MySQLSchemaConverter
 from klab.fs.fsio import read_file
 from klab import colortext
 from klab.fs.fsio import read_file, write_file, write_temp_file
 
-import settings # from ddg.ddglib import settings
+from kddg.api import settings
+
 sys_settings = settings.load()
 
 DeclarativeBase = declarative_base()
@@ -1251,11 +1249,3 @@ def test_schema_against_database_instance(DDG_db):
 
 
 
-if __name__ == '__main__':
-
-    generate_sqlalchemy_definition(['PPIDataSetDE', 'PPIDataSetWildTypeDE', 'UserPPAnalysisSetDE'])
-    #generate_sqlalchemy_definition([''])
-    sys.exit(0)
-    from kddg.api.ppi import get_interface as get_ppi_interface
-    ppi_api = get_ppi_interface(read_file(os.path.join('..', 'pw')).strip())
-    test_schema_against_database_instance(ppi_api.DDG_db)

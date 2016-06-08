@@ -32,9 +32,6 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy import inspect as sqlalchemy_inspect
 
-#if __name__ == '__main__':
-#    sys.path.insert(0, '../../klab')
-
 from klab import colortext
 from klab.bio.pdb import PDB
 from klab.bio.basics import ChainMutation
