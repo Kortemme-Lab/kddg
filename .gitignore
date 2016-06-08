@@ -3,6 +3,6 @@
 pw
 job_output/*
 ddgdb.pw
-ddglib/db_connection_str
-ddglib/settings.json*
+api/db_connection_str
+api/settings.json*
 
