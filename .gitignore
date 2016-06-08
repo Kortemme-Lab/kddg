@@ -1,8 +1,6 @@
 .idea/*
 *.pyc
 pw
-job_output/*
 ddgdb.pw
-api/db_connection_str
-api/settings.json*
-
+db_connection_str
+settings.json*
