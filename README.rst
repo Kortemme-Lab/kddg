@@ -6,13 +6,13 @@ Database APIs for a database used by our lab to store data about mutageneses, ma
 Coding convention
 =================
 
-General rules      : The PEP 8 conventions (https://www.python.org/dev/peps/pep-0008/) are mostly sensible.
-Blank lines        : See "Blank Lines" in PEP 8. Particularly, surround top-level function and class definitions with two blank lines.
-Line length        : Can be more than 79 characters long. We have widescreen technology.
-Whitespace         : Use spaces instead of tabs, with indents set to 4 spaces.
-Natural language   : Please do not use contractions.
-Nerdy references   : Allowed / encouraged.
-Shiny?             : See above.
+- General rules      : The PEP 8 conventions (https://www.python.org/dev/peps/pep-0008/) are mostly sensible.
+- Blank lines        : See "Blank Lines" in PEP 8. Particularly, surround top-level function and class definitions with two blank lines.
+- Line length        : Can be more than 79 characters long. We have widescreen technology.
+- Whitespace         : Use spaces instead of tabs, with indents set to 4 spaces.
+- Natural language   : Please do not use contractions.
+- Nerdy references   : Allowed / encouraged.
+- Shiny?             : See above.
 
 Installation
 ============
