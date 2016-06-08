@@ -4,3 +4,4 @@ pw
 ddgdb.pw
 db_connection_str
 settings.json*
+*.egg-info
