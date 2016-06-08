@@ -42,9 +42,9 @@ from klab.bio.alignment import ScaffoldModelChainMapper, DecoyChainMapper
 from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction, get_single_record_from_query
 from klab.stats.misc import get_xy_dataset_statistics_pandas
 
-import db_schema as dbmodel
-from api_layers import *
-from db_api import ddG, PartialDataException, SanityCheckException
+import kddg.api.schema as dbmodel
+from kddg.api.layers import *
+from kddg.api.db import ddG, PartialDataException, SanityCheckException
 from import_api import json_dumps
 
 import settings # from ddg.ddglib import settings

@@ -8,12 +8,13 @@ Created by Shane O'Connor 2015.
 Copyright (c) 2015 __UCSF__. All rights reserved.
 """
 
-import settings # from ddg.ddglib import settings
-sys_settings = settings.load()
-
 import inspect
 import functools
+
 from klab import colortext
+
+import settings # from ddg.ddglib import settings
+sys_settings = settings.load()
 
 
 ### API function decorators. These are used to group functions together when printing the help text.

@@ -45,13 +45,13 @@ from klab.bio.ligand import Ligand, PDBLigand
 from klab.bio.pdbtm import PDBTM
 from klab.db.sqlalchemy_interface import get_single_record_from_query, get_or_create_in_transaction
 
-from db_schema import test_schema_against_database_instance
-from db_schema import PDBFile, PDBChain, PDBMolecule, PDBMoleculeChain, PDBResidue, LigandDescriptor, LigandIdentifier, LigandSynonym, PDBLigand
-from db_schema import Ligand as DBLigand
-#from db_schema import Publication, PublicationAuthor, PublicationIdentifier
-from api_layers import *
-from db_api import ddG, PartialDataException, SanityCheckException
-import ddgdbapi
+from kddg.api.schema import test_schema_against_database_instance
+from kddg.api.schema import PDBFile, PDBChain, PDBMolecule, PDBMoleculeChain, PDBResidue, LigandDescriptor, LigandIdentifier, LigandSynonym, PDBLigand
+from kddg.api.schema import Ligand as DBLigand
+#from kddg.api.schema import Publication, PublicationAuthor, PublicationIdentifier
+from kddg.api.layers import *
+from kddg.api.db import ddG, PartialDataException, SanityCheckException
+import klab.api.ddgdbapi as ddgdbapi
 
 rosetta_scripts_path =  '/home/oconchus/t14benchmarking/r57934/main/source/bin/rosetta_scripts.linuxgccrelease'
 rosetta_database_path = '/home/oconchus/t14benchmarking/r57934/main/database'

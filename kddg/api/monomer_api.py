@@ -8,7 +8,7 @@ Classes:
 MonomericStabilityDDGInterface - an class used to interface with the database. Call get_interface to get a user API based on this class.
 AnalysisBreakdown - an class used to run analyses on the data
 
-Note: I moved this code from db_api.py during a large refactor and have not tested it yet.
+Note: I moved this code from db.py during a large refactor and have not tested it yet.
       A lot of functionality is currently broken but all the pieces are there. See Trac ticket #1375.
 
 Created by Shane O'Connor 2015.
@@ -31,9 +31,9 @@ from klab.bio.alignment import ScaffoldModelChainMapper
 from klab.benchmarking.analysis.ddg_monomeric_stability_analysis import DBBenchmarkRun as MonomericStabilityBenchmarkRun
 from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmarkRun as BindingAffinityBenchmarkRun
 
-import db_schema as dbmodel
-from api_layers import *
-from db_api import ddG, PartialDataException
+import kddg.api.schema as dbmodel
+from kddg.api.layers import *
+from kddg.api.db import ddG, PartialDataException
 
 import settings # from ddg.ddglib import settings
 sys_settings = settings.load()

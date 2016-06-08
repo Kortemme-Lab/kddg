@@ -4,7 +4,7 @@
 monomer_analysis.py
 
 This is the code I used to generate breakdown analyses for the benchmarks website and for a group meeting in early 2015.
-This code should be refactored into an analysis layer of db_api.py along with the code in analysis.py and dbstats.py.
+This code should be refactored into an analysis layer of db.py along with the code in analysis.py and dbstats.py.
 It may still make sense to leave it as a standalone class since it does not rely on the database (except for one disabled
 block) however a more transparent interface might make it more obvious what the expected input data structure is,
 especially for the predictions and analysis_datasets parameters.

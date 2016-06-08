@@ -1,7 +1,7 @@
 #!/usr/bin/python2.4
 # encoding: utf-8
 """
-db_api.py
+db.py
 High-level functions for interacting with the ddG database.
 
 Created by Shane O'Connor 2012.
@@ -25,7 +25,7 @@ import pprint
 import json
 
 from io import BytesIO
-from api_layers import *
+from kddg.api.layers import *
 try:
     import pandas
 except ImportError:
@@ -63,7 +63,7 @@ from klab.rosetta.input_files import Mutfile, Resfile
 
 import ddgdbapi
 from import_api import DataImportInterface, json_dumps
-import db_schema as dbmodel
+import kddg.api.schema as dbmodel
 
 import settings # from ddg.ddglib import settings
 sys_settings = settings.load()

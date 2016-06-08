@@ -83,13 +83,13 @@ from klab.bio import rcsb
 from klab.general.strutil import remove_trailing_line_whitespace
 from klab.hash.md5 import get_hexdigest
 
-from db_schema import test_schema_against_database_instance
-from db_schema import PDBFile, PDBChain, PDBMolecule, PDBMoleculeChain, PDBResidue, LigandDescriptor, LigandIdentifier, LigandSynonym, LigandPrice, LigandReference, PDBLigand, PDBLigandFile, PDBIon, FileContent, PDB2PDBChainMap
-from db_schema import Ligand as DBLigand
-from db_schema import Ion as DBIon
-from db_schema import User as DBUser
-from db_schema import Publication, PublicationAuthor, PublicationIdentifier, DeclarativeBase
-from api_layers import *
+from kddg.api.schema import test_schema_against_database_instance
+from kddg.api.schema import PDBFile, PDBChain, PDBMolecule, PDBMoleculeChain, PDBResidue, LigandDescriptor, LigandIdentifier, LigandSynonym, LigandPrice, LigandReference, PDBLigand, PDBLigandFile, PDBIon, FileContent, PDB2PDBChainMap
+from kddg.api.schema import Ligand as DBLigand
+from kddg.api.schema import Ion as DBIon
+from kddg.api.schema import User as DBUser
+from kddg.api.schema import Publication, PublicationAuthor, PublicationIdentifier, DeclarativeBase
+from kddg.api.layers import *
 import ddgdbapi
 
 import settings # from ddg.ddglib import settings
@@ -590,7 +590,7 @@ class DataImportInterface(object):
 
 
     def get_rcsb_record(self, pdbfile_db_record, tsession = None):
-        '''pdbfile_db_record should be a db_schema.py::PDBFile object.
+        '''pdbfile_db_record should be a kddg.api.schema.py::PDBFile object.
            Winds up the 'derived from' tree to find the RCSB file that this file originated from.
            Throws an exception if there are no such files.
            This is useful for a number of reasons:

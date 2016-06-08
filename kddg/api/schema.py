@@ -2,7 +2,7 @@
 
 # encoding: utf-8
 """
-db_schema.py
+schema.py
 SQLAlchemy representation
 
 Created by Shane O'Connor 2015.
