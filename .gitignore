@@ -1,0 +1,8 @@
+.idea/*
+*.pyc
+pw
+job_output/*
+ddgdb.pw
+ddglib/db_connection_str
+ddglib/settings.json*
+
