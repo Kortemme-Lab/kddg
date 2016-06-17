@@ -1207,15 +1207,12 @@ class AnalysisDataFrame(DeclarativeBase):
 ###########################
 
 
-
-
 def generate_sqlalchemy_definition(tablenames = []):
     '''This function generates the SQLAlchemy class definitions from the database. The generation does not parse the
        entire definition - it omits unique keys, foreign key constraints etc. but it saves a lot of manual work setting
        up the boilerplate field definitions. When the database schema changes, call this function to update the
        SQLAlchemy class definitions. You may want/need to reuse any existing relationships defined between tables.'''
     sc = MySQLSchemaConverter(sys_settings.database.username, sys_settings.database.hostname, sys_settings.database.database, sys_settings.database.password, sys_settings.database.port, sys_settings.database.socket)
-    #sc.get_sqlalchemy_schema(['PDBFile', 'PDBChain', 'PDBMolecule', 'PDBMoleculeChain', 'PDBResidue'])
     sc.get_sqlalchemy_schema(tablenames)
 
 
