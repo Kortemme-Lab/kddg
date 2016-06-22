@@ -133,6 +133,39 @@ class BindingAffinityDDGInterface(ddG):
                 ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID
                 WHERE PredictionPPI.PredictionSet=%s''', parameters=(prediction_set_id,))])
 
+    def get_prediction_ids_and_record_ids(self, prediction_set_id, data_set_id = 'ZEMu_10.1002/prot.24634'):
+        '''Returns a set of all prediction_ids and the record ids for the underlying data set
+        '''
+
+        # Old query (delete if reading this):
+        # SELECT PredictionPPI.ID, PredictionPPI.PredictionSet, PredictionPPI.PPMutagenesisID, PredictionPPI.UserPPDataSetExperimentID,
+        # PPIDataSetDDG.RecordNumber, PPIDataSetDDG.PublishedPDBFileID
+        # FROM PredictionPPI
+        # INNER JOIN PPIDataSetDDG ON PPIDataSetDDG.PPMutagenesisID=PredictionPPI.PPMutagenesisID
+        # WHERE PredictionPPI.PredictionSet=%s
+        # AND PPIDataSetDDG.DataSetID=%s
+
+        return self.DDG_db.execute_select('''
+        SELECT PredictionPPI.ID, PredictionPPI.PredictionSet, PredictionPPI.PPMutagenesisID, PredictionPPI.UserPPDataSetExperimentID, PPIDataSetDDG.RecordNumber, PPIDataSetDDG.PublishedPDBFileID
+FROM PredictionPPI
+        INNER JOIN
+        (SELECT UserPPDataSetExperiment.ID AS UserPPDataSetExperimentID, PPComplexID, SetNumber
+        FROM UserPPDataSetExperiment
+        INNER JOIN UserPPDataSetExperimentTag ON UserPPDataSetExperiment.ID=UserPPDataSetExperimentTag.UserPPDataSetExperimentID
+        WHERE
+        UserPPDataSetExperimentTag.Tag = 'ZEMu') AS ZEMuUserDataSet
+        ON PredictionPPI.UserPPDataSetExperimentID=ZEMuUserDataSet.UserPPDataSetExperimentID
+        INNER JOIN PPIDataSetDDG
+        ON PPIDataSetDDG.PPMutagenesisID=PredictionPPI.PPMutagenesisID AND PPIDataSetDDG.PPComplexID = ZEMuUserDataSet.PPComplexID AND PPIDataSetDDG.SetNumber = ZEMuUserDataSet.SetNumber
+        WHERE
+        PredictionPPI.PredictionSet = %s AND
+        PPIDataSetDDG.DataSetID=%s AND
+        PPIDataSetDDG.PPComplexID = ZEMuUserDataSet.PPComplexID AND
+        PPIDataSetDDG.SetNumber = ZEMuUserDataSet.SetNumber AND
+        PPIDataSetDDG.RecordNumber NOT IN (929, 524, 468, 1027, 1026)
+        ''', parameters=(prediction_set_id, data_set_id))
+
+
 
     def get_unfinished_prediction_ids(self, prediction_set_id):
         '''Returns a set of all prediction_ids that have Status != "done"
