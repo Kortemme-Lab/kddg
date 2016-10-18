@@ -612,7 +612,7 @@ class MonomericStabilityDDGInterface(ddG):
 
 
     @analysis_api
-    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None, dataframe_type = "Stability"):
+    def get_prediction_data(self, prediction_id, score_method_id, main_ddg_analysis_type, top_x = 3, expectn = None, extract_data_for_case_if_missing = True, root_directory = None, dataframe_type = "Stability", prediction_table_rows_cache = None):
         assert(dataframe_type == "Binding affinity") # todo: stability case needs to be written
         try:
             top_x_ddg = self.get_top_x_ddg_affinity(prediction_id, score_method_id, top_x = top_x, expectn = expectn)
