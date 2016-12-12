@@ -1185,21 +1185,41 @@ class AnalysisDataFrame(DeclarativeBase):
         return '\n'.join(s)
 
 
-    def get_dataframe_info(self):
-        mem_zip = StringIO.StringIO()
-        mem_zip.write(self.PandasHDFStore)
-        mem_zip.seek(0)
-        hdf_store_blob = gzip.GzipFile(fileobj = mem_zip, mode='rb').read()
-
+    def get_dataframe_objects(self):
         try:
-            # read_hdf does not currently (as of pandas.__version__ == 0.17.0) accept stream objects so we write to file
+            mem_zip = StringIO.StringIO()
+            mem_zip.write(self.PandasHDFStore)
+            mem_zip.seek(0)
+            hdf_store_blob = gzip.GzipFile(fileobj = mem_zip, mode='rb').read()
+
             #mem_unzipped = StringIO.StringIO()
+            # read_hdf does not currently (as of pandas.__version__ == 0.17.0) accept stream objects so we write to file
             #mem_unzipped.write(hdf_store_blob)
             #mem_unzipped.seek(0)
             analysis_pandas_input_filepath = write_temp_file('/tmp', hdf_store_blob, ftype = 'wb')
 
             df = pandas.read_hdf(analysis_pandas_input_filepath, 'dataframe')
             store = pandas.HDFStore(analysis_pandas_input_filepath)
+            os.remove(analysis_pandas_input_filepath)
+            return df, store
+        except:
+            if os.path.exists(analysis_pandas_input_filepath):
+                os.remove(analysis_pandas_input_filepath)
+            raise
+
+
+    def has_scalar_adjustments(self):
+        try:
+            df, store = self.get_dataframe_objects()
+            scalar_adjustments = store['scalar_adjustments'].to_dict()
+            return not(not(scalar_adjustments))
+        except Exception, e:
+            raise Exception('An exception occurred reading the dataframe: {0}\n.{1}'.format(str(e), traceback.format_exc()))
+
+
+    def get_dataframe_info(self):
+        try:
+            df, store = self.get_dataframe_objects()
 
             # Defensive programming in case the format changes
             scalar_adjustments, ddg_analysis_type, ddg_analysis_type_description, analysis_sets = None, None, None, None
@@ -1209,13 +1229,37 @@ class AnalysisDataFrame(DeclarativeBase):
             except: pass
             try: ddg_analysis_type_description = store['ddg_analysis_type_description'].to_dict()['ddg_analysis_type_description']
             except: pass
+
+            results = df.to_dict(orient = 'index').values()
             if scalar_adjustments:
                 analysis_sets = scalar_adjustments.keys()
+            else:
+                # Workaround for cases where the scalar adjustments are now no longer being computed (Kyle's changes)
+                try:
+                    results = df.to_dict(orient = 'index').values()
+                    if results:
+                        r = results[0]
+                        analysis_sets = sorted(set([k[13:] for k in r.keys() if k.startswith('Experimental_')]))
+                except: pass
+
+            colortext.pcyan('HRE'  * 100)
+            has_adjusted_values = False
+            try:
+                results = df.to_dict(orient = 'index').values()
+                if results:
+                    r = results[0]
+                    for analysis_set in analysis_sets:
+                        print(analysis_set)
+                        print(r.keys())
+                        print(('Predicted_' + analysis_set) in r.keys()) # Experimental_
+                        print(('Predicted_adj_' + analysis_set) in r.keys()) # Experimental_
+            except: pass
 
             d = dict(
                 AnalysisDataFrameID = self.ID,
                 dataframe = df,
                 scalar_adjustments = scalar_adjustments,
+                has_scalar_adjustments = not(not(scalar_adjustments)),
                 analysis_type = ddg_analysis_type,
                 analysis_type_description = ddg_analysis_type_description,
                 analysis_sets = analysis_sets,
@@ -1223,11 +1267,8 @@ class AnalysisDataFrame(DeclarativeBase):
                 prediction_set = self.prediction_set.ID,
                 top_x = self.TopX,
             )
-            os.remove(analysis_pandas_input_filepath)
             return d
         except Exception, e:
-            if os.path.exists(analysis_pandas_input_filepath):
-                os.remove(analysis_pandas_input_filepath)
             raise Exception('An exception occurred reading the dataframe: {0}\n.{1}'.format(str(e), traceback.format_exc()))
 
 

@@ -131,6 +131,39 @@ class BindingAffinityDDGInterface(ddG):
                 ON PredictionPPI.ID=PredictionPPIStructureScore.PredictionPPIID
                 WHERE PredictionPPI.PredictionSet=%s''', parameters=(prediction_set_id,))])
 
+    def get_prediction_ids_and_record_ids(self, prediction_set_id, data_set_id = 'ZEMu_10.1002/prot.24634'):
+        '''Returns a set of all prediction_ids and the record ids for the underlying data set
+        '''
+
+        # Old query (delete if reading this):
+        # SELECT PredictionPPI.ID, PredictionPPI.PredictionSet, PredictionPPI.PPMutagenesisID, PredictionPPI.UserPPDataSetExperimentID,
+        # PPIDataSetDDG.RecordNumber, PPIDataSetDDG.PublishedPDBFileID
+        # FROM PredictionPPI
+        # INNER JOIN PPIDataSetDDG ON PPIDataSetDDG.PPMutagenesisID=PredictionPPI.PPMutagenesisID
+        # WHERE PredictionPPI.PredictionSet=%s
+        # AND PPIDataSetDDG.DataSetID=%s
+
+        return self.DDG_db.execute_select('''
+        SELECT PredictionPPI.ID, PredictionPPI.PredictionSet, PredictionPPI.PPMutagenesisID, PredictionPPI.UserPPDataSetExperimentID, PPIDataSetDDG.RecordNumber, PPIDataSetDDG.PublishedPDBFileID
+FROM PredictionPPI
+        INNER JOIN
+        (SELECT UserPPDataSetExperiment.ID AS UserPPDataSetExperimentID, PPComplexID, SetNumber
+        FROM UserPPDataSetExperiment
+        INNER JOIN UserPPDataSetExperimentTag ON UserPPDataSetExperiment.ID=UserPPDataSetExperimentTag.UserPPDataSetExperimentID
+        WHERE
+        UserPPDataSetExperimentTag.Tag = 'ZEMu') AS ZEMuUserDataSet
+        ON PredictionPPI.UserPPDataSetExperimentID=ZEMuUserDataSet.UserPPDataSetExperimentID
+        INNER JOIN PPIDataSetDDG
+        ON PPIDataSetDDG.PPMutagenesisID=PredictionPPI.PPMutagenesisID AND PPIDataSetDDG.PPComplexID = ZEMuUserDataSet.PPComplexID AND PPIDataSetDDG.SetNumber = ZEMuUserDataSet.SetNumber
+        WHERE
+        PredictionPPI.PredictionSet = %s AND
+        PPIDataSetDDG.DataSetID=%s AND
+        PPIDataSetDDG.PPComplexID = ZEMuUserDataSet.PPComplexID AND
+        PPIDataSetDDG.SetNumber = ZEMuUserDataSet.SetNumber AND
+        PPIDataSetDDG.RecordNumber NOT IN (929, 524, 468, 1027, 1026)
+        ''', parameters=(prediction_set_id, data_set_id))
+
+
 
     def get_unfinished_prediction_ids(self, prediction_set_id):
         '''Returns a set of all prediction_ids that have Status != "done"
@@ -1789,7 +1822,7 @@ class BindingAffinityDDGInterface(ddG):
             use_existing_benchmark_data = True,
             include_derived_mutations = False,
             use_single_reported_value = False,
-            ddg_analysis_type = 'DDG_Top3',
+            ddg_analysis_type = None, # Shane: either this should be set or take_lowest should be set - setting both breaks assertions in _get_analysis_dataframe. We could rethink this but setting the default to None is the simplest fix for now.
             take_lowest = None,
             burial_cutoff = 0.25,
             stability_classication_experimental_cutoff = 1.0,
@@ -1817,7 +1850,7 @@ class BindingAffinityDDGInterface(ddG):
 
 
     @analysis_api
-    def get_existing_analysis(self, prediction_set_id = None, analysis_dataframe_id = None, return_dataframe = True):
+    def get_existing_analysis(self, prediction_set_id = None, analysis_dataframe_id = None, return_dataframe = True, use_scalar_adjusted_values = True):
         '''Returns a list of the summary statistics for any existing dataframes in the database.
            Each item in the list is a dict corresponding to a dataframe. These dicts are structured as e.g.
 
@@ -1852,6 +1885,7 @@ class BindingAffinityDDGInterface(ddG):
             }
         '''
         ### KAB TODO: this function is not adjusted for new changes in top_x
+
         if analysis_dataframe_id == None:
             # Get a valid PredictionSet record if one exists
             assert(prediction_set_id != None)
@@ -1872,29 +1906,53 @@ class BindingAffinityDDGInterface(ddG):
 
         analysis_results = []
         dataframes = [dfr for dfr in dataframes]
+
         for dfr in dataframes:
             # The dict to return
             dfi = dfr.get_dataframe_info()
             dfi['stats'] = {}
+
+
+            # If the scalar adjustment values are generated, fields like "Predicted_adj_<analysis_set>" are created in the
+            # dataframe. Otherwise, if these fields do not exist, we must use the "Predicted" field.
+
+            results = dfi['dataframe'].to_dict(orient = 'index').values()
+            if results:
+                r = results[0]
+                print(r.keys())
+
+            has_scalar_adjustments = dfi['has_scalar_adjustments']
 
             # Compute the stats per analysis set
             df = dfi['dataframe']
             if dfi['analysis_sets']:
                 # Case where there are analysis sets
                 for analysis_set in dfi['analysis_sets']:
+
+                    # The choice of whether or not we are using adjusted values depends on whether we want to use them and whether or not they exist
+                    prediction_field = 'Predicted'
+                    if use_scalar_adjusted_values and has_scalar_adjustments:
+                        prediction_field = BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Predicted_adj', analysis_set)
+
                     dfi['stats'][analysis_set] = get_xy_dataset_statistics_pandas(
                         df,
                         BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Experimental', analysis_set),
-                        BindingAffinityBenchmarkRun.get_analysis_set_fieldname('Predicted_adj', analysis_set),
+                        prediction_field,
                         fcorrect_x_cutoff = float(dfr.StabilityClassicationExperimentalCutoff),
                         fcorrect_y_cutoff = float(dfr.StabilityClassicationPredictedCutoff),
                         ignore_null_values = True)
             elif 'Experimental' in df.columns:
                 # Case where there are no analysis sets
+
+                # The choice of whether or not we are using adjusted values depends on whether we want to use them and whether or not they exist
+                prediction_field = 'Predicted'
+                if use_scalar_adjusted_values and has_scalar_adjustments:
+                    prediction_field = 'Predicted_adj'
+
                 dfi['stats']['Global'] = get_xy_dataset_statistics_pandas(
                     df,
                     'Experimental',
-                    'Predicted_adj',
+                    prediction_field,
                     fcorrect_x_cutoff = float(dfr.StabilityClassicationExperimentalCutoff),
                     fcorrect_y_cutoff = float(dfr.StabilityClassicationPredictedCutoff),
                     ignore_null_values = True)
@@ -2122,7 +2180,7 @@ class BindingAffinityDDGInterface(ddG):
     def get_complex_ids_matching_protein_name(self, partial_name, tsession = None):
         '''Returns a list of PPComplex IDs where at least one of the partner names matches partial_name.'''
 
-        tsession = self.importer.get_session(utf = True)
+        tsession = self.importer.get_session(utf = True) # todo: looks like a bug! try switching these two
         tsession_utf = self.importer.get_session()
 
         results = []

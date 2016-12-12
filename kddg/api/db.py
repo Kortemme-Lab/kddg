@@ -1146,7 +1146,11 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
         prediction_cases = {}
         for prediction_id in prediction_ids:
-            UserDataSetExperimentID = self._get_sqa_predictions_user_dataset_experiment_id(prediction_table_rows_cache[prediction_id])
+
+            # todo: Fix for PUBS class. Revisit.
+            UserDataSetExperimentID = prediction_table_rows_cache[prediction_id].UserDataSetExperimentID
+            #UserDataSetExperimentID = self._get_sqa_predictions_user_dataset_experiment_id(prediction_table_rows_cache[prediction_id])
+
             experimental_details = self.get_predictions_experimental_details(prediction_id, userdatset_experiment_ids_to_subset_ddgs, include_experimental_data = include_experimental_data)
             experimental_details['PredictionID'] = prediction_id
             prediction_cases[UserDataSetExperimentID] = experimental_details
@@ -1900,12 +1904,13 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             ):
         '''This 'private' function does most of the work for get_analysis_dataframe.'''
 
+        # Shane: todo: This code all needs to be refactored (switch-statement by string parsing)
         if take_lowest:
-            assert( ddg_analysis_type == None )
+            assert(ddg_analysis_type == None)
             ddg_analysis_type = 'DDG_Top%d' % take_lowest
         else:
             assert( ddg_analysis_type != None and take_lowest == None )
-            if ddg_analysis_type.startswith( 'DDG_Top' ):
+            if ddg_analysis_type.startswith('DDG_Top'):
                 take_lowest = int( ddg_analysis_type[7:] )
 
         assert(dataframe_type != None and prediction_set_id != None)
@@ -1920,7 +1925,6 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                         prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, burial_cutoff,
                         stability_classication_experimental_cutoff, stability_classication_predicted_cutoff, include_derived_mutations, ddg_analysis_type))
             else:
-                # KAB TODO: to ask Shane - why does passing None not correctly change to IS NULL?
                 hdf_store_blob = self.DDG_db.execute_select('''
                 SELECT PandasHDFStore FROM AnalysisDataFrame WHERE
                    PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND BurialCutoff=%s AND
@@ -2065,16 +2069,32 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 DDGAnalysisTypeDescription              = benchmark_run.ddg_analysis_type_description,
                 PandasHDFStore                          = hdf_store_blob,
             )
-            self.DDG_db.execute('''DELETE FROM AnalysisDataFrame WHERE PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND
-                                    BurialCutoff=%s AND StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
-                                    IncludesDerivedMutations=%s AND DDGAnalysisType=%s''',
-                                    parameters = (prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, take_lowest,
-                                                  burial_cutoff, stability_classication_experimental_cutoff, stability_classication_predicted_cutoff,
-                                                  include_derived_mutations, ddg_analysis_type
-                                    ))
-            self.DDG_db.insertDictIfNew('AnalysisDataFrame', d, ['PredictionSet', 'DataFrameType', 'ContainsExperimentalData', 'ScoreMethodID', 'UseSingleReportedValue', 'TopX', 'BurialCutoff',
-                                                                 'StabilityClassicationExperimentalCutoff', 'StabilityClassicationPredictedCutoff',
-                                                                 'IncludesDerivedMutations', 'DDGAnalysisType'], locked = False)
+
+            # Delete any existing dataframe
+            tsession = self.importer.get_session(new_session = True)
+            existing_record = [r for r in tsession.query(dbmodel.AnalysisDataFrame).filter(
+                dbmodel.AnalysisDataFrame.PredictionSet == prediction_set_id,
+                dbmodel.AnalysisDataFrame.DataFrameType == dataframe_type,
+                dbmodel.AnalysisDataFrame.ContainsExperimentalData == experimental_data_exists,
+                dbmodel.AnalysisDataFrame.ScoreMethodID == score_method_id,
+                dbmodel.AnalysisDataFrame.UseSingleReportedValue == use_single_reported_value,
+                dbmodel.AnalysisDataFrame.TopX == take_lowest,
+                dbmodel.AnalysisDataFrame.BurialCutoff == burial_cutoff,
+                dbmodel.AnalysisDataFrame.StabilityClassicationExperimentalCutoff == stability_classication_experimental_cutoff,
+                dbmodel.AnalysisDataFrame.StabilityClassicationPredictedCutoff == stability_classication_predicted_cutoff,
+                dbmodel.AnalysisDataFrame.IncludesDerivedMutations == include_derived_mutations,
+                dbmodel.AnalysisDataFrame.DDGAnalysisType == ddg_analysis_type,
+            )]
+            if existing_record:
+                assert(len(existing_record) == 1) # otherwise the schema has changed, our selection criteria do not form a unique key, and we need to update the query above
+                tsession.query(dbmodel.AnalysisDataFrame).filter(dbmodel.AnalysisDataFrame.ID == existing_record[0].ID).delete()
+
+            new_dataframe = dbmodel.AnalysisDataFrame(**d)
+            tsession.add(new_dataframe)
+            tsession.flush()
+            tsession.commit()
+            tsession.close()
+
         else:
             benchmark_run.read_dataframe_from_content(hdf_store_blob)
 
