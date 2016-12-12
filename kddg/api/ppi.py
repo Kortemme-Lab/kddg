@@ -32,7 +32,6 @@ import getpass
 
 import numpy
 from sqlalchemy import and_, or_, func
-
 from klab import colortext
 from klab.bio.pdb import PDB
 from klab.bio.basics import ChainMutation, residue_type_1to3_map
@@ -41,7 +40,6 @@ from klab.benchmarking.analysis.ddg_binding_affinity_analysis import DBBenchmark
 from klab.bio.alignment import ScaffoldModelChainMapper, DecoyChainMapper
 from klab.db.sqlalchemy_interface import row_to_dict, get_or_create_in_transaction, get_single_record_from_query
 from klab.stats.misc import get_xy_dataset_statistics_pandas
-
 import kddg.api.schema as dbmodel
 from kddg.api.layers import *
 from kddg.api.db import ddG, PartialDataException, SanityCheckException
@@ -831,7 +829,7 @@ class BindingAffinityDDGInterface(ddG):
            Returns False if no predictions were added to the run else return True if all predictions (and there were some) were added to the run.'''
 
         # For test runs, this number of predictions will be created
-        short_run_limit = 100
+        short_run_limit = 10
 
         # Create a new session
         tsession = self.get_session(new_session = True)
@@ -1093,6 +1091,7 @@ class BindingAffinityDDGInterface(ddG):
         assert(not(input_files))
 
         # Preliminaries
+        print(self.rosetta_scripts_path )
         if not self.rosetta_scripts_path or not os.path.exists(self.rosetta_scripts_path):
             raise Exception('The path "%s" to the RosettaScripts executable does not exist.' % self.rosetta_scripts_path)
 
@@ -2299,7 +2298,7 @@ class BindingAffinityDDGInterface(ddG):
                 #pprint.pprint(self.get_complex_details(complex_id))
 
             assert(type(keywords) == list)
-            keywords = set(keywords)
+            keywords = sorted(set(keywords))
             for keyword in keywords:
 
                 hits = self.get_complex_ids_matching_protein_name(keyword, tsession = tsession)
@@ -2372,6 +2371,201 @@ class BindingAffinityDDGInterface(ddG):
             raise
 
 
+    def get_mutageneses_for_pdb_set(self, complex_id, set_number, cache = None):
+        if cache:
+            cache['pdb_set_matches'] = cache.get('pdb_set_matches', {})
+            if (complex_id, set_number) in cache['pdb_set_matches']:
+                return cache['pdb_set_matches'][(complex_id, set_number)]
+
+        q = self.get_session().query(dbmodel.PPMutagenesisPDBMutation).filter(and_(
+                dbmodel.PPMutagenesisPDBMutation.PPComplexID == complex_id,
+                dbmodel.PPMutagenesisPDBMutation.SetNumber == set_number,
+        ))
+        mutations = {}
+        for r in q:
+            mut_id = r.PPMutagenesisID
+            mutations[mut_id] = mutations.get(mut_id, [])
+            mutations[mut_id].append(ChainMutation(r.WildTypeAA, r.ResidueID, r.MutantAA, Chain = r.Chain))
+        for k, v in mutations.iteritems():
+            mutations[k] = sorted(v)
+
+        if cache and (complex_id, set_number) not in cache['pdb_set_matches']:
+            colortext.porange('{0} {1} {2}'.format(', '.join(sorted(set([r.PDBFileID for r in q]))), complex_id, set_number))
+            colortext.porange(pprint.pformat(mutations))
+        if cache:
+            cache['pdb_set_matches'][(complex_id, set_number)] = mutations
+        return mutations
+
+
+    @ppi_data_entry
+    def get_mutagenesis_from_pdb_mutations(self, complex_id, set_number, mutations, DDG = None, DDG_diff_cutoff = None, cache = None, silent = False):
+        '''Used to see whether a mutagenesis exists in the database before adding it.
+
+        :param complex_id: Along with set_number, this identifies the PDB set being searched.
+        :param set_number: See above.
+        :param mutations: A list of ChainMutation objects containing the mutations in the mutagenesis relative to the PDB set.
+        :return: None if no hits were found. Else, return a dict containing:
+                    mutagenesis: The associated PPMutagenesis record
+                    mutations: The list of associated PPMutagenesisPDBMutation records
+        '''
+
+        for m in mutations:
+            m.ResidueID = str(m.ResidueID)
+            assert(len(m.ResidueID) <= 5)
+            if len(m.ResidueID) != 5:
+                m.ResidueID = PDB.ResidueID2String(m.ResidueID)
+
+        #print('INPUT MUTATIONS TO SEARCH FOR')
+        #print(mutations)
+        mutations = sorted(mutations)
+
+        pp_mutagenesis_ids = set()
+        hits_by_pdb_set = self.get_mutageneses_for_pdb_set(complex_id, set_number, cache = cache) or {}
+        for mut_id, db_mutations in sorted(hits_by_pdb_set.iteritems()):
+            #print(db_mutations, mutations)
+            if db_mutations == mutations:
+                colortext.plightpurple('Found a PPMutagenesis match on the set of mutations')
+                pp_mutagenesis_ids.add(mut_id)
+
+        if not len(pp_mutagenesis_ids) <= 1:
+            # todo: fix the data and remove this hack
+            # Hack: the data in the database needs to be elided for these case
+            assert(sorted(pp_mutagenesis_ids) in [
+                # 1JTG cases
+                [140, 1193],
+                [139, 1185],
+                [137, 1201],
+            ])
+        if not silent and len(pp_mutagenesis_ids) == 0:
+            colortext.warning('No related PPMutagenesis records found.')
+
+        pp_mutagenesis_records = []
+        if pp_mutagenesis_ids:
+
+            # Look up the PPMutagenesis record(s). Multiple PPMutagenesis records suggests that the database contains redundant records.
+            for pp_mutagenesis_id in pp_mutagenesis_ids:
+                cached_record = None
+                if cache:
+                    cache['pp_mutagenesis'] = cache.get('pp_mutagenesis', {})
+                    if pp_mutagenesis_id in cache['pp_mutagenesis']:
+                        cached_record = cache['pp_mutagenesis'][pp_mutagenesis_id]
+
+                if not (cached_record):
+                    cached_record = self.get_session().query(dbmodel.PPMutagenesis).filter(dbmodel.PPMutagenesis.ID == pp_mutagenesis_id).one()
+                    if cache:
+                        cache['pp_mutagenesis'][pp_mutagenesis_id] = cached_record
+                pp_mutagenesis_records.append(row_to_dict(cached_record))
+                print(pp_mutagenesis_records)
+
+
+            # Look up the DDG values
+            ddg_records = []
+            for pp_mutagenesis_id in pp_mutagenesis_ids:
+                ddg_records.extend(self.get_session().query(dbmodel.PPIDDG).filter(dbmodel.PPIDDG.PPMutagenesisID == pp_mutagenesis_id))
+            if ddg_records:
+                ddg_records = [row_to_dict(r) for r in ddg_records]
+                #pprint.pprint(ddg_records)
+
+            ddg_hits = []
+            if DDG != None and ddg_records:
+
+                # Brute-force search against the stored records i.e. this could be improved
+                # This code is also horrible since I am unwrapping the loops which limits the practical number of multiple
+                # records we can match. This code was written in a hurry!
+                #
+                # ddg_hits is a list of tuples which are sorted by absolute DDG difference and then by number of records so e.g.
+                # if 2 matching records have the same DDG or polar opposite DDGs w.r.t. the DDG parameter to th function
+                # (and hence both records have the same absolute DDG difference), then the individual records are given
+                # match-priority over the combination of records.
+
+                # Treat published DDG values as equal for matching
+                flattened_records = []
+                for r in ddg_records:
+                    flattened_records.append((r, 0, float(r['DDG'])))
+                    if r['PublishedDDG'] != None and abs(r['PublishedDDG'] - r['DDG']) >= 0.01: # ignore results which are overly similar
+                        flattened_records.append((r, 1, float(r['PublishedDDG'])))
+
+                # Match against single records
+                num_records = 1
+                for fr in flattened_records:
+                    r, is_dataset_value, fr_ddg_value = fr
+                    abs_difference = abs(DDG - fr_ddg_value)
+                    if DDG_diff_cutoff == None or abs_difference <= DDG_diff_cutoff:
+                        ddg_hits.append((abs_difference, num_records, float(is_dataset_value), [r['ID']], [float(r['DDG'])], [r['Publication']]))
+
+                num_flattened_records = len(flattened_records)
+                if True:
+                    # Match against average of two records
+                    num_flattened_records = len(flattened_records)
+                    num_records = 2
+                    for x in xrange(0, num_flattened_records):
+                        for y in xrange(x + 1, num_flattened_records):
+                            fr1 = flattened_records[x]
+                            fr2 = flattened_records[y]
+                            avg_ddg = (fr1[2] + fr2[2]) / 2.0
+                            is_dataset_value = (fr1[1] + fr2[1]) / 2.0
+                            print('is_dataset_value', is_dataset_value)
+                            abs_difference = abs(DDG - avg_ddg)
+                            if DDG_diff_cutoff == None or abs_difference <= DDG_diff_cutoff:
+                                ddg_hits.append((abs_difference, num_records, is_dataset_value, [fr1[0]['ID'], fr2[0]['ID']], [float(fr1[0]['DDG']), float(fr2[0]['DDG'])], [fr1[0]['Publication'], fr2[0]['Publication']]))
+
+                    # Match against average of three records
+                    num_flattened_records = len(flattened_records)
+                    num_records = 3
+                    for x in xrange(0, num_flattened_records):
+                        for y in xrange(x + 1, num_flattened_records):
+                            for z in xrange(y + 1, num_flattened_records):
+                                fr1 = flattened_records[x]
+                                fr2 = flattened_records[y]
+                                fr3 = flattened_records[z]
+                                avg_ddg = (fr1[2] + fr2[2] + fr3[2]) / 3.0
+                                is_dataset_value = (fr1[1] + fr2[1] + fr3[1]) / 3.0
+                                print('is_dataset_value', is_dataset_value)
+                                abs_difference = abs(DDG - avg_ddg)
+                                if DDG_diff_cutoff == None or abs_difference <= DDG_diff_cutoff:
+                                    ddg_hits.append((abs_difference, num_records, is_dataset_value, [fr1[0]['ID'], fr2[0]['ID'], fr3[0]['ID']], [float(fr1[0]['DDG']), float(fr2[0]['DDG']), float(fr3[0]['DDG'])], [fr1[0]['Publication'], fr2[0]['Publication'], fr3[0]['Publication']]))
+
+                    # Match against average of three records
+                    num_flattened_records = len(flattened_records)
+                    num_records = 4
+                    for x in xrange(0, num_flattened_records):
+                        for y in xrange(x + 1, num_flattened_records):
+                            for z in xrange(y + 1, num_flattened_records):
+                                for w in xrange(z + 1, num_flattened_records):
+                                    fr1 = flattened_records[x]
+                                    fr2 = flattened_records[y]
+                                    fr3 = flattened_records[z]
+                                    fr4 = flattened_records[w]
+                                    avg_ddg = (fr1[2] + fr2[2] + fr3[2] + fr4[2]) / 4.0
+                                    is_dataset_value = (fr1[1] + fr2[1] + fr3[1] + fr4[1]) / 4.0
+                                    abs_difference = abs(DDG - avg_ddg)
+                                    if DDG_diff_cutoff == None or abs_difference <= DDG_diff_cutoff:
+                                        ddg_hits.append((abs_difference, num_records, is_dataset_value, [fr1[0]['ID'], fr2[0]['ID'], fr3[0]['ID'], fr4[0]['ID']], [float(fr1[0]['DDG']), float(fr2[0]['DDG']), float(fr3[0]['DDG']), float(fr4[0]['DDG'])], [fr1[0]['Publication'], fr2[0]['Publication'], fr3[0]['Publication'], fr4[0]['Publication']]))
+
+                if num_flattened_records > 4:
+                    raise Exception('We need to handle this case. At this point, the matching code should be rewritten completely to work with all values of len(num_flattened_records) i.e. remove the horrible code that Shane wrote.')
+
+                ddg_hits = sorted(ddg_hits)
+                if False and ddg_hits:
+                    pprint.pprint(ddg_hits)
+                    for h in ddg_hits:
+                        if len(h[3]) > 3:
+                            print('Matched on multiple')
+                            pprint.pprint(ddg_hits)
+                            sys.exit(0)
+
+            return dict(
+                ddg_records = ddg_records,
+                mutageneses = pp_mutagenesis_records,
+                ddg_hits = ddg_hits,
+            )
+
+        else:
+            return None
+
+
+
+    @ppi_data_entry
     def lookup_pdb_set(self, tsession, passed_pdb_set, allow_partial_matches = True, complex_id = None):
         '''Takes a dict {'L' -> List(Tuple(PDB ID, Chain ID)), 'R' -> List(Tuple(PDB ID, Chain ID))} and returns all PDB
            sets (complex_id, set_number, reverse_match) which have either partial or exact matches depending on
@@ -3167,3 +3361,5 @@ class BindingAffinityDDGInterface(ddG):
             tsession.close()
             colortext.warning(traceback.format_exc())
             raise colortext.Exception(str(e))
+
+

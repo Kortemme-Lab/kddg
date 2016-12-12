@@ -21,21 +21,13 @@ import gzip
 import pprint
 import json
 
+from sys import modules
 from io import BytesIO
 
 try:
     import pandas
 except ImportError:
     pass
-
-try:
-    import matplotlib
-    # A non-interactive backend to generate PNGs. matplotlib.use('PS') is used for PS files. If used, this command must be run before importing matplotlib.pyplot.
-    matplotlib.use("AGG")
-    import matplotlib.pyplot as plt
-    import textwrap
-except ImportError:
-    plt=None
 
 from sqlalchemy import and_, func
 from sqlalchemy.orm import load_only
@@ -71,6 +63,25 @@ class SanityCheckException(Exception): pass
 
 
 DeclarativeBase = dbmodel.DeclarativeBase
+
+
+plt = None
+
+
+def matplotlib_init():
+    plt = None
+    try:
+        module = modules['matplotlib']
+    except KeyError:
+        try:
+            import matplotlib
+            # A non-interactive backend to generate PNGs. matplotlib.use('PS') is used for PS files. If used, this command must be run before importing matplotlib.pyplot.
+            matplotlib.use("AGG")
+            import matplotlib.pyplot as plt
+            import textwrap
+        except ImportError:
+            plt = None
+    return plt
 
 
 class MutationSet(object):
@@ -178,6 +189,8 @@ class ddG(object):
            A byte stream for the graph (currently PNG format but we could parameterize this) is returned. This may be
            written directly to a binary file or streamed for online display.
         '''
+
+        plt = plt or matplotlib_init()
 
         if plt:
             assert(data)
@@ -830,7 +843,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def get_pdb_details(self, pdb_ids, cached_pdb_details = None):
         '''Returns the details stored in the database about the PDB files associated with pdb_ids e.g. chains, resolution,
            technique used to determine the structure etc.'''
-        raise Exception('Replace this with a call to kddg.api.data.py::DataImportInterface.get_pdb_details()')
+
+        #raise Exception('Replace this with a call to kddg.api.data.py::DataImportInterface.get_pdb_details()')
         return self.importer.get_pdb_details(pdb_ids, cached_pdb_details = None)
         pdbs = {}
         cached_pdb_ids = []
@@ -988,6 +1002,10 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def _get_prediction_set_status_counts(self, prediction_set_id):
         '''Returns a summary of the prediction job statuses for the prediction set.'''
         return dict((x, y) for x, y in self.get_session().query(self.PredictionTable.Status, func.count(self.PredictionTable.Status)).filter(self.PredictionTable.PredictionSet == prediction_set_id).group_by(self.PredictionTable.Status))
+
+
+    def get_connection(self, utf = False):
+        return self.importer.get_connection(utf = utf)
 
 
     def get_session(self, new_session = False, autoflush = True, autocommit = False, utf = False):
@@ -1294,6 +1312,8 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         '''Check to make sure that the prediction set, user dataset, and optional tagged subset make sense for this API.
            Returns the set of allowed_user_datasets.
         '''
+
+        print(tsession, prediction_set_id, user_dataset_name, tagged_subset)
 
         prediction_set = get_single_record_from_query(tsession.query(dbmodel.PredictionSet).filter(dbmodel.PredictionSet.ID == prediction_set_id))
         if not prediction_set:
