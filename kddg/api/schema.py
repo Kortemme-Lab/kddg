@@ -23,7 +23,7 @@ from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.dialects.mysql import DOUBLE, TINYINT, LONGBLOB
+from sqlalchemy.dialects.mysql import DOUBLE, TINYINT, LONGBLOB, LONGTEXT
 from sqlalchemy.types import DateTime, Enum, Integer, TIMESTAMP, Text, Unicode, String
 from sqlalchemy.orm import deferred
 
@@ -576,7 +576,7 @@ class PPIDatabaseComplex(DeclarativeBase):
     DatabaseName = Column(Enum('Kortemme & Baker', 'Kastritis et al.', 'Protein Protein Docking Benchmark v4.0', 'SKEMPI', 'ZEMu', 'CC/PBSA', 'Ben Stranges'), nullable=False, primary_key=True)
     DatabaseKey = Column(String(32), nullable=False, primary_key=True)
     PPComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=False)
-
+    Notes = Column(LONGTEXT(collation='utf8_unicode_ci'), nullable=False)
 
 #########################################
 #                                       #
@@ -639,10 +639,10 @@ class PPMutagenesisPDBMutation(DeclarativeBase):
 #                                                     #
 #######################################################
 
+
 '''
-PPIDataSetDDG
-PPIDataSetDDGSource
-PPIExperimentalMeasurements'''
+todo: PPIExperimentalMeasurements
+'''
 
 
 class PPIDDG(DeclarativeBase):
@@ -703,6 +703,37 @@ class UserPPAnalysisSet(DeclarativeBase):
 #  Protein-protein complex experimental measurements - DeltaE  #
 #                                                              #
 ################################################################
+
+
+'''
+todo: PPIDataSetDDGSource
+'''
+
+
+class PPIDataSetDDG(DeclarativeBase):
+    __tablename__ = 'PPIDataSetDDG'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    DataSetID = Column(String(128), ForeignKey('DataSet.ID'), nullable=False)
+    Section = Column(String(64), nullable=False)
+    RecordNumber = Column(Integer, nullable=False)
+    PublishedDDG = Column(DOUBLE, nullable=False)
+    RecordIsDerivative = Column(TINYINT(1), nullable=False)
+    PPMutagenesisID = Column(Integer, nullable=False)
+    PPComplexID = Column(Integer, nullable=False)
+    SetNumber = Column(Integer, nullable=False)
+    PublishedPDBFileID = Column(String(10), nullable=True)
+    PublishedPPComplexID = Column(Integer, nullable=True)
+    PublishedSetNumber = Column(Integer, nullable=True)
+    PossibleError = Column(TINYINT(1), nullable=False)
+    Remark = Column(Text, nullable=True)
+    CorrectionRemark = Column(Text, nullable=True)
+
+#    ForeignKey('PPMutagenesisPDBMutation.PPMutagenesisID'), ForeignKey('PPMutagenesis.ID')
+#  CONSTRAINT `PPIDataSetDDG_ibfk_2` FOREIGN KEY (`PDBFileID`) REFERENCES `PDBFile` (`ID`),
+#  CONSTRAINT `PPIDataSetDDG_ibfk_3` FOREIGN KEY (`PublishedPDBFileID`) REFERENCES `PDBFile` (`ID`),
+#  CONSTRAINT `PPIDataSetDDG_ibfk_4` FOREIGN KEY (`PublishedPDBFileID`) REFERENCES `PDBFile` (`ID`),
+#  CONSTRAINT `PPIDataSetDDG_ibfk_5` FOREIGN KEY (`PPMutagenesisID`, `PDBFileID`) REFERENCES `PPMutagenesisPDBMutation` (`PPMutagenesisID`, `PDBFileID`)
 
 
 class PPIDataSetDE(DeclarativeBase):
