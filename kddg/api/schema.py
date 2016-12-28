@@ -23,7 +23,7 @@ from sqlalchemy import Table, Column, Integer, ForeignKey
 from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.dialects.mysql import DOUBLE, TINYINT, LONGBLOB
+from sqlalchemy.dialects.mysql import DOUBLE, TINYINT, LONGBLOB, LONGTEXT
 from sqlalchemy.types import DateTime, Enum, Integer, TIMESTAMP, Text, Unicode, String
 from sqlalchemy.orm import deferred
 
@@ -576,7 +576,7 @@ class PPIDatabaseComplex(DeclarativeBase):
     DatabaseName = Column(Enum('Kortemme & Baker', 'Kastritis et al.', 'Protein Protein Docking Benchmark v4.0', 'SKEMPI', 'ZEMu', 'CC/PBSA', 'Ben Stranges'), nullable=False, primary_key=True)
     DatabaseKey = Column(String(32), nullable=False, primary_key=True)
     PPComplexID = Column(Integer, ForeignKey('PPComplex.ID'), nullable=False)
-
+    Notes = Column(LONGTEXT(collation='utf8_unicode_ci'), nullable=False)
 
 #########################################
 #                                       #
@@ -639,10 +639,10 @@ class PPMutagenesisPDBMutation(DeclarativeBase):
 #                                                     #
 #######################################################
 
+
 '''
-PPIDataSetDDG
-PPIDataSetDDGSource
-PPIExperimentalMeasurements'''
+todo: PPIExperimentalMeasurements
+'''
 
 
 class PPIDDG(DeclarativeBase):
@@ -703,6 +703,37 @@ class UserPPAnalysisSet(DeclarativeBase):
 #  Protein-protein complex experimental measurements - DeltaE  #
 #                                                              #
 ################################################################
+
+
+'''
+todo: PPIDataSetDDGSource
+'''
+
+
+class PPIDataSetDDG(DeclarativeBase):
+    __tablename__ = 'PPIDataSetDDG'
+
+    ID = Column(Integer, nullable=False, primary_key=True)
+    DataSetID = Column(String(128), ForeignKey('DataSet.ID'), nullable=False)
+    Section = Column(String(64), nullable=False)
+    RecordNumber = Column(Integer, nullable=False)
+    PublishedDDG = Column(DOUBLE, nullable=False)
+    RecordIsDerivative = Column(TINYINT(1), nullable=False)
+    PPMutagenesisID = Column(Integer, nullable=False)
+    PPComplexID = Column(Integer, nullable=False)
+    SetNumber = Column(Integer, nullable=False)
+    PublishedPDBFileID = Column(String(10), nullable=True)
+    PublishedPPComplexID = Column(Integer, nullable=True)
+    PublishedSetNumber = Column(Integer, nullable=True)
+    PossibleError = Column(TINYINT(1), nullable=False)
+    Remark = Column(Text, nullable=True)
+    CorrectionRemark = Column(Text, nullable=True)
+
+#    ForeignKey('PPMutagenesisPDBMutation.PPMutagenesisID'), ForeignKey('PPMutagenesis.ID')
+#  CONSTRAINT `PPIDataSetDDG_ibfk_2` FOREIGN KEY (`PDBFileID`) REFERENCES `PDBFile` (`ID`),
+#  CONSTRAINT `PPIDataSetDDG_ibfk_3` FOREIGN KEY (`PublishedPDBFileID`) REFERENCES `PDBFile` (`ID`),
+#  CONSTRAINT `PPIDataSetDDG_ibfk_4` FOREIGN KEY (`PublishedPDBFileID`) REFERENCES `PDBFile` (`ID`),
+#  CONSTRAINT `PPIDataSetDDG_ibfk_5` FOREIGN KEY (`PPMutagenesisID`, `PDBFileID`) REFERENCES `PPMutagenesisPDBMutation` (`PPMutagenesisID`, `PDBFileID`)
 
 
 class PPIDataSetDE(DeclarativeBase):
@@ -1154,21 +1185,41 @@ class AnalysisDataFrame(DeclarativeBase):
         return '\n'.join(s)
 
 
-    def get_dataframe_info(self):
-        mem_zip = StringIO.StringIO()
-        mem_zip.write(self.PandasHDFStore)
-        mem_zip.seek(0)
-        hdf_store_blob = gzip.GzipFile(fileobj = mem_zip, mode='rb').read()
-
+    def get_dataframe_objects(self):
         try:
-            # read_hdf does not currently (as of pandas.__version__ == 0.17.0) accept stream objects so we write to file
+            mem_zip = StringIO.StringIO()
+            mem_zip.write(self.PandasHDFStore)
+            mem_zip.seek(0)
+            hdf_store_blob = gzip.GzipFile(fileobj = mem_zip, mode='rb').read()
+
             #mem_unzipped = StringIO.StringIO()
+            # read_hdf does not currently (as of pandas.__version__ == 0.17.0) accept stream objects so we write to file
             #mem_unzipped.write(hdf_store_blob)
             #mem_unzipped.seek(0)
             analysis_pandas_input_filepath = write_temp_file('/tmp', hdf_store_blob, ftype = 'wb')
 
             df = pandas.read_hdf(analysis_pandas_input_filepath, 'dataframe')
             store = pandas.HDFStore(analysis_pandas_input_filepath)
+            os.remove(analysis_pandas_input_filepath)
+            return df, store
+        except:
+            if os.path.exists(analysis_pandas_input_filepath):
+                os.remove(analysis_pandas_input_filepath)
+            raise
+
+
+    def has_scalar_adjustments(self):
+        try:
+            df, store = self.get_dataframe_objects()
+            scalar_adjustments = store['scalar_adjustments'].to_dict()
+            return not(not(scalar_adjustments))
+        except Exception, e:
+            raise Exception('An exception occurred reading the dataframe: {0}\n.{1}'.format(str(e), traceback.format_exc()))
+
+
+    def get_dataframe_info(self):
+        try:
+            df, store = self.get_dataframe_objects()
 
             # Defensive programming in case the format changes
             scalar_adjustments, ddg_analysis_type, ddg_analysis_type_description, analysis_sets = None, None, None, None
@@ -1178,13 +1229,37 @@ class AnalysisDataFrame(DeclarativeBase):
             except: pass
             try: ddg_analysis_type_description = store['ddg_analysis_type_description'].to_dict()['ddg_analysis_type_description']
             except: pass
+
+            results = df.to_dict(orient = 'index').values()
             if scalar_adjustments:
                 analysis_sets = scalar_adjustments.keys()
+            else:
+                # Workaround for cases where the scalar adjustments are now no longer being computed (Kyle's changes)
+                try:
+                    results = df.to_dict(orient = 'index').values()
+                    if results:
+                        r = results[0]
+                        analysis_sets = sorted(set([k[13:] for k in r.keys() if k.startswith('Experimental_')]))
+                except: pass
+
+            colortext.pcyan('HRE'  * 100)
+            has_adjusted_values = False
+            try:
+                results = df.to_dict(orient = 'index').values()
+                if results:
+                    r = results[0]
+                    for analysis_set in analysis_sets:
+                        print(analysis_set)
+                        print(r.keys())
+                        print(('Predicted_' + analysis_set) in r.keys()) # Experimental_
+                        print(('Predicted_adj_' + analysis_set) in r.keys()) # Experimental_
+            except: pass
 
             d = dict(
                 AnalysisDataFrameID = self.ID,
                 dataframe = df,
                 scalar_adjustments = scalar_adjustments,
+                has_scalar_adjustments = not(not(scalar_adjustments)),
                 analysis_type = ddg_analysis_type,
                 analysis_type_description = ddg_analysis_type_description,
                 analysis_sets = analysis_sets,
@@ -1192,11 +1267,8 @@ class AnalysisDataFrame(DeclarativeBase):
                 prediction_set = self.prediction_set.ID,
                 top_x = self.TopX,
             )
-            os.remove(analysis_pandas_input_filepath)
             return d
         except Exception, e:
-            if os.path.exists(analysis_pandas_input_filepath):
-                os.remove(analysis_pandas_input_filepath)
             raise Exception('An exception occurred reading the dataframe: {0}\n.{1}'.format(str(e), traceback.format_exc()))
 
 
@@ -1207,15 +1279,12 @@ class AnalysisDataFrame(DeclarativeBase):
 ###########################
 
 
-
-
 def generate_sqlalchemy_definition(tablenames = []):
     '''This function generates the SQLAlchemy class definitions from the database. The generation does not parse the
        entire definition - it omits unique keys, foreign key constraints etc. but it saves a lot of manual work setting
        up the boilerplate field definitions. When the database schema changes, call this function to update the
        SQLAlchemy class definitions. You may want/need to reuse any existing relationships defined between tables.'''
     sc = MySQLSchemaConverter(sys_settings.database.username, sys_settings.database.hostname, sys_settings.database.database, sys_settings.database.password, sys_settings.database.port, sys_settings.database.socket)
-    #sc.get_sqlalchemy_schema(['PDBFile', 'PDBChain', 'PDBMolecule', 'PDBMoleculeChain', 'PDBResidue'])
     sc.get_sqlalchemy_schema(tablenames)
 
 

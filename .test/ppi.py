@@ -1,3 +1,12 @@
+#!/usr/bin/python2
+"""
+.test/ppi.py
+Simple tests of the ppi interface.
+
+Created by Shane O'Connor 2016.
+"""
+
+
 import pprint
 
 from kddg.api.ppi import get_interface_with_config_file
