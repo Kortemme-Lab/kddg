@@ -1589,6 +1589,18 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 # print params_to_insert
                 db_cursor.executemany(sql_query, params_to_insert)
 
+    def remove_scores(self, prediction_set, prediction_id, score_method_id, prediction_structure_scores_table = None, prediction_id_field = None, test_mode = False):
+        prediction_structure_scores_table = prediction_structure_scores_table or self._get_prediction_structure_scores_table()
+        prediction_id_field = prediction_id_field or self._get_prediction_id_field()
+
+        query = 'DELETE FROM %s WHERE %s=%s AND ScoreMethodID=%s' % (
+            prediction_structure_scores_table, prediction_id_field, str(prediction_id), str(score_method_id)
+        )
+
+        if test_mode:
+            print query
+
+        self.DDG_db.execute(query)
 
     @job_completion
     def store_scores(self, prediction_set, prediction_id, scores, prediction_structure_scores_table = None, prediction_id_field = None):
