@@ -71,7 +71,7 @@ from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from klab import colortext
-from klab.bio.pdb import PDB, MissingRecordsException
+from klab.bio.pdb import PDB
 from klab.bio.basics import ChainMutation
 from klab.fs.fsio import read_file, write_temp_file, open_temp_file, write_file
 from klab.bio.pfam import Pfam
@@ -101,9 +101,6 @@ try:
 except ImportError:
     colortext.error('Failed to import magic package. This failure will prevent you from being able to import new file content into the database.')
     pass
-
-
-class MissingDataException(Exception): pass
 
 
 #################################
@@ -416,10 +413,7 @@ class DataImportInterface(object):
                 assert(l.PDBCode == 'UNL' or l.PDBCode == 'UNK' or l.PDBCode == 'UNX')
                 l.InChI = l.PDBCode
                 l.InChIKey = l.PDBCode
-
-            pprint.pprint(l.__dict__)
-
-            db_ligand = get_or_create_in_transaction(tsession, DBLigand, l.__dict__, missing_columns = ['ID'], only_use_supplied_columns = True)
+            db_ligand = get_or_create_in_transaction(tsession, DBLigand, l.__dict__, missing_columns = ['ID'])
 
             # Create the ligand descriptor records
             descriptor_fieldnames = [c.name for c in list(sqlalchemy_inspect(LigandDescriptor).columns)]
@@ -427,12 +421,12 @@ class DataImportInterface(object):
             for descriptor in l.descriptors:
                 descriptor = copy.deepcopy(descriptor)
                 descriptor['LigandID'] = db_ligand.ID
-                db_ligand_descriptor = get_or_create_in_transaction(tsession, LigandDescriptor, descriptor, missing_columns = ['ID'], only_use_supplied_columns = True)
+                db_ligand_descriptor = get_or_create_in_transaction(tsession, LigandDescriptor, descriptor, missing_columns = ['ID'])
 
             for identifier in l.identifiers:
                 identifier = copy.deepcopy(identifier)
                 identifier['LigandID'] = db_ligand.ID
-                db_ligand_identifier = get_or_create_in_transaction(tsession, LigandIdentifier, identifier, missing_columns = ['ID'], only_use_supplied_columns = True)
+                db_ligand_identifier = get_or_create_in_transaction(tsession, LigandIdentifier, identifier, missing_columns = ['ID'])
 
             for synonym in l.synonyms:
                 db_ligand_synonym = get_or_create_in_transaction(tsession, LigandSynonym, dict(LigandID = db_ligand.ID, Synonym = synonym.strip()))
@@ -578,10 +572,7 @@ class DataImportInterface(object):
             if pdb_id in cached_pdb_ids:
                 pdbs[pdb_id] = cached_pdb_details[pdb_id]
             else:
-                record = self.DDG_db.execute_select('SELECT * FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))
-                if not record:
-                    raise MissingDataException('No record for {0} exists in the database.'.format(pdb_id))
-                record = record[0]
+                record = self.DDG_db.execute_select('SELECT * FROM PDBFile WHERE ID=%s', parameters=(pdb_id,))[0]
                 p = PDB(record['Content'], parse_ligands = True)
                 pdb_chain_lengths = {}
                 for chain_id, s in p.atom_sequences.iteritems():
@@ -1270,7 +1261,7 @@ ER  - ''',
                         PDBLigandCode = lig.PDBCode,
                         LigandID = db_ligand_ids[lig.PDBCode],
                         ParamsFileContentID = None,
-                    ), only_use_supplied_columns = True)
+                    ))
                 except Exception, e:
                     colortext.error(str(e))
                     colortext.error(traceback.format_exc())

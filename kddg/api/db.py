@@ -21,13 +21,21 @@ import gzip
 import pprint
 import json
 
-from sys import modules
 from io import BytesIO
 
 try:
     import pandas
 except ImportError:
     pass
+
+try:
+    import matplotlib
+    # A non-interactive backend to generate PNGs. matplotlib.use('PS') is used for PS files. If used, this command must be run before importing matplotlib.pyplot.
+    matplotlib.use("AGG")
+    import matplotlib.pyplot as plt
+    import textwrap
+except ImportError:
+    plt=None
 
 from sqlalchemy import and_, func
 from sqlalchemy.orm import load_only
@@ -63,25 +71,6 @@ class SanityCheckException(Exception): pass
 
 
 DeclarativeBase = dbmodel.DeclarativeBase
-
-
-plt = None
-
-
-def matplotlib_init():
-    plt = None
-    try:
-        module = modules['matplotlib']
-    except KeyError:
-        try:
-            import matplotlib
-            # A non-interactive backend to generate PNGs. matplotlib.use('PS') is used for PS files. If used, this command must be run before importing matplotlib.pyplot.
-            matplotlib.use("AGG")
-            import matplotlib.pyplot as plt
-            import textwrap
-        except ImportError:
-            plt = None
-    return plt
 
 
 class MutationSet(object):
@@ -189,8 +178,6 @@ class ddG(object):
            A byte stream for the graph (currently PNG format but we could parameterize this) is returned. This may be
            written directly to a binary file or streamed for online display.
         '''
-
-        plt = plt or matplotlib_init()
 
         if plt:
             assert(data)
@@ -843,8 +830,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
     def get_pdb_details(self, pdb_ids, cached_pdb_details = None):
         '''Returns the details stored in the database about the PDB files associated with pdb_ids e.g. chains, resolution,
            technique used to determine the structure etc.'''
-
-        #raise Exception('Replace this with a call to kddg.api.data.py::DataImportInterface.get_pdb_details()')
+        raise Exception('Replace this with a call to kddg.api.data.py::DataImportInterface.get_pdb_details()')
         return self.importer.get_pdb_details(pdb_ids, cached_pdb_details = None)
         pdbs = {}
         cached_pdb_ids = []
@@ -1004,10 +990,6 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         return dict((x, y) for x, y in self.get_session().query(self.PredictionTable.Status, func.count(self.PredictionTable.Status)).filter(self.PredictionTable.PredictionSet == prediction_set_id).group_by(self.PredictionTable.Status))
 
 
-    def get_connection(self, utf = False):
-        return self.importer.get_connection(utf = utf)
-
-
     def get_session(self, new_session = False, autoflush = True, autocommit = False, utf = False):
         return self.importer.get_session(new_session = new_session, autoflush = autoflush, autocommit = autocommit, utf = utf)
 
@@ -1146,11 +1128,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
 
         prediction_cases = {}
         for prediction_id in prediction_ids:
-
-            # todo: Fix for PUBS class. Revisit.
-            UserDataSetExperimentID = prediction_table_rows_cache[prediction_id].UserDataSetExperimentID
-            #UserDataSetExperimentID = self._get_sqa_predictions_user_dataset_experiment_id(prediction_table_rows_cache[prediction_id])
-
+            UserDataSetExperimentID = self._get_sqa_predictions_user_dataset_experiment_id(prediction_table_rows_cache[prediction_id])
             experimental_details = self.get_predictions_experimental_details(prediction_id, userdatset_experiment_ids_to_subset_ddgs, include_experimental_data = include_experimental_data)
             experimental_details['PredictionID'] = prediction_id
             prediction_cases[UserDataSetExperimentID] = experimental_details
@@ -1316,8 +1294,6 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         '''Check to make sure that the prediction set, user dataset, and optional tagged subset make sense for this API.
            Returns the set of allowed_user_datasets.
         '''
-
-        print(tsession, prediction_set_id, user_dataset_name, tagged_subset)
 
         prediction_set = get_single_record_from_query(tsession.query(dbmodel.PredictionSet).filter(dbmodel.PredictionSet.ID == prediction_set_id))
         if not prediction_set:
@@ -1916,13 +1892,12 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
             ):
         '''This 'private' function does most of the work for get_analysis_dataframe.'''
 
-        # Shane: todo: This code all needs to be refactored (switch-statement by string parsing)
         if take_lowest:
-            assert(ddg_analysis_type == None)
+            assert( ddg_analysis_type == None )
             ddg_analysis_type = 'DDG_Top%d' % take_lowest
         else:
             assert( ddg_analysis_type != None and take_lowest == None )
-            if ddg_analysis_type.startswith('DDG_Top'):
+            if ddg_analysis_type.startswith( 'DDG_Top' ):
                 take_lowest = int( ddg_analysis_type[7:] )
 
         assert(dataframe_type != None and prediction_set_id != None)
@@ -1937,6 +1912,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                         prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, burial_cutoff,
                         stability_classication_experimental_cutoff, stability_classication_predicted_cutoff, include_derived_mutations, ddg_analysis_type))
             else:
+                # KAB TODO: to ask Shane - why does passing None not correctly change to IS NULL?
                 hdf_store_blob = self.DDG_db.execute_select('''
                 SELECT PandasHDFStore FROM AnalysisDataFrame WHERE
                    PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND BurialCutoff=%s AND
@@ -2081,32 +2057,16 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                 DDGAnalysisTypeDescription              = benchmark_run.ddg_analysis_type_description,
                 PandasHDFStore                          = hdf_store_blob,
             )
-
-            # Delete any existing dataframe
-            tsession = self.importer.get_session(new_session = True)
-            existing_record = [r for r in tsession.query(dbmodel.AnalysisDataFrame).filter(
-                dbmodel.AnalysisDataFrame.PredictionSet == prediction_set_id,
-                dbmodel.AnalysisDataFrame.DataFrameType == dataframe_type,
-                dbmodel.AnalysisDataFrame.ContainsExperimentalData == experimental_data_exists,
-                dbmodel.AnalysisDataFrame.ScoreMethodID == score_method_id,
-                dbmodel.AnalysisDataFrame.UseSingleReportedValue == use_single_reported_value,
-                dbmodel.AnalysisDataFrame.TopX == take_lowest,
-                dbmodel.AnalysisDataFrame.BurialCutoff == burial_cutoff,
-                dbmodel.AnalysisDataFrame.StabilityClassicationExperimentalCutoff == stability_classication_experimental_cutoff,
-                dbmodel.AnalysisDataFrame.StabilityClassicationPredictedCutoff == stability_classication_predicted_cutoff,
-                dbmodel.AnalysisDataFrame.IncludesDerivedMutations == include_derived_mutations,
-                dbmodel.AnalysisDataFrame.DDGAnalysisType == ddg_analysis_type,
-            )]
-            if existing_record:
-                assert(len(existing_record) == 1) # otherwise the schema has changed, our selection criteria do not form a unique key, and we need to update the query above
-                tsession.query(dbmodel.AnalysisDataFrame).filter(dbmodel.AnalysisDataFrame.ID == existing_record[0].ID).delete()
-
-            new_dataframe = dbmodel.AnalysisDataFrame(**d)
-            tsession.add(new_dataframe)
-            tsession.flush()
-            tsession.commit()
-            tsession.close()
-
+            self.DDG_db.execute('''DELETE FROM AnalysisDataFrame WHERE PredictionSet=%s AND DataFrameType=%s AND ContainsExperimentalData=%s AND ScoreMethodID=%s AND UseSingleReportedValue=%s AND TopX=%s AND
+                                    BurialCutoff=%s AND StabilityClassicationExperimentalCutoff=%s AND StabilityClassicationPredictedCutoff=%s AND
+                                    IncludesDerivedMutations=%s AND DDGAnalysisType=%s''',
+                                    parameters = (prediction_set_id, dataframe_type, experimental_data_exists, score_method_id, use_single_reported_value, take_lowest,
+                                                  burial_cutoff, stability_classication_experimental_cutoff, stability_classication_predicted_cutoff,
+                                                  include_derived_mutations, ddg_analysis_type
+                                    ))
+            self.DDG_db.insertDictIfNew('AnalysisDataFrame', d, ['PredictionSet', 'DataFrameType', 'ContainsExperimentalData', 'ScoreMethodID', 'UseSingleReportedValue', 'TopX', 'BurialCutoff',
+                                                                 'StabilityClassicationExperimentalCutoff', 'StabilityClassicationPredictedCutoff',
+                                                                 'IncludesDerivedMutations', 'DDGAnalysisType'], locked = False)
         else:
             benchmark_run.read_dataframe_from_content(hdf_store_blob)
 
