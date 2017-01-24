@@ -1106,6 +1106,21 @@ class PredictionPPIStructureScore(DeclarativeBase):
     ref = Column(DOUBLE, nullable=True)
     yhh_planarity = Column(DOUBLE, nullable=True)
 
+    # beta_nov_16 columns
+    fa_dun_dev = Column(DOUBLE, nullable=True)
+    fa_dun_rot = Column(DOUBLE, nullable=True)
+    fa_dun_semi = Column(DOUBLE, nullable=True)
+    fa_intra_atr_xover4 = Column(DOUBLE, nullable=True)
+    fa_intra_elec = Column(DOUBLE, nullable=True)
+    fa_intra_rep_xover4 = Column(DOUBLE, nullable=True)
+    fa_intra_sol_xover4 = Column(DOUBLE, nullable=True)
+    hxl_tors = Column(DOUBLE, nullable=True)
+    lk_ball = Column(DOUBLE, nullable=True)
+    lk_ball_bridge = Column(DOUBLE, nullable=True)
+    lk_ball_bridge_uncpl = Column(DOUBLE, nullable=True)
+    lk_ball_iso = Column(DOUBLE, nullable=True)
+    rama_prepro = Column(DOUBLE, nullable=True)
+
 
 #######################################################
 #                                                     #
@@ -1246,6 +1261,3 @@ def test_schema_against_database_instance(DDG_db):
     if inconsistencies:
         generate_sqlalchemy_definition(inconsistencies)
         raise colortext.Exception('The following SQLAlchemy classes do not match the database schema: {0}.'.format(', '.join(inconsistencies)))
-
-
-
