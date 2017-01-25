@@ -1633,6 +1633,7 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
                     if not record_exists:
                         db_cursor.execute(sql, params)
         except Exception, e:
+            print sql, params, record_exists
             raise colortext.Exception('Failed to insert scores for Prediction #{0}: "{1}".\n{2}'.format(prediction_id, str(e), traceback.format_exc()))
 
 
