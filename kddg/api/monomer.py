@@ -41,10 +41,10 @@ sys_settings = settings.load()
 DeclarativeBase = dbmodel.DeclarativeBase
 
 
-def get_interface(passwd, username = sys_settings.database.username, hostname = sys_settings.database.hostname, rosetta_scripts_path = None, rosetta_database_path = None):
+def get_interface(passwd, username = sys_settings.database.username, hostname = sys_settings.database.hostname, rosetta_scripts_path = None, rosetta_database_path = None, port = 3306):
     '''This is the function that should be used to get a MonomericStabilityDDGInterface interface object. It hides the
     private methods from the user so that a more traditional object-oriented API is created.'''
-    return GenericUserInterface.generate(MonomericStabilityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path)
+    return GenericUserInterface.generate(MonomericStabilityDDGInterface, passwd = passwd, username = username, hostname = hostname, rosetta_scripts_path = rosetta_scripts_path, rosetta_database_path = rosetta_database_path, port = port)
 
 
 class MonomericStabilityDDGInterface(ddG):
@@ -825,7 +825,7 @@ class MonomericStabilityDDGInterface(ddG):
         assert(UserDataSetID)
         UserDataSetID = UserDataSetID[0]['ID']
 
-        amino_acids = self.get_amino_acids_for_analysis()
+        amino_acids = self.get_amino_acid_details()
         prediction_chains = self._get_pdb_chains_used_for_prediction_set(predictionset)
 
         # Get the list of mutation predictions
@@ -1280,4 +1280,3 @@ WHERE a.NumMutations=1 AND UserDataSetExperiment.PDBFileID="1U5P" ''', parameter
             print("UPDATE Prediction SET Cost=%0.2f WHERE ID=%d" % (num_residues, prediction['ID']))
 
             predictions = DDG_db.execute("UPDATE Prediction SET Cost=%s WHERE ID=%s", parameters=(num_residues, prediction['ID'],))
-
