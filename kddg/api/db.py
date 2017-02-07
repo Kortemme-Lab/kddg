@@ -1593,9 +1593,14 @@ ORDER BY ScoreMethodID''', parameters=(PredictionSet, kellogg_score_id, noah_sco
         prediction_structure_scores_table = prediction_structure_scores_table or self._get_prediction_structure_scores_table()
         prediction_id_field = prediction_id_field or self._get_prediction_id_field()
 
-        query = 'DELETE FROM %s WHERE %s=%s AND ScoreMethodID=%s' % (
-            prediction_structure_scores_table, prediction_id_field, str(prediction_id), str(score_method_id)
-        )
+        if score_method_id != None:
+            query = 'DELETE FROM %s WHERE %s=%s AND ScoreMethodID=%s' % (
+                prediction_structure_scores_table, prediction_id_field, str(prediction_id), str(score_method_id)
+            )
+        else:
+            query = 'DELETE FROM %s WHERE %s=%s' % (
+                prediction_structure_scores_table, prediction_id_field, str(prediction_id)
+            )
 
         if test_mode:
             print query
