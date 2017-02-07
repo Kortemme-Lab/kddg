@@ -1120,6 +1120,7 @@ class PredictionPPIStructureScore(DeclarativeBase):
     lk_ball_bridge_uncpl = Column(DOUBLE, nullable=True)
     lk_ball_iso = Column(DOUBLE, nullable=True)
     rama_prepro = Column(DOUBLE, nullable=True)
+    cart_bonded = Column(DOUBLE, nullable=True)
 
 
 #######################################################
